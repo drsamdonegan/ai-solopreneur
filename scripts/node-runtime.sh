@@ -5,6 +5,7 @@ set -euo pipefail
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RUNTIME_ROOT="${AI_SOLO_RUNTIME_DIR:-${PROJECT_ROOT}/.runtime}"
 NODE_VERSION="$(tr -d '[:space:]' <"${PROJECT_ROOT}/.node-version")"
+NPM_VERSION="$(tr -d '[:space:]' <"${PROJECT_ROOT}/.npm-version")"
 FORCE_PORTABLE="${AI_SOLO_FORCE_PORTABLE_NODE:-0}"
 INSTALL_IF_MISSING=0
 
@@ -19,17 +20,27 @@ if [[ ! "${NODE_VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   printf 'The pinned Node.js version in .node-version is invalid: %s\n' "${NODE_VERSION}" >&2
   exit 1
 fi
+if [[ ! "${NPM_VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  printf 'The pinned npm version in .npm-version is invalid: %s\n' "${NPM_VERSION}" >&2
+  exit 1
+fi
 
 system_node() {
   local candidate=""
-  local major=""
+  local version=""
+  local npm_candidate=""
+  local npm_version=""
 
   candidate="$(command -v node 2>/dev/null || true)"
   [[ -n "${candidate}" ]] || return 1
 
-  major="$("${candidate}" -p 'Number(process.versions.node.split(".")[0])' 2>/dev/null || true)"
-  [[ "${major}" =~ ^[0-9]+$ ]] || return 1
-  ((major >= 24)) || return 1
+  version="$("${candidate}" -p 'process.versions.node' 2>/dev/null || true)"
+  [[ "${version}" == "${NODE_VERSION}" ]] || return 1
+
+  npm_candidate="$(command -v npm 2>/dev/null || true)"
+  [[ -n "${npm_candidate}" ]] || return 1
+  npm_version="$("${npm_candidate}" --version 2>/dev/null || true)"
+  [[ "${npm_version}" == "${NPM_VERSION}" ]] || return 1
 
   printf '%s\n' "${candidate}"
 }
@@ -115,6 +126,36 @@ cleanup_temporary_directory() {
   fi
 }
 
+portable_node_is_compatible() {
+  local node_path="$1"
+  local install_directory="$2"
+  local installed_version=""
+  local installed_arch=""
+  local npm_cli="${install_directory}/lib/node_modules/npm/bin/npm-cli.js"
+  local installed_npm_version=""
+
+  [[ -x "${node_path}" ]] || return 1
+  installed_version="$("${node_path}" -p 'process.versions.node' 2>/dev/null || true)"
+  installed_arch="$("${node_path}" -p 'process.arch' 2>/dev/null || true)"
+  [[ "${installed_version}" == "${NODE_VERSION}" ]] || return 1
+  [[ "${installed_arch}" == "${NODE_ARCH}" ]] || return 1
+  [[ -f "${npm_cli}" ]] || return 1
+  installed_npm_version="$("${node_path}" "${npm_cli}" --version 2>/dev/null || true)"
+  [[ "${installed_npm_version}" == "${NPM_VERSION}" ]]
+}
+
+remove_private_runtime_directory() {
+  local directory="$1"
+
+  [[ -d "${directory}" ]] || return
+  [[ "${directory}" == "${RUNTIME_ROOT}/node-v${NODE_VERSION}-"* ]] || {
+    printf 'Refusing to replace an unexpected runtime path: %s\n' "${directory}" >&2
+    exit 1
+  }
+  find "${directory}" -depth -mindepth 1 -delete
+  rmdir "${directory}"
+}
+
 platform_details
 
 ARCHIVE_BASENAME="node-v${NODE_VERSION}-${NODE_PLATFORM}-${NODE_ARCH}"
@@ -128,13 +169,13 @@ if [[ "${FORCE_PORTABLE}" != "1" ]]; then
   fi
 fi
 
-if [[ -x "${PORTABLE_NODE}" ]]; then
+if portable_node_is_compatible "${PORTABLE_NODE}" "${INSTALL_DIRECTORY}"; then
   printf '%s\n' "${PORTABLE_NODE}"
   exit 0
 fi
 
 if [[ "${INSTALL_IF_MISSING}" != "1" ]]; then
-  printf 'Node.js 24+ is not available yet. Run setup.command first.\n' >&2
+  printf 'The reviewed Node.js %s/npm %s runtime is not available or is incomplete. Run setup.command to install or repair it.\n' "${NODE_VERSION}" "${NPM_VERSION}" >&2
   exit 1
 fi
 
@@ -148,6 +189,10 @@ if ! command -v tar >/dev/null 2>&1; then
 fi
 
 mkdir -p "${RUNTIME_ROOT}"
+if [[ -d "${INSTALL_DIRECTORY}" ]]; then
+  printf 'The private Node.js runtime is incomplete. Setup will replace that project-local folder.\n' >&2
+  remove_private_runtime_directory "${INSTALL_DIRECTORY}"
+fi
 TEMP_DIRECTORY="$(mktemp -d "${RUNTIME_ROOT}/node-download.XXXXXX")"
 trap 'cleanup_temporary_directory "${TEMP_DIRECTORY}"' EXIT INT TERM
 
@@ -155,11 +200,15 @@ ARCHIVE_NAME="${ARCHIVE_BASENAME}.${NODE_ARCHIVE_EXTENSION}"
 ARCHIVE_PATH="${TEMP_DIRECTORY}/${ARCHIVE_NAME}"
 DOWNLOAD_URL="https://nodejs.org/dist/v${NODE_VERSION}/${ARCHIVE_NAME}"
 
-printf 'Node.js 24+ was not found. Downloading a private project copy of Node.js %s...\n' "${NODE_VERSION}" >&2
+printf 'The reviewed Node.js runtime was not found. Downloading a private project copy of Node.js %s...\n' "${NODE_VERSION}" >&2
 curl \
   --fail \
   --location \
   --proto '=https' \
+  --retry 3 \
+  --retry-all-errors \
+  --connect-timeout 30 \
+  --max-time 300 \
   --show-error \
   --silent \
   --output "${ARCHIVE_PATH}" \
@@ -190,13 +239,10 @@ if [[ ! -x "${EXTRACTED_DIRECTORY}/bin/node" ]]; then
   exit 1
 fi
 
-if [[ ! -d "${INSTALL_DIRECTORY}" ]]; then
-  mv "${EXTRACTED_DIRECTORY}" "${INSTALL_DIRECTORY}"
-fi
+mv "${EXTRACTED_DIRECTORY}" "${INSTALL_DIRECTORY}"
 
-INSTALLED_VERSION="$("${PORTABLE_NODE}" --version)"
-if [[ "${INSTALLED_VERSION}" != "v${NODE_VERSION}" ]]; then
-  printf 'The project-local Node.js version is unexpected: %s\n' "${INSTALLED_VERSION}" >&2
+if ! portable_node_is_compatible "${PORTABLE_NODE}" "${INSTALL_DIRECTORY}"; then
+  printf 'The downloaded private Node.js/npm runtime did not match the reviewed versions and architecture.\n' >&2
   exit 1
 fi
 

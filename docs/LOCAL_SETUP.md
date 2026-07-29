@@ -22,6 +22,7 @@ You need:
 
 - A supported macOS or Windows computer.
 - This repository on the computer.
+- At least 6 GB free for first setup; 8 GB is recommended.
 
 The complete preparation checklist is in [WORKSHOP_PREREQUISITES.md](WORKSHOP_PREREQUISITES.md).
 
@@ -38,16 +39,25 @@ If macOS will not open the command file, Control-click it, select **Open**, then
 
 ## Windows setup
 
+Windows 10 and 11 x64 are supported. Windows 11 ARM is supported through its
+built-in x64 emulation; Windows 10 ARM is not supported. Keep the project in a
+short local folder outside OneDrive and network/UNC paths.
+
 1. Open the repository folder in File Explorer.
-2. Double-click `setup-windows.cmd`.
-3. Wait for the window to report `Local stack is healthy`.
-4. Press a key when prompted to close the setup window.
-5. Open [http://localhost:3000](http://localhost:3000).
-6. Open [http://localhost:5678](http://localhost:5678).
+2. Double-click `preflight-windows.cmd` and resolve any `[!!]` result.
+3. Double-click `setup-windows.cmd`.
+4. Wait for the window to report `Local stack is healthy`.
+5. Press a key when prompted to close the setup window.
+6. Open [http://localhost:3000](http://localhost:3000).
+7. Open [http://localhost:5678](http://localhost:5678).
 
 The Windows wrapper runs the shared runner through the included PowerShell shim without requiring the learner to change their permanent PowerShell execution policy.
 
-On either platform, setup uses an existing Node.js 24+ runtime when available. Otherwise it downloads the pinned official Node.js 24.18.0 archive, verifies its SHA-256 checksum, and unpacks it into `.runtime/` inside the project. It does not install anything globally or require administrator access.
+On either platform, setup uses an existing runtime only when it is the exact
+reviewed Node.js 24.18.0 and npm 11.16.0 pair. Otherwise it downloads the pinned
+official Node.js archive, verifies its SHA-256 checksum, and unpacks the pair
+into `.runtime/` inside the project. It does not install anything globally or
+require administrator access.
 
 ## First n8n visit
 
@@ -65,7 +75,7 @@ The n8n owner account exists only in this project's local `data/` folder.
 
 All local state lives inside the repository folder and is ignored by Git:
 
-- `.runtime/` — the verified private Node.js copy, only when the computer needs it.
+- `.runtime/` — the verified private Node.js/npm pair and npm cache.
 - `node_modules/` — the exact npm-pinned n8n release.
 - `apps/chat/dist/` — the compiled chat gateway.
 - `data/n8n/` — the n8n database, settings, and encrypted credentials, including a private encryption key n8n generates on first start.
@@ -77,9 +87,12 @@ No `.env` file is required. Create one from `.env.example` only to change a port
 
 The setup script:
 
-1. Selects an existing Node.js 24+ runtime or prepares the verified private copy.
-2. Validates Node.js and npm availability.
-3. Checks whether ports 3000, 3100, and 5678 are available.
+1. Selects the reviewed Node.js 24.18.0/npm 11.16.0 pair or prepares the
+   verified private copy.
+2. Validates disk space, folder access, Node.js, npm, and package-registry
+   access.
+3. Proves ports 3000, 3100, 5678, and n8n's derived internal task-broker port
+   can be bound.
 4. Installs the pinned n8n release with `npm ci`.
 5. Installs the document-reader packages.
 6. Installs the chat build tools and compiles the TypeScript gateway.
@@ -94,11 +107,12 @@ On a later setup run, the learner-checklist workflow acts as the installation ma
 
 ## Local-only networking
 
-All three services listen on `127.0.0.1` only:
+All three services and n8n's internal task broker listen on `127.0.0.1` only:
 
 - `127.0.0.1:3000`
 - `127.0.0.1:3100` (internal document reader)
 - `127.0.0.1:5678`
+- `127.0.0.1:5679` by default (the internal task broker)
 
 Other computers on the local network cannot connect. This is a local learning environment, not a public deployment. Because nothing listens on an external interface, Windows learners should not see a firewall prompt.
 
@@ -107,11 +121,14 @@ need to open its internal health address.
 
 ## Changing ports
 
-If another application needs port 3000, 3100, or 5678:
+If another application needs port 3000, 3100, 5678, or the derived task-broker
+port:
 
 1. Stop the local stack.
 2. Copy `.env.example` to `.env` if `.env` does not exist.
-3. Change `CHAT_PORT`, `DOCUMENT_WORKER_PORT`, or `N8N_PORT`.
+3. Change `CHAT_PORT`, `DOCUMENT_WORKER_PORT`, or `N8N_PORT`. Set
+   `N8N_RUNNERS_BROKER_PORT` only when the automatically derived broker port
+   also conflicts.
 4. Save the file.
 5. Start the stack again.
 

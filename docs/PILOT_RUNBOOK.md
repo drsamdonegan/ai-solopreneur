@@ -15,7 +15,8 @@ Recruit at least five people who did not develop or review this repository.
 Cover both supported environments:
 
 - At least one current macOS computer.
-- At least one current Windows computer; include ARM64 when the cohort may use it.
+- At least one Windows 10/11 x64 computer; include Windows 11 ARM when the
+  cohort may use it.
 
 Participants may work in teams, but record one session per participant. Use only
 anonymous participant and team IDs. Ask participants to disclose a work computer
@@ -32,9 +33,12 @@ Run this as a short session before the main pilot.
 1. Give participants only [Workshop prerequisites](WORKSHOP_PREREQUISITES.md).
 2. Ask them to create their template copy and bring it into Claude Code.
 3. Ask Claude Code to follow the README and run the one-click setup.
-4. Confirm setup selects an existing Node.js 24+ runtime or prepares the verified private copy.
+4. Confirm setup selects or prepares the exact reviewed Node.js 24.18.0/npm
+   11.16.0 pair.
 5. Run `preflight.command` on macOS or `preflight-windows.cmd` on Windows.
-6. Record every point where an instructor must touch the computer or give a
+6. On Windows, confirm at least 6 GB is free and the project uses a short local
+   folder outside OneDrive and network/UNC paths.
+7. Record every point where an instructor must touch the computer or give a
    direction not present in the guide.
 
 `preflightCompleted` means the helper passes. An intervention is still recorded
@@ -65,7 +69,7 @@ Without demonstrating the clicks first, ask each participant or team to:
 2. Change one Markdown skill and sync it.
 3. Ask the agent to list local tasks.
 4. Propose a task change and approve it with the exact confirmation phrase.
-5. Stop and start the stack, then confirm both local services recover.
+5. Stop and start the stack, then confirm all three local services recover.
 
 Record a boolean only after observing the result. A verbal explanation is not a
 demonstration.
@@ -93,7 +97,7 @@ after each scenario.
 | Invalid Claude credential | Save a deliberately invalid test key in the n8n Anthropic credential and send a message | Chat shows a safe workflow error; n8n execution points the instructor to the Anthropic node; no key appears in the browser |
 | Exhausted API credit | Use a test Anthropic workspace with no usable credit | Chat shows a safe workflow error; provider billing details remain in the private n8n execution only |
 | Inactive main workflow | Unpublish `00 - START HERE - Project Partner` and send a message | Chat reports that n8n and the active workflow should be checked |
-| Occupied ports | Start another local listener on configured port 3000 or 5678, then run preflight | Preflight names the occupied port and tells the learner to close the app or change `.env` |
+| Occupied ports | Start another local listener on a configured service or task-broker port, then run preflight | Preflight names the occupied port and tells the learner to close the app or change `.env` |
 | Native-process restart | Stop and start the stack | Health checks recover and persistent n8n data remains |
 | No internet | Disconnect networking after packages are present and send a message, then test a clean setup separately | Existing UI opens locally; Claude calls fail safely; a clean setup clearly names the download it cannot complete |
 

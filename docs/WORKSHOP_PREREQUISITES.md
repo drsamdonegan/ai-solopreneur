@@ -31,8 +31,14 @@ The key will be added to n8n during the workshop.
 - **Claude Desktop**, signed in with the Code area available.
 - **GitHub Desktop**, signed in for the visual save-and-push workflow.
 - A current Chrome or Edge browser.
+- At least 6 GB of free disk space for first setup; 8 GB is recommended.
 
-Node.js does not need a manual installer. Setup first looks for Node.js 24 or newer. If it is missing or older, setup downloads the pinned official Node.js 24.18.0 archive, checks its SHA-256 fingerprint, and unpacks it into this project's private `.runtime/` folder. Nothing is installed globally and no administrator access or restart is needed.
+Node.js and npm do not need manual installers. Setup uses an existing runtime
+only when it is the exact reviewed Node.js 24.18.0 and npm 11.16.0 pair.
+Otherwise it downloads the pinned official Node.js archive, checks its SHA-256
+fingerprint, and unpacks the pair into this project's private `.runtime/`
+folder. Nothing is installed globally and no administrator access or restart is
+needed.
 
 ### macOS
 
@@ -45,23 +51,38 @@ Both Apple Silicon and Intel are target environments and must be represented in 
 
 ### Windows
 
-- Windows 10 or 11.
+- Windows 10 or 11 on an x64 computer; or Windows 11 on an ARM-based computer.
 - Current Chrome or Edge.
 - Claude Desktop installed and signed in.
 - GitHub Desktop installed and signed in.
 
-WSL2, Hyper-V, and BIOS virtualization settings are **not** required. Learners on ARM-based Windows laptops (for example Snapdragon devices) should complete the preflight exercise early so any platform issue is found before the session.
+On Windows 11 ARM laptops, including Snapdragon devices, setup deliberately
+uses the reviewed x64 runtime through Windows' built-in emulation because the
+pinned n8n native packages do not provide all required Windows ARM64 binaries.
+Windows 10 on ARM is not supported. WSL2, Hyper-V, BIOS virtualization settings,
+Visual Studio build tools, and Python are **not** required.
+
+Keep the repository in a short local folder such as
+`C:\ai-workshop\ai-solopreneur`. Do not run it inside OneDrive, from a
+network/UNC path such as `\\server\share`, or from inside a ZIP. Cloud sync and
+network filesystems can lock or mis-handle the large native dependency install.
 
 ## Network requirements
 
 The learner's network must permit:
 
-- Downloading packages from registry.npmjs.org.
-- Downloading the pinned Node.js archive from nodejs.org when a suitable runtime is not already available.
+- Downloading the pinned runtime from `nodejs.org`.
+- Downloading npm packages from `registry.npmjs.org`.
+- Downloading the SheetJS package asset from `cdn.sheetjs.com`.
+- Downloading prebuilt native package assets from
+  `release-assets.githubusercontent.com`.
 - Accessing GitHub.
 - Accessing the Anthropic API.
 
-VPN, proxy, firewall, managed-device, or campus-network restrictions should be discovered during preflight rather than during the workshop.
+Opening the npm website in a browser is not enough: the package registry and
+asset hosts above must all be allowed. VPN, proxy, TLS-inspection certificate,
+firewall, managed-device, or campus-network restrictions should be discovered
+during preflight rather than during the workshop.
 
 ## Port check
 
@@ -69,20 +90,29 @@ The local project uses:
 
 - `http://localhost:3000` for the learner chat.
 - `http://localhost:5678` for n8n.
+- `127.0.0.1:3100` for the internal document reader.
+- `127.0.0.1:5679` for n8n's internal task broker. This defaults to one above
+  `N8N_PORT` when the n8n port is changed.
 
-The setup and preflight helpers confirm that these ports are available or explain how to change them in `.env`.
+The setup and preflight helpers confirm that all required ports are available or
+explain how to change them in `.env`.
 
 ## Preflight exercise
 
 Before the main workshop, every learner should:
 
-1. Create a private repository from the released template and bring it into Claude Code.
-2. Ask Claude Code to read the README and run the documented one-click setup.
-3. Wait for `Local stack is healthy`.
-4. Open [http://localhost:3000](http://localhost:3000) and [http://localhost:5678](http://localhost:5678).
-5. Double-click `stop.command` or `stop-windows.cmd`.
-6. Sign in to GitHub Desktop.
-7. Confirm possession of a private Claude API key with available credit.
+1. Create a private repository from the released template and bring it into
+   Claude Code in a supported local folder.
+2. On Windows, double-click `preflight-windows.cmd` and resolve every `[!!]`
+   result before the large dependency install.
+3. Ask Claude Code to read the README and run the documented one-click setup.
+   On Windows it should set `AI_SOLO_NO_PAUSE=1` before running the `.cmd`
+   launcher.
+4. Wait for `Local stack is healthy`.
+5. Open [http://localhost:3000](http://localhost:3000) and [http://localhost:5678](http://localhost:5678).
+6. Double-click `stop.command` or `stop-windows.cmd`.
+7. Sign in to GitHub Desktop.
+8. Confirm possession of a private Claude API key with available credit.
 
 Running setup at home also downloads the large npm packages in advance, which protects the workshop from slow venue wifi.
 
@@ -91,7 +121,8 @@ Running setup at home also downloads the large npm packages in advance, which pr
 The instructor should use [INSTRUCTOR_CHECKLIST.md](INSTRUCTOR_CHECKLIST.md) and prepare:
 
 - At least one tested macOS machine.
-- At least one tested Windows machine (include an ARM-based Windows laptop when the cohort may bring them).
+- At least one tested Windows x64 machine; include a Windows 11 ARM laptop when
+  the cohort may bring one.
 - Screenshots for every setup step.
 - A small number of preconfigured backup machines where practical.
 - A repository archive and exported n8n workflows.
@@ -104,10 +135,13 @@ Record for each learner:
 | Check | Result |
 | --- | --- |
 | Supported operating system | Pass / needs help |
-| Project-local Node.js runtime prepared | Pass / needs help |
+| 6 GB minimum free; 8 GB recommended | Pass / needs help |
+| Short local folder outside OneDrive/UNC | Pass / needs help |
+| Reviewed Node.js 24.18.0 + npm 11.16.0 pair prepared | Pass / needs help |
+| Windows `preflight-windows.cmd` completed | Pass / needs help |
 | `setup.command` / `setup-windows.cmd` completed | Pass / needs help |
-| Ports 3000 and 5678 available | Pass / needs help |
-| GitHub access | Pass / needs help |
+| Required local ports available | Pass / needs help |
+| GitHub and all four download hosts accessible | Pass / needs help |
 | GitHub Desktop access | Pass / needs help |
 | Anthropic Console access | Pass / needs help |
 | Claude API key and credit | Pass / needs help |

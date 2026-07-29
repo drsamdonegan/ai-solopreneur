@@ -1,11 +1,11 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\windows\sync-skills.ps1" %*
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\windows\restore.ps1" %*
 set "AI_SOLO_STATUS=%ERRORLEVEL%"
 if not "%AI_SOLO_STATUS%"=="0" (
   echo.
-  echo Skill sync did not complete. Review the message above.
+  echo Restore failed. Read the message above, then try again.
 )
 if /I not "%AI_SOLO_NO_PAUSE%"=="1" (
   echo.

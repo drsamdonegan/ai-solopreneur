@@ -13,9 +13,9 @@ changes.
 
 ## Reproducibility lock
 
-The project-local runtime is pinned in `.node-version`. The root `package.json`
-and `package-lock.json` pin the exact n8n release. JavaScript dependencies are
-locked by:
+The reviewed runtime pair is pinned in `.node-version` and `.npm-version`. The
+root `package.json` and `package-lock.json` pin the exact n8n release.
+JavaScript dependencies are locked by:
 
 - `package-lock.json`
 - `apps/chat/package-lock.json`
@@ -23,9 +23,9 @@ locked by:
 - `tests/phase7/package-lock.json`
 
 The setup helper verifies the private Node.js runtime download with the official
-SHA-256 checksum before using it. Release validation confirms the version files,
-lockfiles, native launchers, workflows, documentation, and instructor-kit
-metadata agree.
+SHA-256 checksum and verifies its bundled npm version before using it. Release
+validation confirms the version files, lockfiles, native launchers, workflows,
+documentation, and instructor-kit metadata agree.
 
 ## Owner release decision
 
@@ -41,7 +41,7 @@ The kit contains:
 
 - a source archive from the exact release commit;
 - the eleven canonical workflow exports;
-- pinned Node.js and n8n version metadata;
+- pinned Node.js, npm, and n8n version metadata;
 - native setup instructions;
 - SHA-256 checksums for every included file.
 
@@ -105,6 +105,9 @@ node scripts/validate-release.mjs
 ./scripts/test-phase8.sh
 ```
 
-CI repeats the native learner-path smoke on Linux, macOS, and Windows, plus the
-native agent, resilience, and browser checks. A release is not valid if the tag,
-`VERSION`, version pins, documentation, workflows, or checksums disagree.
+CI repeats the native learner-path smoke on Linux, macOS, Windows x64, and
+Windows 11 ARM. The Windows jobs exercise the root `.cmd` launchers under
+Windows PowerShell 5.1 and prove fallback from an incompatible system Node.
+Separate jobs run the native agent, resilience, and browser checks. A release is
+not valid if the tag, `VERSION`, version pins, documentation, workflows, or
+checksums disagree.

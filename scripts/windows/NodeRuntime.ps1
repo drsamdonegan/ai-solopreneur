@@ -1,6 +1,6 @@
 $ErrorActionPreference = "Stop"
 
-function Get-ProjectNodePlatform {
+function Get-WindowsProcessorArchitecture {
     $architecture = if ($env:PROCESSOR_ARCHITEW6432) {
         $env:PROCESSOR_ARCHITEW6432
     } else {
@@ -8,13 +8,45 @@ function Get-ProjectNodePlatform {
     }
 
     switch ($architecture.ToUpperInvariant()) {
-        "ARM64" { return "arm64" }
-        "AMD64" { return "x64" }
+        "ARM64" { return "ARM64" }
+        "AMD64" { return "AMD64" }
         default { throw "Automatic Node.js setup does not support this processor: $architecture" }
     }
 }
 
+function Get-ProjectNodePlatform {
+    $processor = Get-WindowsProcessorArchitecture
+    if ($processor -eq "ARM64") {
+        $windowsBuild = [Environment]::OSVersion.Version.Build
+        if ($windowsBuild -lt 22000) {
+            throw "ARM-based Windows laptops need Windows 11 for the x64 compatibility runtime used by this project. This computer reports Windows build $windowsBuild."
+        }
+
+        # n8n 2.30.5 includes native modules with Windows x64 prebuilds but no
+        # Windows ARM64 prebuilds. Windows 11 runs this reviewed x64 runtime
+        # through its built-in emulation layer, avoiding Visual Studio builds.
+        return "x64"
+    }
+
+    return "x64"
+}
+
+function Test-ProjectNodeCompatibility {
+    param(
+        [Parameter(Mandatory = $true)][string]$Version,
+        [Parameter(Mandatory = $true)][string]$Architecture,
+        [Parameter(Mandatory = $true)][string]$ExpectedVersion
+    )
+
+    return $Version -eq $ExpectedVersion -and $Architecture -eq "x64"
+}
+
 function Get-SystemNode24 {
+    param(
+        [Parameter(Mandatory = $true)][string]$ExpectedVersion,
+        [Parameter(Mandatory = $true)][string]$ExpectedNpmVersion
+    )
+
     $command = Get-Command node -CommandType Application -ErrorAction SilentlyContinue |
         Select-Object -First 1
     if (-not $command) {
@@ -22,8 +54,24 @@ function Get-SystemNode24 {
     }
 
     try {
-        $major = & $command.Source -p 'Number(process.versions.node.split(".")[0])'
-        if ([int]$major -ge 24) {
+        $detailsJson = & $command.Source -p 'JSON.stringify({version:process.versions.node,arch:process.arch})'
+        if ($LASTEXITCODE -ne 0) {
+            return $null
+        }
+        $details = $detailsJson | ConvertFrom-Json
+        if (-not (Test-ProjectNodeCompatibility `
+            -Version $details.version `
+            -Architecture $details.arch `
+            -ExpectedVersion $ExpectedVersion)) {
+            return $null
+        }
+
+        $npmCli = Join-Path (Split-Path -Parent $command.Source) "node_modules\npm\bin\npm-cli.js"
+        if (-not (Test-Path -LiteralPath $npmCli -PathType Leaf)) {
+            return $null
+        }
+        $npmVersion = & $command.Source $npmCli --version
+        if ($LASTEXITCODE -eq 0 -and $npmVersion -eq $ExpectedNpmVersion) {
             return $command.Source
         }
     } catch {
@@ -37,9 +85,43 @@ function Get-ExpectedNodeChecksum {
     param([Parameter(Mandatory = $true)][string]$Architecture)
 
     switch ($Architecture) {
-        "arm64" { return "f274669adb93b1fd0fbf8f21fd078609e9dcc84333d4f2718d2dde3f9a161a01" }
         "x64" { return "0ae68406b42d7725661da979b1403ec9926da205c6770827f33aac9d8f26e821" }
         default { throw "No Node.js checksum is recorded for Windows $Architecture." }
+    }
+}
+
+function Test-PortableNodeRuntime {
+    param(
+        [Parameter(Mandatory = $true)][string]$NodePath,
+        [Parameter(Mandatory = $true)][string]$ExpectedVersion,
+        [Parameter(Mandatory = $true)][string]$ExpectedNpmVersion
+    )
+
+    if (-not (Test-Path -LiteralPath $NodePath -PathType Leaf)) {
+        return $false
+    }
+
+    try {
+        $detailsJson = & $NodePath -p 'JSON.stringify({version:process.versions.node,arch:process.arch})'
+        if ($LASTEXITCODE -ne 0) {
+            return $false
+        }
+        $details = $detailsJson | ConvertFrom-Json
+        if (-not (Test-ProjectNodeCompatibility `
+            -Version $details.version `
+            -Architecture $details.arch `
+            -ExpectedVersion $ExpectedVersion)) {
+            return $false
+        }
+
+        $npmCli = Join-Path (Split-Path -Parent $NodePath) "node_modules\npm\bin\npm-cli.js"
+        if (-not (Test-Path -LiteralPath $npmCli -PathType Leaf)) {
+            return $false
+        }
+        $installedNpmVersion = & $NodePath $npmCli --version
+        return $LASTEXITCODE -eq 0 -and $installedNpmVersion -eq $ExpectedNpmVersion
+    } catch {
+        return $false
     }
 }
 
@@ -49,20 +131,28 @@ function Resolve-ProjectNode {
         [switch]$Install
     )
 
+    $version = (Get-Content -LiteralPath (Join-Path $ProjectRoot ".node-version") -Raw).Trim()
+    if ($version -notmatch '^\d+\.\d+\.\d+$') {
+        throw "The pinned Node.js version in .node-version is invalid: $version"
+    }
+    $npmVersion = (Get-Content -LiteralPath (Join-Path $ProjectRoot ".npm-version") -Raw).Trim()
+    if ($npmVersion -notmatch '^\d+\.\d+\.\d+$') {
+        throw "The pinned npm version in .npm-version is invalid: $npmVersion"
+    }
+
+    # Validate the host before selecting any system or private runtime. Windows
+    # 10 on ARM cannot run the reviewed x64 native-module path reliably.
+    $architecture = Get-ProjectNodePlatform
     $forcePortable = $env:AI_SOLO_FORCE_PORTABLE_NODE -eq "1"
     if (-not $forcePortable) {
-        $systemNode = Get-SystemNode24
+        $systemNode = Get-SystemNode24 `
+            -ExpectedVersion $version `
+            -ExpectedNpmVersion $npmVersion
         if ($systemNode) {
             return $systemNode
         }
     }
 
-    $version = (Get-Content -LiteralPath (Join-Path $ProjectRoot ".node-version") -Raw).Trim()
-    if ($version -notmatch '^\d+\.\d+\.\d+$') {
-        throw "The pinned Node.js version in .node-version is invalid: $version"
-    }
-
-    $architecture = Get-ProjectNodePlatform
     $runtimeRoot = if ($env:AI_SOLO_RUNTIME_DIR) {
         $env:AI_SOLO_RUNTIME_DIR
     } else {
@@ -73,14 +163,21 @@ function Resolve-ProjectNode {
     $installDirectory = Join-Path $runtimeRoot $archiveBaseName
     $portableNode = Join-Path $installDirectory "node.exe"
 
-    if (Test-Path -LiteralPath $portableNode -PathType Leaf) {
+    if (Test-PortableNodeRuntime `
+        -NodePath $portableNode `
+        -ExpectedVersion $version `
+        -ExpectedNpmVersion $npmVersion) {
         return $portableNode
     }
     if (-not $Install) {
-        throw "Node.js 24+ is not available yet. Run setup-windows.cmd first."
+        throw "The reviewed Node.js $version/npm $npmVersion runtime is not available or is incomplete. Run setup-windows.cmd to install or repair it."
     }
 
     New-Item -ItemType Directory -Path $runtimeRoot -Force | Out-Null
+    if (Test-Path -LiteralPath $installDirectory) {
+        Write-Warning "The private Node.js runtime is incomplete. Setup will replace that project-local folder."
+        Remove-Item -LiteralPath $installDirectory -Recurse -Force
+    }
     $temporaryDirectory = Join-Path $runtimeRoot ("node-download." + [IO.Path]::GetRandomFileName())
     New-Item -ItemType Directory -Path $temporaryDirectory | Out-Null
 
@@ -89,9 +186,30 @@ function Resolve-ProjectNode {
         $archivePath = Join-Path $temporaryDirectory $archiveName
         $downloadUrl = "https://nodejs.org/dist/v$version/$archiveName"
 
-        Write-Host "Node.js 24+ was not found. Downloading a private project copy of Node.js $version..."
+        Write-Host "The reviewed Node.js runtime was not found. Downloading a private x64 copy of Node.js $version..."
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-        Invoke-WebRequest -Uri $downloadUrl -OutFile $archivePath -UseBasicParsing
+        $downloaded = $false
+        for ($attempt = 1; $attempt -le 3; $attempt += 1) {
+            try {
+                Invoke-WebRequest `
+                    -Uri $downloadUrl `
+                    -OutFile $archivePath `
+                    -UseBasicParsing `
+                    -TimeoutSec 120
+                $downloaded = $true
+                break
+            } catch {
+                Remove-Item -LiteralPath $archivePath -Force -ErrorAction SilentlyContinue
+                if ($attempt -eq 3) {
+                    throw "Could not download Node.js from $downloadUrl after three attempts. Check whether nodejs.org is allowed by this computer or network. Last error: $($_.Exception.Message)"
+                }
+                Write-Warning "Node.js download attempt $attempt failed. Retrying..."
+                Start-Sleep -Seconds (2 * $attempt)
+            }
+        }
+        if (-not $downloaded) {
+            throw "The Node.js download did not complete."
+        }
 
         $expectedChecksum = Get-ExpectedNodeChecksum -Architecture $architecture
         $actualChecksum = (Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -107,13 +225,16 @@ function Resolve-ProjectNode {
             throw "The Node.js archive did not contain the expected executable."
         }
 
-        if (-not (Test-Path -LiteralPath $installDirectory)) {
-            Move-Item -LiteralPath $extractedDirectory -Destination $installDirectory
+        if (Test-Path -LiteralPath $installDirectory) {
+            Remove-Item -LiteralPath $installDirectory -Recurse -Force
         }
+        Move-Item -LiteralPath $extractedDirectory -Destination $installDirectory
 
-        $installedVersion = & $portableNode --version
-        if ($installedVersion -ne "v$version") {
-            throw "The project-local Node.js version is unexpected: $installedVersion"
+        if (-not (Test-PortableNodeRuntime `
+            -NodePath $portableNode `
+            -ExpectedVersion $version `
+            -ExpectedNpmVersion $npmVersion)) {
+            throw "The downloaded private Node.js/npm runtime did not match the reviewed versions and architecture."
         }
 
         Write-Host "Project-local Node.js $version is ready. Nothing was installed globally."
@@ -126,7 +247,11 @@ function Resolve-ProjectNode {
                 [StringComparison]::OrdinalIgnoreCase
             )
         ) {
-            [IO.Directory]::Delete($temporaryDirectory, $true)
+            try {
+                [IO.Directory]::Delete($temporaryDirectory, $true)
+            } catch {
+                Write-Warning "Windows could not remove the temporary Node.js download folder yet. It is safe to remove later: $temporaryDirectory"
+            }
         }
     }
 }

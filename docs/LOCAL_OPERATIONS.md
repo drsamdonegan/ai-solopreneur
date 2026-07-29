@@ -131,6 +131,8 @@ Export after making a deliberate visual workflow change:
 
 ### Windows
 
+Double-click `export-workflows-windows.cmd`, or run:
+
 ```powershell
 .\scripts\windows\export-workflows.ps1
 ```
@@ -218,6 +220,8 @@ Restore replaces all current local n8n data. Create a fresh backup first if the 
 Type `RESTORE` when prompted.
 
 ### Windows
+
+Double-click `restore-windows.cmd`, or run:
 
 ```powershell
 .\scripts\windows\restore.ps1 -BackupDirectory .\backups\YYYYMMDD-HHMMSS

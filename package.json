@@ -5,7 +5,7 @@
   "description": "Local AI project assistant: a browser chat and a visual n8n agent, run directly with Node.js",
   "type": "module",
   "engines": {
-    "node": ">=24"
+    "node": "24.x"
   },
   "scripts": {
     "setup": "node scripts/local.mjs setup",
@@ -23,5 +23,22 @@
   },
   "dependencies": {
     "n8n": "2.30.5"
+  },
+  "allowScripts": {
+    "@parcel/watcher@2.6.0": false,
+    "@scarf/scarf@1.4.0": false,
+    "@sentry/node-cpu-profiler@2.4.2": false,
+    "@sentry/node-native-stacktrace@0.5.2": false,
+    "agent-browser@0.26.0": false,
+    "cpu-features@0.0.10": false,
+    "fsevents@2.3.2": false,
+    "isolated-vm@6.1.2": true,
+    "msgpackr-extract@3.0.4": false,
+    "oracledb@6.10.0": false,
+    "protobufjs@7.6.5": false,
+    "protobufjs@8.0.1": false,
+    "sqlite3@5.1.7": true,
+    "ssh2@1.15.0": false,
+    "ssh2@1.17.0": false
   }
 }

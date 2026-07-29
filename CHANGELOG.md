@@ -21,9 +21,19 @@ the chat.
 
 - The one-click setup, start, stop, diagnose, import, skill-sync, export,
   backup, restore, and reset helpers now run everything directly with Node.js.
-- Learners no longer need to install Node.js manually. The helpers use an
-  existing Node.js 24+ runtime or download the pinned official Node.js 24.18.0
-  archive, verify its SHA-256 checksum, and keep it inside `.runtime/`.
+- Learners no longer need to install Node.js or npm manually. The helpers use
+  the exact reviewed Node.js 24.18.0 and npm 11.16.0 pair or download the pinned
+  official archive, verify its SHA-256 checksum, and keep it inside `.runtime/`.
+- Windows setup now supports Windows 10 and 11 on x64 and Windows 11 on ARM
+  through its built-in x64 emulation. Windows 10 on ARM is explicitly
+  unsupported because the pinned n8n native dependencies require x64.
+- Windows preflight checks disk space, folder writability, local path risks,
+  package-registry access, ports, and the reviewed runtime pair before the large
+  install. First setup requires at least 6 GB free; 8 GB is recommended.
+- Windows launchers preserve failures, support non-pausing Claude Code use, and
+  include root helpers for preflight, workflow export, and backup restore.
+- npm downloads use a private project cache with retries, quieter learner
+  output, and a detailed local log path when installation fails.
 - One cross-platform runner (`scripts/local.mjs`) replaces the parallel Bash
   and PowerShell implementations; the familiar double-click files remain and
   simply delegate to it.
@@ -36,7 +46,9 @@ the chat.
   a `.env` file at all; an existing `.env` or backup key is still honoured, and
   ports remain configurable.
 - Agent, packaging, resilience, browser, and occupied-port smoke tests all use
-  isolated native project copies. CI exercises Linux, macOS, and Windows.
+  isolated native project copies. CI exercises Linux, macOS, Windows x64, and
+  Windows 11 ARM, including the learner-facing Windows launchers under Windows
+  PowerShell.
 
 ### Unchanged
 

@@ -28,12 +28,17 @@ check(/^\d+\.\d+\.\d+$/.test(version), "VERSION must contain semantic version X.
 
 for (const file of [
   "CHANGELOG.md",
+  ".node-version",
+  ".npm-version",
   "docs/GETTING_STARTED.md",
   "docs/COURSE_GUIDE.md",
   "docs/RELEASE.md",
   "docs/FEEDBACK_AND_CHANGE_CONTROL.md",
   "prepare-instructor-pack.command",
   "prepare-instructor-pack-windows.cmd",
+  "preflight-windows.cmd",
+  "export-workflows-windows.cmd",
+  "restore-windows.cmd",
   "scripts/prepare-instructor-pack.sh",
   "scripts/windows/prepare-instructor-pack.ps1",
   ".github/ISSUE_TEMPLATE/learner-feedback.yml",
@@ -101,6 +106,18 @@ check(
   rootPackageLock.packages?.["node_modules/n8n"]?.version ===
     rootPackageJson.dependencies?.n8n,
   "Root lockfile must pin the exact n8n version",
+);
+const reviewedNodeVersion = (
+  await readFile(join(projectRoot, ".node-version"), "utf8")
+).trim();
+const reviewedNpmVersion = (
+  await readFile(join(projectRoot, ".npm-version"), "utf8")
+).trim();
+check(
+  reviewedNodeVersion === "24.18.0" &&
+    reviewedNpmVersion === "11.16.0" &&
+    rootPackageJson.engines?.node === "24.x",
+  "Release must keep the reviewed Node.js 24.18.0/npm 11.16.0 runtime contract",
 );
 
 for (const removedArtifact of [

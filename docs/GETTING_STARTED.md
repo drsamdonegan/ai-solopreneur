@@ -37,12 +37,17 @@ Have these ready:
 - [ ] Claude Desktop installed, signed in, and open in Code mode.
 - [ ] GitHub Desktop installed and signed in.
 - [ ] An Anthropic Console API key with a small positive credit balance.
-- [ ] About 2 GB of free disk space for downloaded packages and local data.
+- [ ] At least 6 GB of free disk space for first setup; 8 GB is recommended.
 - [ ] A current Chrome, Edge, Firefox, or Safari browser.
 - [ ] A stable internet connection for the first download and Claude calls.
 
 Follow the [prerequisite guide](WORKSHOP_PREREQUISITES.md) if any checkbox is
 unfamiliar. No WSL2 or virtualization setup is needed.
+
+Windows support means Windows 10 or 11 on an x64 computer, or Windows 11 on an
+ARM-based computer such as a Snapdragon laptop. Windows 11 runs the project's
+reviewed x64 runtime through its built-in emulation. Windows 10 on ARM is not
+supported.
 
 Keep the API key private. Never paste it into GitHub, GitHub Desktop, a chat
 message, `.env`, a screenshot, or an issue. It belongs only in the n8n
@@ -63,6 +68,9 @@ credential screen described below.
 
 If **Use this template** is not visible, ask the instructor for the release ZIP.
 Unzip it into a normal Documents folder; do not run it from inside the ZIP.
+On Windows, use a short local folder outside OneDrive and outside a network/UNC
+path. `C:\ai-workshop\your-project` is a good example when your computer allows
+it.
 
 ### Bring it into Claude Code
 
@@ -70,7 +78,8 @@ Unzip it into a normal Documents folder; do not run it from inside the ZIP.
 2. Select **Code** and keep **HTTPS** selected.
 3. Copy the repository URL.
 4. Open Claude Desktop in Code mode.
-5. Ask: `Please clone this repo: <paste your repository URL>`.
+5. Ask: `Please clone this repo: <paste your repository URL>`. On Windows add:
+   `Use a short local folder outside OneDrive or a network path.`
 6. Open the cloned project in the Claude Code session.
 
 You should now see `README.md` and several files ending in `.command` or
@@ -84,10 +93,16 @@ Ask Claude Code:
 ```text
 Read the README and the existing setup scripts in this repository.
 Start the local services using the project's documented one-click setup.
+On Windows, set AI_SOLO_NO_PAUSE=1 before running the .cmd helper.
 Keep them running, verify the chat and n8n URLs, then open those two pages for me.
 ```
 
 Claude chooses the correct helper for your computer. You can also run it yourself:
+
+On Windows, you can double-click `preflight-windows.cmd` before the large
+package download. It checks the reviewed runtime pair, free disk space,
+project-folder access, local ports, and npm registry access. Setup repeats these
+checks on both platforms.
 
 ### macOS
 
@@ -103,14 +118,23 @@ If macOS blocks it:
 
 Double-click `setup-windows.cmd`.
 
-If Windows asks whether the script may make changes, check that the file is
-inside your cloned project folder, then allow it.
+The helper does not need administrator access. If Windows unexpectedly asks for
+an administrator password or permission to make system changes, cancel and ask
+the instructor for help. A managed-device or SmartScreen warning is a separate
+policy check; do not bypass an organisation's policy.
+
+When Claude Code runs a Windows launcher, it sets `AI_SOLO_NO_PAUSE=1` so the
+launcher returns its real result without waiting for a key. When you double-click
+the same file, it pauses at the end so you can read the result.
 
 ### What setup is doing
 
 The terminal window will:
 
-- use Node.js 24+ if it is already available, or download a verified private copy into this project;
+- use the exact reviewed Node.js 24.18.0 and npm 11.16.0 pair if it is already
+  available, or download a verified private copy into this project;
+- confirm at least 6 GB is free for first setup and that the project folder is
+  writable;
 - check the chat, n8n, and internal document-reader ports;
 - download the exact reviewed n8n release with npm;
 - install the exact document-reader packages with npm;
@@ -120,10 +144,12 @@ The terminal window will:
 - create three sample project tasks;
 - load the enabled Markdown skills.
 
-The private Node.js copy does not change the rest of your computer, need administrator access, or require a restart. It lives in the Git-ignored `.runtime/` folder.
+The private Node.js and npm copy does not change the rest of your computer, need
+administrator access, or require a restart. It lives in the Git-ignored
+`.runtime/` folder.
 
-It is normal for the first run to pause while large downloads finish. Do not
-close the terminal window. Setup is finished when it prints:
+It is normal for the first run to spend several minutes downloading packages.
+Do not close the terminal window. Setup is finished when it prints:
 
 ```text
 Local stack is healthy.

@@ -8,7 +8,9 @@ Run `diagnose.command` on macOS or `diagnose-windows.cmd` on Windows first. It d
 | --- | --- | --- |
 | Node.js download fails | nodejs.org is blocked, offline, or interrupted | Check the connection or managed-device policy, then rerun setup |
 | Node.js SHA-256 safety check fails | The archive is incomplete or does not match the reviewed release | Delete nothing; rerun setup once, then ask a facilitator if it repeats |
-| Port 3000 or 5678 is in use | Another local app owns the port | Close that app or change the matching `.env` value |
+| npm reports `EPERM`, `EBUSY`, or a very long path | OneDrive, a network folder, antivirus, or path length is locking native packages | Move the project to a short local folder such as `C:\ai-workshop\ai-solopreneur`, then rerun setup |
+| npm cannot download SheetJS or a native binary | An asset host is blocked even though the npm website opens | Allow `cdn.sheetjs.com` and `release-assets.githubusercontent.com`, then rerun setup |
+| A required port is in use | Another local app or project copy owns the chat, document, n8n, or task-broker port | Close that app or change the matching `.env` value |
 | Setup pauses a long time on the npm download | Large first download | Wait; later runs reuse the download. Run setup at home before a workshop |
 | Chat opens but says the agent is not ready | Workflow `00` is not published | Follow the yellow diagnostic action and publish workflow `00` |
 | Upload says the document reader is not ready | `document-worker` is still starting or stopped | Restart the local stack, wait for it to become healthy, then retry |
@@ -26,18 +28,24 @@ Run `diagnose.command` on macOS or `diagnose-windows.cmd` on Windows first. It d
 
 ## The private Node.js download fails
 
-Every helper uses Node.js 24+ when it is already available. Otherwise it downloads a checksum-verified private copy into `.runtime/` inside this project. Nothing is installed globally.
+Every helper requires the reviewed Node.js 24.18.0 and npm 11.16.0 pair. If the
+exact pair is unavailable or incomplete, setup downloads and repairs a
+checksum-verified private copy in `.runtime/`. Nothing is installed globally.
 
 If the download fails:
 
-1. Confirm the computer can reach `https://nodejs.org`.
-2. Confirm at least 2 GB of free disk space remains.
+1. Confirm the computer can reach `nodejs.org`, `registry.npmjs.org`,
+   `cdn.sheetjs.com`, and `release-assets.githubusercontent.com`.
+2. Confirm at least 6 GB of free disk space remains; 8 GB is recommended.
 3. Rerun `setup.command` on macOS or `setup-windows.cmd` on Windows.
-4. If a company-managed computer blocks downloads or running files inside the project, ask a facilitator. A manual Node.js 24 LTS installer is the fallback, not the default workshop path.
+4. On Windows, use a short local folder outside OneDrive and network/UNC paths.
+5. If a company-managed computer blocks downloads or project-local executables,
+   ask a facilitator. Do not install a different Node/npm version as a
+   workaround; the pinned native dependencies require the reviewed pair.
 
 Never bypass a repeated SHA-256 mismatch. It prevents an unexpected archive from running.
 
-## Port 3000 or 5678 is already in use
+## A required local port is already in use
 
 Another application is listening on the required local port.
 
@@ -46,9 +54,12 @@ Either close that application or copy `.env.example` to `.env` and change the ma
 ```dotenv
 CHAT_PORT=3000
 N8N_PORT=5678
+# N8N_RUNNERS_BROKER_PORT=5679
 ```
 
-After changing a port, use the new localhost address in the browser.
+The internal broker defaults to `N8N_PORT + 1`; set its commented value only if
+that derived port also conflicts. After changing a browser-facing port, use the
+new localhost address in the browser.
 
 ## The chat app does not open
 
@@ -242,9 +253,11 @@ The backup includes n8n's own encryption-key file, so a complete backup restores
 
 ## Windows script execution error
 
-Use the supplied `.cmd` wrappers for setup, start, and stop. They invoke the repository's PowerShell shims without changing the computer's permanent execution policy, and those shims simply run the shared Node.js runner.
-
-For restore, open PowerShell in the repository directory and run the documented command.
+Use the supplied `.cmd` wrappers. They invoke the repository's PowerShell shims
+without changing the computer's permanent execution policy and preserve the
+real success or failure status. Root wrappers include
+`preflight-windows.cmd`, `export-workflows-windows.cmd`, and
+`restore-windows.cmd`.
 
 ## macOS blocks a command file
 

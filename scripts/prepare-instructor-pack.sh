@@ -5,6 +5,7 @@ set -euo pipefail
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VERSION="$(tr -d '[:space:]' <"${PROJECT_ROOT}/VERSION")"
 NODE_VERSION="$(tr -d '[:space:]' <"${PROJECT_ROOT}/.node-version")"
+NPM_VERSION="$(tr -d '[:space:]' <"${PROJECT_ROOT}/.npm-version")"
 N8N_VERSION="$(node -p "require('${PROJECT_ROOT}/package.json').dependencies.n8n")"
 OUTPUT_ROOT="${PROJECT_ROOT}/instructor-pack"
 METADATA_ONLY=false
@@ -69,6 +70,7 @@ cp "${PROJECT_ROOT}"/n8n/workflows/*.json "${PACK_DIR}/workflows/"
   printf 'Version: %s\n' "${VERSION}"
   printf 'Commit: %s\n' "${COMMIT}"
   printf 'Node.js runtime: %s\n' "${NODE_VERSION}"
+  printf 'npm runtime: %s\n' "${NPM_VERSION}"
   printf 'n8n package: %s\n' "${N8N_VERSION}"
   printf 'Generated UTC: %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 } >"${PACK_DIR}/RELEASE-METADATA.txt"
@@ -86,10 +88,11 @@ For a full release kit:
 3. Ask Claude Code to run the setup helper for this project.
 4. Open the local chat URL printed by setup.
 
-The setup helper uses an existing Node.js 24+ runtime when available. Otherwise
-it downloads a checksum-verified private runtime into the project. The first
-setup requires internet access for the runtime/packages and real Claude messages
-require each learner's private Anthropic API key.
+The setup helper uses the reviewed Node.js ${NODE_VERSION}/npm ${NPM_VERSION}
+pair when it is already available. Otherwise it downloads a checksum-verified
+private runtime into the project. The first setup requires internet access for
+the runtime/packages and real Claude messages require each learner's private
+Anthropic API key.
 EOF
 
 if [[ "${METADATA_ONLY}" == "false" ]]; then

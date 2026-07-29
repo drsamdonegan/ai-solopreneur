@@ -57,10 +57,10 @@ Claude through an encrypted n8n credential
 ```
 
 `scripts/local.mjs` owns installation, startup, shutdown, health checks, data
-paths, workflow import, diagnostics, and recovery operations. It uses an
-existing Node.js 24+ runtime when available. Otherwise the platform launcher
-downloads the pinned official runtime, verifies its SHA-256 checksum, and keeps
-it under `.runtime/`.
+paths, workflow import, diagnostics, and recovery operations. It uses the exact
+reviewed Node.js 24.18.0/npm 11.16.0 pair when available. Otherwise the platform
+launcher downloads the pinned official runtime, verifies its SHA-256 checksum,
+and keeps it under `.runtime/`.
 
 Generated state lives under:
 

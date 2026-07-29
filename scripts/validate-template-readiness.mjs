@@ -15,6 +15,7 @@ const requiredFiles = [
   "VERSION",
   "CHANGELOG.md",
   ".node-version",
+  ".npm-version",
   "package.json",
   "package-lock.json",
   "scripts/local.mjs",
@@ -29,12 +30,15 @@ const requiredFiles = [
   ".gitignore",
   "setup.command",
   "setup-windows.cmd",
+  "preflight-windows.cmd",
   "diagnose.command",
   "diagnose-windows.cmd",
   "evaluate-pilot.command",
   "evaluate-pilot-windows.cmd",
   "backup.command",
   "backup-windows.cmd",
+  "export-workflows-windows.cmd",
+  "restore-windows.cmd",
   "reset.command",
   "reset-windows.cmd",
   "prepare-instructor-pack.command",
@@ -82,6 +86,9 @@ const requiredFiles = [
   "tests/phase7/package-lock.json",
   "tests/phase7/package.json",
   "tests/phase7/test-pilot-evaluator.mjs",
+  "tests/windows/native-smoke.ps1",
+  "tests/windows/node-runtime.tests.ps1",
+  "tests/windows/windows-contracts.test.mjs",
   ".github/workflows/ci.yml",
   ".github/ISSUE_TEMPLATE/learner-feedback.yml",
   ".github/ISSUE_TEMPLATE/improvement.yml",
@@ -200,8 +207,10 @@ check(
   localRunner.includes("documentWorkerServer") &&
     localRunner.includes("DOCUMENT_WORKER_URL") &&
     localRunner.includes('"data", "documents"') &&
-    localRunner.includes("documentWorkerPort"),
-  "The native runner must start and configure the local document reader",
+    localRunner.includes("documentWorkerPort") &&
+    localRunner.includes("N8N_RUNNERS_BROKER_PORT") &&
+    localRunner.includes("taskBrokerPort"),
+  "The native runner must configure the local document reader and an isolated n8n task-broker port",
 );
 
 const setupShell = await readFile(join(projectRoot, "scripts/setup.sh"), "utf8");
@@ -222,6 +231,9 @@ check(
 const nodeVersion = (
   await readFile(join(projectRoot, ".node-version"), "utf8")
 ).trim();
+const npmVersion = (
+  await readFile(join(projectRoot, ".npm-version"), "utf8")
+).trim();
 const nodeRuntimeShell = await readFile(
   join(projectRoot, "scripts/node-runtime.sh"),
   "utf8",
@@ -233,14 +245,19 @@ const nodeRuntimeWindows = await readFile(
 for (const runtimeSource of [nodeRuntimeShell, nodeRuntimeWindows]) {
   check(
     runtimeSource.includes(".node-version") &&
+      runtimeSource.includes(".npm-version") &&
       runtimeSource.includes("nodejs.org") &&
       runtimeSource.includes("SHA-256"),
-    "Each project-local Node.js bootstrap must use the pinned version, official download host, and SHA-256 verification",
+    "Each project-local Node.js bootstrap must use the pinned Node.js/npm pair, official download host, and SHA-256 verification",
   );
 }
 check(
-  /^24\.\d+\.\d+$/.test(nodeVersion),
-  `.node-version must pin a Node.js 24 patch release, found "${nodeVersion}"`,
+  nodeVersion === "24.18.0",
+  `.node-version must pin the reviewed Node.js release 24.18.0, found "${nodeVersion}"`,
+);
+check(
+  npmVersion === "11.16.0",
+  `.npm-version must pin the npm release bundled with Node.js 24.18.0, found "${npmVersion}"`,
 );
 
 const learnerLaunchers = [
@@ -250,12 +267,15 @@ const learnerLaunchers = [
   "start-windows.cmd",
   "stop.command",
   "stop-windows.cmd",
+  "preflight-windows.cmd",
   "diagnose.command",
   "diagnose-windows.cmd",
   "import-workflows.command",
   "import-workflows-windows.cmd",
+  "export-workflows-windows.cmd",
   "backup.command",
   "backup-windows.cmd",
+  "restore-windows.cmd",
   "reset.command",
   "reset-windows.cmd",
   "sync-skills.command",
@@ -296,12 +316,16 @@ const ciWorkflow = await readFile(
   "utf8",
 );
 check(
-  ciWorkflow.includes('AI_SOLO_FORCE_PORTABLE_NODE = "1"') &&
-    ciWorkflow.includes("Resolve-ProjectNode") &&
+  ciWorkflow.includes("tests/windows/native-smoke.ps1") &&
+    ciWorkflow.includes("tests/windows/node-runtime.tests.ps1") &&
+    ciWorkflow.includes("tests/windows/windows-contracts.test.mjs") &&
+    ciWorkflow.includes("windows-11-arm") &&
+    ciWorkflow.includes("shell: powershell") &&
+    ciWorkflow.includes("'25.2.1'") &&
     ciWorkflow.includes("macos-latest") &&
     ciWorkflow.includes("Native agent and resilience smoke") &&
     ciWorkflow.includes("windows-latest"),
-  "CI must exercise the native runtime on macOS, Windows, and the integration runner",
+  "CI must exercise the learner launchers through Windows PowerShell 5.1 on x64 and ARM, including incompatible-system-Node fallback",
 );
 
 for (const removedArtifact of [

@@ -11,8 +11,12 @@ Use this list to prepare and run a workshop in which non-technical teams reach a
 - [ ] Merge the release phase branches in order and complete [TEMPLATE_RELEASE.md](TEMPLATE_RELEASE.md).
 - [ ] Generate a disposable repository from the template with **Include all branches** off.
 - [ ] Follow only that generated repository's README on one supported Mac and one Windows computer.
-- [ ] Confirm a clean project downloads and uses its verified private Node.js 24 runtime without admin access.
+- [ ] Confirm a clean project downloads and uses its verified Node.js
+      24.18.0/npm 11.16.0 pair without admin access.
 - [ ] Run `setup.command` and `setup-windows.cmd` on a computer without existing project data.
+- [ ] On Windows, run `preflight-windows.cmd` from a short local path and test
+      the actual `.cmd` launchers, including one path containing spaces.
+- [ ] Test Windows 11 ARM when the cohort may use ARM laptops.
 - [ ] Confirm all eleven workflows appear and the four Data Tables are created.
 - [ ] Run diagnostics before configuration and confirm its `[next]` actions are accurate.
 - [ ] Add a disposable Anthropic credential, publish workflows `00` and `90`, and confirm diagnostics become all green.
@@ -31,11 +35,13 @@ For each learner or team, record:
 | --- | --- |
 | GitHub | Signed in and allowed to create a repository |
 | GitHub Desktop | Signed in and able to clone |
-| Project runtime | One-click setup prepares Node.js 24.18.0 inside `.runtime/` when needed |
-| Local ports | 3000 and 5678 are available, or `.env` alternatives are agreed |
+| Windows support | Windows 10/11 x64, or Windows 11 ARM through x64 emulation |
+| Disk and path | At least 6 GB free (8 GB preferred), in a short local non-OneDrive/non-UNC folder |
+| Project runtime | One-click setup prepares Node.js 24.18.0/npm 11.16.0 inside `.runtime/` when needed |
+| Local ports | Chat, n8n, document-reader, and task-broker ports are available, or `.env` alternatives are agreed |
 | Browser | Current Chrome or Edge |
 | Anthropic Console | API key exists and the workspace has a small credit balance |
-| Network | GitHub, registry.npmjs.org, and Anthropic API are reachable |
+| Network | GitHub, Anthropic, nodejs.org, registry.npmjs.org, cdn.sheetjs.com, and release-assets.githubusercontent.com are reachable |
 | Security | Learner knows the key goes only into the n8n credential |
 
 Resolve account access and any managed-device restriction on project-local executables before the main session.
