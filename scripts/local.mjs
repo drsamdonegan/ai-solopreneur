@@ -1404,11 +1404,7 @@ async function commandDiagnose() {
 
       const chatProbe = await fetchStatus(
         `http://127.0.0.1:${cfg.n8nPort}/webhook/chat`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: '{"sessionId":"diagnostic","message":"diagnostic"}',
-        },
+        { method: "POST" },
       );
       if (
         chatProbe !== null &&
