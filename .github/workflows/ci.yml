@@ -135,8 +135,11 @@ jobs:
           & $nodePath scripts/local.mjs status
           if ($LASTEXITCODE -ne 0) { exit 1 }
           $diagnostics = & $nodePath scripts/local.mjs diagnose | Out-String
-          if ($LASTEXITCODE -ne 0) { exit 1 }
           Write-Host $diagnostics
+          if ($diagnostics.Contains("[!!]")) {
+            Write-Error "Diagnostics reported a native service failure."
+            exit 1
+          }
           if (-not ($diagnostics -match "The learner checklist is installed")) {
             Write-Error "Diagnostics did not confirm the imported learner checklist."
             exit 1

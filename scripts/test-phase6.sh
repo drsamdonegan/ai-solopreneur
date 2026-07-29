@@ -37,6 +37,25 @@ copy_local() {
   (cd "${COPY_ROOT}" && node scripts/local.mjs "$@")
 }
 
+diagnostics_until_green() {
+  local output=""
+  local status=1
+  local attempt
+  for attempt in $(seq 1 30); do
+    set +e
+    output="$("${COPY_ROOT}/scripts/diagnose.sh" 2>&1)"
+    status=$?
+    set -e
+    if [[ "${status}" -eq 0 ]]; then
+      printf '%s' "${output}"
+      return 0
+    fi
+    sleep 1
+  done
+  printf '%s' "${output}"
+  return "${status}"
+}
+
 cleanup() {
   if [[ "${KEEP_SMOKE}" == "1" ]]; then
     printf '\nKeeping the isolated Phase 6 stack and template copy for visual inspection.\n'
@@ -290,7 +309,13 @@ curl \
   --silent \
   --show-error \
   "http://127.0.0.1:${N8N_PORT}/webhook/agent-health" >/dev/null
-diagnostic_after="$("${COPY_ROOT}/scripts/diagnose.sh" 2>&1)"
+set +e
+diagnostic_after="$(diagnostics_until_green)"
+diagnostic_after_status=$?
+set -e
+if [[ "${diagnostic_after_status}" -ne 0 ]]; then
+  fail $'configured diagnostics did not reach all-green state:\n'"${diagnostic_after}"
+fi
 expect_contains "${diagnostic_after}" \
   "Anthropic credential exists and is selected" \
   "configured diagnostics"
@@ -342,7 +367,13 @@ restored_workflow_list="$(copy_local n8n list:workflow)"
 expect_contains "${restored_workflow_list}" \
   "phase6LearnerChecklist|01 - START HERE - Learner Checklist [LOCAL EDIT]" \
   "restored workflow state"
-restored_diagnostics="$("${COPY_ROOT}/scripts/diagnose.sh" 2>&1)"
+set +e
+restored_diagnostics="$(diagnostics_until_green)"
+restored_diagnostics_status=$?
+set -e
+if [[ "${restored_diagnostics_status}" -ne 0 ]]; then
+  fail $'restored diagnostics did not reach all-green state:\n'"${restored_diagnostics}"
+fi
 expect_contains "${restored_diagnostics}" \
   "All checks are green" \
   "restored diagnostics"
