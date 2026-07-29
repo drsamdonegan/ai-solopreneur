@@ -40,13 +40,20 @@ copy_local() {
   )
 }
 
+copy_diagnose() {
+  (
+    cd "${COPY_ROOT}"
+    AI_SOLO_FORCE_PORTABLE_NODE=1 ./scripts/diagnose.sh
+  )
+}
+
 diagnostics_until_green() {
   local output=""
   local status=1
   local attempt
   for attempt in $(seq 1 10); do
     set +e
-    output="$("${COPY_ROOT}/scripts/diagnose.sh" 2>&1)"
+    output="$(copy_diagnose 2>&1)"
     status=$?
     set -e
     if [[ "${status}" -eq 0 ]]; then
@@ -283,7 +290,7 @@ if (credential.id !== 'phase3Anthropic' || credential.name !== 'Anthropic accoun
 
 printf 'Checking friendly diagnostics before and after agent configuration...\n'
 set +e
-diagnostic_before="$("${COPY_ROOT}/scripts/diagnose.sh" 2>&1)"
+diagnostic_before="$(copy_diagnose 2>&1)"
 diagnostic_status=$?
 set -e
 [[ "${diagnostic_status}" -ne 0 ]] ||
