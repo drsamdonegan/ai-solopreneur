@@ -27,6 +27,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { chmod, copyFile, mkdir, readFile, rm } from "node:fs/promises";
+import { request as httpRequest } from "node:http";
 import net from "node:net";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
@@ -297,21 +298,45 @@ function portInUse(port) {
   });
 }
 
-async function fetchStatus(url, options = {}, timeoutMs = 5_000) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const response = await fetch(url, {
-      ...options,
-      signal: controller.signal,
+function fetchStatus(url, options = {}, timeoutMs = 5_000) {
+  return new Promise((resolveStatus) => {
+    let settled = false;
+    const finish = (value) => {
+      if (!settled) {
+        settled = true;
+        resolveStatus(value);
+      }
+    };
+    const request = httpRequest(
+      url,
+      {
+        method: options.method ?? "GET",
+        headers: options.headers ?? {},
+      },
+      (response) => {
+        const chunks = [];
+        response.setEncoding("utf8");
+        response.on("data", (chunk) => chunks.push(chunk));
+        response.on("end", () => {
+          const status = response.statusCode ?? 0;
+          finish({
+            status,
+            ok: status >= 200 && status < 300,
+            body: chunks.join(""),
+          });
+        });
+        response.on("error", () => finish(null));
+      },
+    );
+    request.setTimeout(timeoutMs, () => {
+      request.destroy(new Error("Local health request timed out"));
     });
-    const body = await response.text();
-    return { status: response.status, ok: response.ok, body };
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timeout);
-  }
+    request.on("error", () => finish(null));
+    if (options.body !== undefined) {
+      request.write(options.body);
+    }
+    request.end();
+  });
 }
 
 // ---------------------------------------------------------------------------
