@@ -14,6 +14,17 @@ const requiredFiles = [
   "README.md",
   "VERSION",
   "CHANGELOG.md",
+  ".node-version",
+  "package.json",
+  "package-lock.json",
+  "scripts/local.mjs",
+  "scripts/node-runtime.sh",
+  "scripts/run-local.sh",
+  "scripts/windows/NodeRuntime.ps1",
+  "services/document-worker/package.json",
+  "services/document-worker/package-lock.json",
+  "services/document-worker/src/server.mjs",
+  "apps/chat/config/agents.json",
   "compose.yaml",
   ".env.example",
   ".gitignore",
@@ -43,6 +54,8 @@ const requiredFiles = [
   "docs/WORKFLOW_DEVELOPMENT.md",
   "docs/LOCAL_OPERATIONS.md",
   "docs/TROUBLESHOOTING.md",
+  "docs/DOCUMENT_UPLOADS.md",
+  "docs/ADD_AN_AGENT.md",
   "docs/images/01-n8n-owner-setup.png",
   "docs/images/02-n8n-learner-checklist.png",
   "docs/images/03-chat-confirmation.png",
@@ -70,7 +83,6 @@ const requiredFiles = [
   "tests/phase7/package-lock.json",
   "tests/phase7/package.json",
   "tests/phase7/test-pilot-evaluator.mjs",
-  "tests/phase7/lsof-conflict-fixture.sh",
   ".github/workflows/ci.yml",
   ".github/ISSUE_TEMPLATE/learner-feedback.yml",
   ".github/ISSUE_TEMPLATE/improvement.yml",
@@ -82,6 +94,9 @@ const executableFiles = [
   "diagnose.command",
   "backup.command",
   "reset.command",
+  "scripts/local.mjs",
+  "scripts/node-runtime.sh",
+  "scripts/run-local.sh",
   "scripts/setup.sh",
   "scripts/diagnose.sh",
   "scripts/test-phase6.sh",
@@ -164,13 +179,30 @@ for (const requiredText of [
   "CONFIRM XXXXXXXX",
   "backup.command",
   "reset.command",
-  "without installing Node.js, npm, or n8n",
+  "No Docker or manual Node.js install",
   "Complete beginner getting-started guide",
   "Eight-exercise course guide",
-  "v0.1.0",
+  "v0.2.0",
 ]) {
   check(readme.includes(requiredText), `README must mention "${requiredText}"`);
 }
+
+const localRunner = await readFile(
+  join(projectRoot, "scripts/local.mjs"),
+  "utf8",
+);
+check(
+  localRunner.includes("phase6LearnerChecklist") &&
+    localRunner.includes("keeping local edits unchanged"),
+  "The local runner must automatically import only when the reviewed workflow marker is missing",
+);
+check(
+  localRunner.includes("documentWorkerServer") &&
+    localRunner.includes("DOCUMENT_WORKER_URL") &&
+    localRunner.includes('"data", "documents"') &&
+    localRunner.includes("documentWorkerPort"),
+  "The native runner must start and configure the local document reader",
+);
 
 const setupShell = await readFile(join(projectRoot, "scripts/setup.sh"), "utf8");
 const setupWindows = await readFile(
@@ -178,32 +210,111 @@ const setupWindows = await readFile(
   "utf8",
 );
 check(
-  setupShell.includes("phase6LearnerChecklist") &&
-    setupShell.includes("scripts/import-workflows.sh"),
-  "macOS setup must automatically import only when the reviewed workflow marker is missing",
+  setupShell.includes("run-local.sh"),
+  "macOS setup must delegate through the project-local Node.js launcher",
 );
 check(
-  setupWindows.includes("phase6LearnerChecklist") &&
-    setupWindows.includes("import-workflows.ps1"),
-  "Windows setup must automatically import only when the reviewed workflow marker is missing",
+  setupWindows.includes("NodeRuntime.ps1") &&
+    setupWindows.includes("Invoke-ProjectLocalRunner"),
+  "Windows setup must delegate through the project-local Node.js launcher",
 );
 
-for (const diagnostic of [
-  "scripts/diagnose.sh",
-  "scripts/windows/diagnose.ps1",
-]) {
-  const source = await readFile(join(projectRoot, diagnostic), "utf8");
-  check(!source.includes("--decrypted"), `${diagnostic} must never decrypt credentials`);
+const nodeVersion = (
+  await readFile(join(projectRoot, ".node-version"), "utf8")
+).trim();
+const nodeRuntimeShell = await readFile(
+  join(projectRoot, "scripts/node-runtime.sh"),
+  "utf8",
+);
+const nodeRuntimeWindows = await readFile(
+  join(projectRoot, "scripts/windows/NodeRuntime.ps1"),
+  "utf8",
+);
+for (const runtimeSource of [nodeRuntimeShell, nodeRuntimeWindows]) {
   check(
-    source.includes("phase3StartHere") &&
-      source.includes("phase6LearnerChecklist") &&
-      source.includes("Anthropic"),
-    `${diagnostic} must inspect the checklist, main workflow, and Anthropic selection`,
+    runtimeSource.includes(".node-version") &&
+      runtimeSource.includes("nodejs.org") &&
+      runtimeSource.includes("SHA-256"),
+    "Each project-local Node.js bootstrap must use the pinned version, official download host, and SHA-256 verification",
+  );
+}
+check(
+  /^24\.\d+\.\d+$/.test(nodeVersion),
+  `.node-version must pin a Node.js 24 patch release, found "${nodeVersion}"`,
+);
+
+const learnerLaunchers = [
+  "setup.command",
+  "setup-windows.cmd",
+  "start.command",
+  "start-windows.cmd",
+  "stop.command",
+  "stop-windows.cmd",
+  "diagnose.command",
+  "diagnose-windows.cmd",
+  "import-workflows.command",
+  "import-workflows-windows.cmd",
+  "backup.command",
+  "backup-windows.cmd",
+  "reset.command",
+  "reset-windows.cmd",
+  "sync-skills.command",
+  "sync-skills-windows.cmd",
+  "scripts/setup.sh",
+  "scripts/start.sh",
+  "scripts/stop.sh",
+  "scripts/diagnose.sh",
+  "scripts/preflight.sh",
+  "scripts/import-workflows.sh",
+  "scripts/export-workflows.sh",
+  "scripts/backup.sh",
+  "scripts/restore.sh",
+  "scripts/reset.sh",
+  "scripts/sync-skills.sh",
+  "scripts/windows/setup.ps1",
+  "scripts/windows/start.ps1",
+  "scripts/windows/stop.ps1",
+  "scripts/windows/diagnose.ps1",
+  "scripts/windows/preflight.ps1",
+  "scripts/windows/import-workflows.ps1",
+  "scripts/windows/export-workflows.ps1",
+  "scripts/windows/backup.ps1",
+  "scripts/windows/restore.ps1",
+  "scripts/windows/reset.ps1",
+  "scripts/windows/sync-skills.ps1",
+];
+for (const launcher of learnerLaunchers) {
+  const source = await readFile(join(projectRoot, launcher), "utf8");
+  check(
+    !/\bdocker(?:\.exe)?\b|\bdocker\s+compose\b/i.test(source),
+    `${launcher} must not invoke Docker on the learner path`,
   );
 }
 
+const ciWorkflow = await readFile(
+  join(projectRoot, ".github/workflows/ci.yml"),
+  "utf8",
+);
+check(
+  ciWorkflow.includes('AI_SOLO_FORCE_PORTABLE_NODE = "1"') &&
+    ciWorkflow.includes("Resolve-ProjectNode") &&
+    ciWorkflow.includes("windows-latest"),
+  "CI must exercise the Windows project-local Node.js bootstrap",
+);
+
+check(
+  !localRunner.includes("--decrypted"),
+  "scripts/local.mjs must never decrypt credentials",
+);
+check(
+  localRunner.includes("phase3StartHere") &&
+    localRunner.includes("phase6LearnerChecklist") &&
+    localRunner.includes("Anthropic"),
+  "scripts/local.mjs diagnostics must inspect the checklist, main workflow, and Anthropic selection",
+);
+
 const gitignore = await readFile(join(projectRoot, ".gitignore"), "utf8");
-for (const ignored of [".env", "backups/*", "n8n/exports/"]) {
+for (const ignored of [".env", "backups/*", "n8n/exports/", "data/", ".runtime/"]) {
   check(gitignore.includes(ignored), `.gitignore must protect ${ignored}`);
 }
 
@@ -249,6 +360,7 @@ const projectFiles = await collectFiles(
     ".git",
     ".env",
     "backups",
+    "data",
     "node_modules",
     "dist",
     "coverage",

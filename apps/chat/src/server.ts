@@ -22,6 +22,9 @@ const timeoutMs = positiveInteger(
   DEFAULT_TIMEOUT_MS,
 );
 const upstreamUrl = process.env.N8N_CHAT_WEBHOOK_URL ?? DEFAULT_UPSTREAM_URL;
+// Containers must accept connections from the published port mapping; the
+// native local runner narrows this to the loopback interface instead.
+const listenAddress = process.env.CHAT_LISTEN_ADDRESS ?? "0.0.0.0";
 const publicDirectory = fileURLToPath(new URL("../public", import.meta.url));
 const agentRegistryPath =
   process.env.AGENT_REGISTRY_PATH ??
@@ -54,8 +57,8 @@ const server = createChatServer({
   logError: (message, error) => console.error(message, error),
 });
 
-server.listen(port, "0.0.0.0", () => {
-  console.log(`Chat gateway listening on http://0.0.0.0:${port}`);
+server.listen(port, listenAddress, () => {
+  console.log(`Chat gateway listening on http://${listenAddress}:${port}`);
   console.log(
     `Loaded ${agents.length} agent definitions; ${agents.filter((agent) => agent.status === "active").length} active.`,
   );

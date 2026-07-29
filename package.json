@@ -1,0 +1,27 @@
+{
+  "name": "ai-solopreneur",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Local AI project assistant: a browser chat and a visual n8n agent, run directly with Node.js",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "setup": "node scripts/local.mjs setup",
+    "start": "node scripts/local.mjs start",
+    "stop": "node scripts/local.mjs stop",
+    "restart": "node scripts/local.mjs restart",
+    "status": "node scripts/local.mjs status",
+    "diagnose": "node scripts/local.mjs diagnose",
+    "preflight": "node scripts/local.mjs preflight",
+    "import-workflows": "node scripts/local.mjs import-workflows",
+    "sync-skills": "node scripts/local.mjs sync-skills",
+    "export-workflows": "node scripts/local.mjs export-workflows",
+    "backup": "node scripts/local.mjs backup",
+    "reset": "node scripts/local.mjs reset"
+  },
+  "dependencies": {
+    "n8n": "2.30.5"
+  }
+}

@@ -1,10 +1,14 @@
 # AI Solopreneur: Local-First Implementation Plan
 
-> **Status note:** Phases 0–8 describe the original local release. The current
-> repository also implements bounded PDF, DOCX, TXT, and pasted-text context,
-> plus a reusable agent registry. The current contracts are documented in
-> [CHAT_CONTRACT.md](CHAT_CONTRACT.md), [DOCUMENT_UPLOADS.md](DOCUMENT_UPLOADS.md),
-> and [ADD_AN_AGENT.md](ADD_AN_AGENT.md).
+> **Status note:** Phases 0–8 describe the original `v0.1.0` Docker-based
+> implementation. Release `v0.2.0` replaced Docker on the learner path with a
+> shared native runner and verified project-local Node.js bootstrap, and added
+> bounded PDF, DOCX, TXT, and pasted-text context plus a reusable agent
+> registry. Current contracts are documented in
+> [CHAT_CONTRACT.md](CHAT_CONTRACT.md),
+> [DOCUMENT_UPLOADS.md](DOCUMENT_UPLOADS.md), and
+> [ADD_AN_AGENT.md](ADD_AN_AGENT.md). `compose.yaml` remains for contributor
+> smoke tests and future server deployment.
 
 ## 1. Objective
 

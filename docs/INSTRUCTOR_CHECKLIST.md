@@ -10,9 +10,9 @@ Use this list to prepare and run a workshop in which non-technical teams reach a
 - [ ] If your organisation requires its own learner pilot, complete the [pilot runbook](PILOT_RUNBOOK.md) and receive `GO` before delivery.
 - [ ] Merge the release phase branches in order and complete [TEMPLATE_RELEASE.md](TEMPLATE_RELEASE.md).
 - [ ] Generate a disposable repository from the template with **Include all branches** off.
-- [ ] Follow only that generated repository's README on one supported Mac and one Windows 11/WSL2 computer.
-- [ ] Confirm no host Node.js, npm, or n8n installation is needed.
-- [ ] Run `setup.command` and `setup-windows.cmd` from a fresh Docker state.
+- [ ] Follow only that generated repository's README on one supported Mac and one Windows computer.
+- [ ] Confirm a clean project downloads and uses its verified private Node.js 24 runtime without admin access.
+- [ ] Run `setup.command` and `setup-windows.cmd` on a computer without existing project data.
 - [ ] Confirm all eleven workflows appear and the four Data Tables are created.
 - [ ] Run diagnostics before configuration and confirm its `[next]` actions are accurate.
 - [ ] Add a disposable Anthropic credential, publish workflows `00` and `90`, and confirm diagnostics become all green.
@@ -20,7 +20,7 @@ Use this list to prepare and run a workshop in which non-technical teams reach a
 - [ ] Create, inspect, restore, and securely remove a disposable backup.
 - [ ] Confirm reset requires the exact `RESET` word.
 - [ ] Test the current screenshots and every learner-facing link.
-- [ ] Record any managed-network, VPN, proxy, or Docker policy constraints.
+- [ ] Record any managed-network, VPN, proxy, or npm-registry policy constraints.
 - [ ] Generate and test the versioned instructor kit using [RELEASE.md](RELEASE.md).
 
 ## Learner preflight
@@ -31,14 +31,14 @@ For each learner or team, record:
 | --- | --- |
 | GitHub | Signed in and allowed to create a repository |
 | GitHub Desktop | Signed in and able to clone |
-| Docker Desktop | Installed, open, and engine running |
+| Project runtime | One-click setup prepares Node.js 24.18.0 inside `.runtime/` when needed |
 | Local ports | 3000 and 5678 are available, or `.env` alternatives are agreed |
 | Browser | Current Chrome or Edge |
 | Anthropic Console | API key exists and the workspace has a small credit balance |
-| Network | GitHub, Docker image registries, and Anthropic API are reachable |
+| Network | GitHub, registry.npmjs.org, and Anthropic API are reachable |
 | Security | Learner knows the key goes only into the n8n credential |
 
-Resolve Docker and account installation before the main session.
+Resolve account access and any managed-device restriction on project-local executables before the main session.
 
 ## Workshop kit
 
@@ -97,7 +97,7 @@ rules in the [pilot runbook](PILOT_RUNBOOK.md). A compact working view is:
 
 | Anonymous team | OS | Time to first response | Intervention | Root cause | Follow-up |
 | --- | --- | --- | --- | --- | --- |
-| T01 | Windows 11/WSL2 | 34 min | Docker restart | WSL2 update pending | Add to preflight |
+| T01 | Windows 11 | 24 min | Runtime download blocked | Managed-device policy | Prepare a paired fallback |
 
 Do not record API keys, passwords, full logs, or sensitive task content.
 

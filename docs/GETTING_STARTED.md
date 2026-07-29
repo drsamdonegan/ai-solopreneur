@@ -8,22 +8,22 @@ not published on the internet.
 
 You do not need to know how to code. You will mostly:
 
-1. click buttons in GitHub Desktop and Docker Desktop;
-2. double-click the setup file for your computer;
+1. click buttons in GitHub and Claude Desktop;
+2. ask Claude Code to set up the project;
 3. connect your Claude API key inside n8n;
 4. edit a few clearly labelled words;
 5. save your changes with GitHub Desktop.
 
-Allow 30–45 minutes for the first setup. The first Docker download is the
-slowest part.
+Allow 30–45 minutes for the first setup. The first npm download is the slowest
+part.
 
 ## Four names you will see
 
 | Name | Plain-language meaning |
 | --- | --- |
 | GitHub | The website that stores your project files |
-| GitHub Desktop | The app that copies those files to your computer and saves changes |
-| Docker Desktop | The app that runs the project without installing developer tools |
+| Claude Code | The Code area in Claude Desktop that copies and sets up the project for you |
+| Node.js | The engine that runs the project; setup supplies a private copy automatically when needed |
 | n8n | The visual canvas where you can see and change the AI agent |
 
 Claude is the AI model. An Anthropic API key lets this local project call
@@ -34,15 +34,15 @@ Claude. A paid Claude web subscription and API credit are separate products.
 Have these ready:
 
 - [ ] A GitHub account.
+- [ ] Claude Desktop installed, signed in, and open in Code mode.
 - [ ] GitHub Desktop installed and signed in.
-- [ ] Docker Desktop installed, open, and reporting that its engine is running.
 - [ ] An Anthropic Console API key with a small positive credit balance.
-- [ ] About 5 GB of free disk space for Docker images and local data.
+- [ ] About 2 GB of free disk space for downloaded packages and local data.
 - [ ] A current Chrome, Edge, Firefox, or Safari browser.
 - [ ] A stable internet connection for the first download and Claude calls.
 
-Windows learners must use Windows 11 with WSL2 enabled. Follow the
-[prerequisite guide](WORKSHOP_PREREQUISITES.md) if any checkbox is unfamiliar.
+Follow the [prerequisite guide](WORKSHOP_PREREQUISITES.md) if any checkbox is
+unfamiliar. No Docker, WSL2, or virtualization setup is needed.
 
 Keep the API key private. Never paste it into GitHub, GitHub Desktop, a chat
 message, `.env`, a screenshot, or an issue. It belongs only in the n8n
@@ -64,21 +64,30 @@ credential screen described below.
 If **Use this template** is not visible, ask the instructor for the release ZIP.
 Unzip it into a normal Documents folder; do not run it from inside the ZIP.
 
-### Clone it with GitHub Desktop
+### Bring it into Claude Code
 
-1. In GitHub Desktop, choose **File → Clone repository**.
-2. Select the repository you just created.
-3. Keep the suggested local folder or choose a folder you can find again.
-4. Select **Clone**.
-5. Select **Show in Finder** on macOS or **Show in Explorer** on Windows.
+1. Open your new repository on GitHub.
+2. Select **Code** and keep **HTTPS** selected.
+3. Copy the repository URL.
+4. Open Claude Desktop in Code mode.
+5. Ask: `Please clone this repo: <paste your repository URL>`.
+6. Open the cloned project in the Claude Code session.
 
-You should now see `README.md`, `compose.yaml`, and several files ending in
-`.command` or `.cmd`. The [GitHub Desktop guide](GITHUB_DESKTOP.md) has
-screenshots-in-words for every save and push action.
+You should now see `README.md` and several files ending in `.command` or
+`.cmd`. The [GitHub Desktop guide](GITHUB_DESKTOP.md) has screenshots-in-words
+for the alternative visual clone workflow and every save and push action.
 
 ## Part 2 — run the one-click setup
 
-Leave Docker Desktop open.
+Ask Claude Code:
+
+```text
+Read the README and the existing setup scripts in this repository.
+Start the local services using the project's documented one-click setup.
+Keep them running, verify the chat and n8n URLs, then open those two pages for me.
+```
+
+Claude chooses the correct helper for your computer. You can also run it yourself:
 
 ### macOS
 
@@ -101,17 +110,20 @@ inside your cloned project folder, then allow it.
 
 The terminal window will:
 
-- check Docker and the two browser ports;
-- make a private encryption key;
-- download exact, versioned Docker images;
+- use Node.js 24+ if it is already available, or download a verified private copy into this project;
+- check the chat, n8n, and internal document-reader ports;
+- download the exact reviewed n8n release with npm;
+- install the exact document-reader packages with npm;
 - build the chat app;
-- start n8n and the chat;
+- start n8n, the document reader, and the chat in the background;
 - import eleven reviewed workflows;
 - create three sample project tasks;
 - load the enabled Markdown skills.
 
-It is normal for the first run to pause while large files download. Do not close
-the terminal or Docker Desktop. Setup is finished when it prints:
+The private Node.js copy does not change the rest of your computer, need administrator access, or require a restart. It lives in the Git-ignored `.runtime/` folder.
+
+It is normal for the first run to pause while large downloads finish. Do not
+close the terminal window. Setup is finished when it prints:
 
 ```text
 Local stack is healthy.
@@ -135,8 +147,8 @@ macOS or `import-workflows-windows.cmd` on Windows.
 
 ![The five-step learner checklist inside n8n](images/02-n8n-learner-checklist.png)
 
-This account exists only in the local Docker data on this computer. It is not
-your GitHub, Anthropic, or n8n Cloud account.
+This account exists only in this project's local data folder on this computer.
+It is not your GitHub, Anthropic, or n8n Cloud account.
 
 ## Part 4 — connect Claude safely
 
@@ -155,8 +167,8 @@ Turn off screen sharing before showing or pasting the key.
 11. Open `90 - DEBUG - Agent Health`.
 12. Select **Publish**.
 
-The browser chat never receives the key. n8n stores it encrypted in the local
-Docker volume.
+The browser chat never receives the key. n8n stores it encrypted inside the
+project's private, Git-ignored data folder.
 
 ## Part 5 — check that everything is ready
 
@@ -238,7 +250,7 @@ Start a new browser conversation so the new instruction is loaded. Follow
 
 In GitHub Desktop:
 
-1. Review the changed file names and make sure `.env` and `backups` are absent.
+1. Review the changed file names and make sure `.env`, `data`, and `backups` are absent.
 2. In **Summary**, type `Customise my project partner`.
 3. Select **Commit to main**.
 4. Select **Push origin**.
@@ -254,8 +266,8 @@ Before an experiment, create a private backup:
 - macOS: double-click `backup.command`.
 - Windows: double-click `backup-windows.cmd`.
 
-Treat `backups/` like a password. It contains encrypted credentials plus the
-matching encryption key.
+Treat `backups/` like a password. It contains encrypted credentials and local
+settings.
 
 To stop at the end of the day:
 
@@ -264,9 +276,8 @@ To stop at the end of the day:
 
 To return later:
 
-1. Open Docker Desktop and wait until it is ready.
-2. Double-click `start.command` or `start-windows.cmd`.
-3. Open [http://localhost:3000](http://localhost:3000).
+1. Double-click `start.command` or `start-windows.cmd`.
+2. Open [http://localhost:3000](http://localhost:3000).
 
 Stopping preserves your local work. Reset is different: it permanently removes
 the local n8n account, credentials, workflows, tasks, history, and extracted
@@ -278,11 +289,10 @@ document context. Do not run a reset unless you understand the
 Use this order:
 
 1. Read the exact terminal or browser message once.
-2. Confirm Docker Desktop is open and ready.
-3. Run `diagnose.command` or `diagnose-windows.cmd`.
-4. Follow its first yellow `[next]` instruction.
-5. Search the [troubleshooting table](TROUBLESHOOTING.md).
-6. Ask for help without sharing `.env`, an API key, a backup, or screenshots of
+2. Run `diagnose.command` or `diagnose-windows.cmd`.
+3. Follow its first yellow `[next]` instruction.
+4. Search the [troubleshooting table](TROUBLESHOOTING.md).
+5. Ask for help without sharing `.env`, an API key, a backup, or screenshots of
    the credential screen.
 
 The two most useful local addresses are:

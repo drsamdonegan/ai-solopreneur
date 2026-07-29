@@ -3,6 +3,14 @@
 .env.*
 !.env.example
 
+# Local runtime data: the n8n database, encrypted credentials, service logs,
+# and process records all live here and must never be committed
+data/
+
+# Verified project-local Node.js runtime, downloaded only when Node 24+ is not
+# already available. It is reproducible from .node-version and never committed.
+.runtime/
+
 # Local n8n backups contain encrypted credentials and an encryption-key backup
 backups/*
 !backups/.gitkeep

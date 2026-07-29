@@ -1,9 +1,7 @@
-. (Join-Path $PSScriptRoot "Common.ps1")
+$ErrorActionPreference = "Stop"
 
-if (-not (Test-Path $script:EnvFile)) {
-    Write-Host "Nothing to stop because local setup has not been completed."
-    exit 0
-}
+$projectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
+. (Join-Path $PSScriptRoot "NodeRuntime.ps1")
 
-Invoke-Compose @("stop")
-Write-Host "AI Solopreneur is stopped. Local data is preserved."
+Invoke-ProjectLocalRunner -ProjectRoot $projectRoot -Command "stop" -CommandArguments $args
+exit 0

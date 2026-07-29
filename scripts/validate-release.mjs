@@ -119,6 +119,26 @@ check(
   "Document reader lockfile version must match VERSION",
 );
 
+const rootPackageJson = JSON.parse(
+  await readFile(join(projectRoot, "package.json"), "utf8"),
+);
+const rootPackageLock = JSON.parse(
+  await readFile(join(projectRoot, "package-lock.json"), "utf8"),
+);
+check(
+  rootPackageJson.version === version,
+  "Root package version must match VERSION",
+);
+check(
+  n8nImage.includes(`:${rootPackageJson.dependencies?.n8n}@`),
+  "Root package.json must pin the same n8n version as the locked image digest",
+);
+check(
+  rootPackageLock.packages?.["node_modules/n8n"]?.version ===
+    rootPackageJson.dependencies?.n8n,
+  "Root lockfile must pin the exact n8n version",
+);
+
 const compose = await readFile(join(projectRoot, "compose.yaml"), "utf8");
 check(compose.includes(n8nImage), "compose.yaml must use the locked n8n digest");
 check(

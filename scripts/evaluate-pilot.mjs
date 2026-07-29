@@ -5,12 +5,12 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ALLOWED_STATUSES = new Set(["not_run", "in_progress", "complete"]);
-const ALLOWED_OPERATING_SYSTEMS = new Set(["macos", "windows-wsl2"]);
+const ALLOWED_OPERATING_SYSTEMS = new Set(["macos", "windows"]);
 const ALLOWED_OUTCOMES = new Set(["completed", "stopped", "not_started"]);
 const ALLOWED_INTERVENTION_CATEGORIES = new Set([
   "anthropic-account",
   "claude-credential",
-  "docker-desktop",
+  "runtime-download",
   "github-desktop",
   "n8n",
   "ports",
@@ -127,7 +127,7 @@ function validateSession(value, index, errors) {
     addError(errors, `${path}.priorInvolvement`, "must be a boolean");
   }
   if (!ALLOWED_OPERATING_SYSTEMS.has(value.operatingSystem)) {
-    addError(errors, `${path}.operatingSystem`, "must be macos or windows-wsl2");
+    addError(errors, `${path}.operatingSystem`, "must be macos or windows");
   }
   if (
     !Number.isInteger(value.browserWidthPx) ||
@@ -303,7 +303,7 @@ export function evaluatePilot(data) {
           operatingSystems.includes(os),
         ),
       operatingSystems,
-      ["macos", "windows-wsl2"],
+      ["macos", "windows"],
     ),
     criterion(
       "response-within-30-minutes",

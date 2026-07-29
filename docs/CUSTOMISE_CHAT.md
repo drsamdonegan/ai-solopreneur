@@ -88,13 +88,12 @@ npm ci
 npm test
 ```
 
-Rebuild the container after changing TypeScript:
+Rebuild and restart after changing TypeScript:
 
 ```bash
-docker compose build chat
-docker compose up -d --wait chat
+node scripts/local.mjs restart
 ```
 
-Edits to files in `apps/chat/public/` are visible after a browser refresh in the local Compose environment.
+Edits to files in `apps/chat/public/` are visible after a plain browser refresh; they need no rebuild or restart.
 
 Learners can compare the supplied [finished Launch Partner example](../examples/finished-solo-project-assistant/README.md), then use [GitHub Desktop](GITHUB_DESKTOP.md) to commit and push their chosen customisation.

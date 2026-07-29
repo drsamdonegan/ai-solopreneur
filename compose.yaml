@@ -1,3 +1,9 @@
+# Optional Docker Compose definition of the same three services.
+#
+# Learners do not need this file: the workshop path runs everything directly
+# with Node.js through scripts/local.mjs. Compose remains the reviewed recipe
+# for the workflow smoke tests and for deploying the stack to a cloud computer
+# later, where these pinned images run on the server instead of a laptop.
 name: ${COMPOSE_PROJECT_NAME:-ai-solopreneur}
 
 services:
@@ -46,7 +52,7 @@ services:
     stop_grace_period: 30s
 
   document-worker:
-    image: ai-solopreneur-document-worker:0.1.0
+    image: ai-solopreneur-document-worker:0.2.0
     build:
       context: ./services/document-worker
     restart: unless-stopped
@@ -74,7 +80,7 @@ services:
       start_period: 5s
 
   chat:
-    image: ai-solopreneur-chat:0.1.0
+    image: ai-solopreneur-chat:0.2.0
     build:
       context: ./apps/chat
     restart: unless-stopped

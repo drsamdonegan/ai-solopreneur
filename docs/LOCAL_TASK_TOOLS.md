@@ -46,7 +46,7 @@ The three starter tasks have stable `requestId` values. Re-running import insert
 | `result` | JSON snapshot of the structured result |
 | `error` | Understandable error message, or empty on success |
 
-Audit rows are operational records, not conversation memory. They persist across normal Docker restarts and are included in local backups.
+Audit rows are operational records, not conversation memory. They persist across normal restarts and are included in local backups.
 
 ## The workflow set
 
@@ -135,7 +135,7 @@ Run:
 ./scripts/test-phase4.sh
 ```
 
-The test uses a separate Docker project and a fake Anthropic endpoint. It verifies:
+The test requires Docker; it uses a separate, isolated Compose project and a fake Anthropic endpoint. It verifies:
 
 - Workflow import in n8n 2.30.5.
 - Repeatable setup without duplicate samples.

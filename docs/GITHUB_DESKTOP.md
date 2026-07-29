@@ -49,7 +49,7 @@ After changing the chat or a Markdown skill:
 5. Select **Commit to main**.
 6. Select **Push origin**.
 
-The change is now saved in the learner's GitHub repository. Local n8n users, task rows, execution history, and credentials live in the Docker volume and are not included in a Git commit; use the private backup helper for those.
+The change is now saved in the learner's GitHub repository. Local n8n users, task rows, execution history, and credentials live in the project's Git-ignored `data/` folder and are not included in a Git commit; use the private backup helper for those.
 
 ## Receive a teammate's change
 

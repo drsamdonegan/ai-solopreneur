@@ -85,13 +85,79 @@ jobs:
             exit 1
           }
 
+  native-smoke:
+    name: Native learner-path smoke (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24.16.0
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            apps/chat/package-lock.json
+            services/document-worker/package-lock.json
+
+      - name: Run the Phase 6 packaging smoke (native path)
+        if: runner.os != 'Windows'
+        run: ./scripts/test-phase6.sh
+
+      - name: Run the project-local Node bootstrap and native setup
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:AI_SOLO_FORCE_PORTABLE_NODE = "1"
+          $env:AI_SOLO_RUNTIME_DIR = Join-Path $env:RUNNER_TEMP "ai-solo-node-runtime"
+          . .\scripts\windows\NodeRuntime.ps1
+
+          $nodePath = Resolve-ProjectNode -ProjectRoot $PWD.Path -Install
+          $expectedVersion = "v$((Get-Content .node-version -Raw).Trim())"
+          $actualVersion = & $nodePath --version
+          if ($actualVersion -ne $expectedVersion) {
+            Write-Error "Expected project-local Node.js $expectedVersion, found $actualVersion."
+            exit 1
+          }
+
+          $env:Path = "$(Split-Path -Parent $nodePath);$env:Path"
+          & $nodePath scripts/local.mjs setup
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          & $nodePath scripts/local.mjs status
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          $diagnostics = & $nodePath scripts/local.mjs diagnose | Out-String
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Write-Host $diagnostics
+          if (-not ($diagnostics -match "The learner checklist is installed")) {
+            Write-Error "Diagnostics did not confirm the imported learner checklist."
+            exit 1
+          }
+          & $nodePath scripts/local.mjs stop
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          & $nodePath scripts/local.mjs reset --yes
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
   docker-smoke:
-    name: Docker smoke
+    name: Docker workflow smoke
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
+
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24.16.0
 
       - name: Install smoke-test host tools
         run: sudo apt-get update && sudo apt-get install --yes jq lsof
@@ -104,9 +170,6 @@ jobs:
 
       - name: Run Phase 5 safety smoke
         run: ./scripts/test-phase5.sh
-
-      - name: Run Phase 6 packaging smoke
-        run: ./scripts/test-phase6.sh
 
       - name: Run Phase 7 validation smoke
         run: ./scripts/test-phase7.sh

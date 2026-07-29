@@ -5,8 +5,8 @@ set -euo pipefail
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TEMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/ai-solopreneur-phase6.XXXXXX")"
 COPY_ROOT="${TEMP_ROOT}/template-copy"
-COMPOSE_PROJECT_NAME="ai-solopreneur-phase6-smoke"
 CHAT_PORT="3340"
+DOCUMENT_WORKER_PORT="3190"
 N8N_PORT="5718"
 TEST_ENCRYPTION_KEY="abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
 SESSION_ID="66666666-6666-4666-8666-666666666666"
@@ -33,25 +33,22 @@ expect_not_contains() {
     fail "${label} unexpectedly contained ${unexpected}"
 }
 
-compose() {
-  docker compose \
-    --project-directory "${COPY_ROOT}" \
-    --env-file "${COPY_ROOT}/.env" \
-    -f "${COPY_ROOT}/compose.yaml" \
-    "$@"
+copy_local() {
+  (cd "${COPY_ROOT}" && node scripts/local.mjs "$@")
 }
 
 cleanup() {
   if [[ "${KEEP_SMOKE}" == "1" ]]; then
     printf '\nKeeping the isolated Phase 6 stack and template copy for visual inspection.\n'
-    printf '  Chat:         http://localhost:%s\n' "${CHAT_PORT}"
-    printf '  n8n:          http://localhost:%s\n' "${N8N_PORT}"
+    printf '  Chat:          http://localhost:%s\n' "${CHAT_PORT}"
+    printf '  Documents:     http://localhost:%s/health\n' "${DOCUMENT_WORKER_PORT}"
+    printf '  n8n:           http://localhost:%s\n' "${N8N_PORT}"
     printf '  Template copy: %s\n' "${COPY_ROOT}"
     return
   fi
 
-  if [[ -f "${COPY_ROOT}/.env" ]]; then
-    compose down --volumes --remove-orphans >/dev/null 2>&1 || true
+  if [[ -f "${COPY_ROOT}/scripts/local.mjs" ]]; then
+    copy_local stop >/dev/null 2>&1 || true
   fi
   if [[ -n "${TEMP_ROOT}" && "${TEMP_ROOT}" == "${TMPDIR:-/tmp}/ai-solopreneur-phase6."* ]]; then
     find "${TEMP_ROOT}" -depth -mindepth 1 -delete >/dev/null 2>&1 || true
@@ -61,21 +58,16 @@ cleanup() {
 
 trap cleanup EXIT INT TERM
 
-if ! docker info >/dev/null 2>&1; then
-  fail "Docker Desktop is not running"
+if ! command -v node >/dev/null 2>&1; then
+  fail "Node.js is not installed"
 fi
+NODE_MAJOR="$(node -p 'Number(process.versions.node.split(".")[0])')"
+[[ "${NODE_MAJOR}" -ge 24 ]] ||
+  fail "Node.js 24 or newer is required, found $(node --version)"
 
 printf 'Validating the template package and canonical workflows...\n'
-docker run --rm \
-  -v "${PROJECT_ROOT}:/workspace:ro" \
-  -w /workspace \
-  node:24.16.0-alpine3.22@sha256:191c9f0080fcbbc6547a85dc0ff7988072214a355aabdc1d2ec55a7dae5eea8a \
-  node scripts/validate-template-readiness.mjs
-docker run --rm \
-  -v "${PROJECT_ROOT}:/workspace:ro" \
-  -w /workspace \
-  node:24.16.0-alpine3.22@sha256:191c9f0080fcbbc6547a85dc0ff7988072214a355aabdc1d2ec55a7dae5eea8a \
-  node scripts/validate-workflows.mjs
+node "${PROJECT_ROOT}/scripts/validate-template-readiness.mjs"
+node "${PROJECT_ROOT}/scripts/validate-workflows.mjs"
 
 printf 'Creating a fresh template-style project copy...\n'
 mkdir -p "${COPY_ROOT}"
@@ -85,11 +77,17 @@ tar \
   --exclude='./.env' \
   --exclude='./backups/*' \
   --exclude='./n8n/exports/*' \
+  --exclude='./node_modules' \
+  --exclude='./.runtime' \
+  --exclude='./data' \
+  --exclude='./apps/chat/node_modules' \
+  --exclude='./apps/chat/dist' \
+  --exclude='./services/document-worker/node_modules' \
   -cf - . | tar -C "${COPY_ROOT}" -xf -
 
 {
-  printf 'COMPOSE_PROJECT_NAME=%s\n' "${COMPOSE_PROJECT_NAME}"
   printf 'CHAT_PORT=%s\n' "${CHAT_PORT}"
+  printf 'DOCUMENT_WORKER_PORT=%s\n' "${DOCUMENT_WORKER_PORT}"
   printf 'N8N_PORT=%s\n' "${N8N_PORT}"
   printf 'GENERIC_TIMEZONE=Australia/Melbourne\n'
   printf 'N8N_ENCRYPTION_KEY=%s\n' "${TEST_ENCRYPTION_KEY}"
@@ -97,7 +95,12 @@ tar \
 chmod 600 "${COPY_ROOT}/.env"
 
 printf 'Running the same one-click setup a learner uses...\n'
-first_setup_output="$("${COPY_ROOT}/scripts/setup.sh" 2>&1)"
+first_setup_output="$(
+  AI_SOLO_FORCE_PORTABLE_NODE=1 "${COPY_ROOT}/scripts/setup.sh" 2>&1
+)"
+expect_contains "${first_setup_output}" \
+  "Project-local Node.js 24.18.0 is ready" \
+  "project-local Node bootstrap"
 expect_contains "${first_setup_output}" \
   "Installing the reviewed workflows, sample data, and enabled skills" \
   "first setup output"
@@ -111,9 +114,25 @@ expect_contains "${first_setup_output}" \
 curl --fail --silent --show-error \
   "http://127.0.0.1:${CHAT_PORT}/health" >/dev/null
 curl --fail --silent --show-error \
+  "http://127.0.0.1:${DOCUMENT_WORKER_PORT}/health" >/dev/null
+curl --fail --silent --show-error \
   "http://127.0.0.1:${N8N_PORT}/healthz" >/dev/null
 
-workflow_list="$(compose exec -T n8n n8n list:workflow)"
+printf 'Checking native document upload and extraction...\n'
+document_upload="$(
+  curl --fail --silent --show-error \
+    -X POST "http://127.0.0.1:${CHAT_PORT}/api/documents" \
+    -F "sessionId=${SESSION_ID}" \
+    -F "file=@${COPY_ROOT}/tests/fixtures/sample-meeting.txt;type=text/plain"
+)"
+expect_contains "${document_upload}" '"name":"sample-meeting.txt"' \
+  "native document upload"
+expect_contains "${document_upload}" '"type":"text"' \
+  "native document extraction"
+expect_contains "${document_upload}" '"wordCount":' \
+  "native document extraction"
+
+workflow_list="$(copy_local n8n list:workflow)"
 for workflow in \
   "phase3StartHere|00 - START HERE - Project Partner" \
   "phase6LearnerChecklist|01 - START HERE - Learner Checklist" \
@@ -129,13 +148,11 @@ for workflow in \
   expect_contains "${workflow_list}" "${workflow}" "automatic workflow import"
 done
 
-compose exec -T n8n \
-  n8n export:workflow \
-  --all \
-  --output=/tmp/phase6-all-workflows.json >/dev/null
-compose exec -T n8n node -e "
+copy_local n8n export:workflow --all \
+  --output="${TEMP_ROOT}/phase6-all-workflows.json" >/dev/null
+node -e "
 const fs = require('fs');
-const workflows = JSON.parse(fs.readFileSync('/tmp/phase6-all-workflows.json', 'utf8'));
+const workflows = JSON.parse(fs.readFileSync('${TEMP_ROOT}/phase6-all-workflows.json', 'utf8'));
 const canonical = workflows.filter((workflow) => /^phase[3456]/.test(workflow.id));
 const active = canonical.filter((workflow) => workflow.active).map((workflow) => workflow.id).sort();
 const expectedActive = [
@@ -151,27 +168,15 @@ if (canonical.length !== 11 || JSON.stringify(active) !== JSON.stringify(expecte
   process.exit(1);
 }
 "
-compose exec -T n8n \
-  sh -c "rm -f -- /tmp/phase6-all-workflows.json" >/dev/null
 
 printf 'Inspecting automatically created tasks and enabled skills...\n'
-n8n_container="$(compose ps -q n8n)"
-docker cp \
-  "${COPY_ROOT}/tests/phase4/workflows/phase4-tool-harness.json" \
-  "${n8n_container}:/tmp/phase4-tool-harness.json"
-docker cp \
-  "${COPY_ROOT}/tests/phase5/workflows/phase5-confirmation-harness.json" \
-  "${n8n_container}:/tmp/phase5-confirmation-harness.json"
-compose exec -T n8n \
-  n8n import:workflow --input=/tmp/phase4-tool-harness.json >/dev/null
-compose exec -T n8n \
-  n8n import:workflow --input=/tmp/phase5-confirmation-harness.json >/dev/null
-compose exec -T n8n \
-  n8n publish:workflow --id=phase4TestHarness >/dev/null
-compose exec -T n8n \
-  n8n publish:workflow --id=phase5TestHarness >/dev/null
-compose restart n8n >/dev/null
-compose up -d --wait --wait-timeout 240 n8n >/dev/null
+copy_local n8n import:workflow \
+  --input="${COPY_ROOT}/tests/phase4/workflows/phase4-tool-harness.json" >/dev/null
+copy_local n8n import:workflow \
+  --input="${COPY_ROOT}/tests/phase5/workflows/phase5-confirmation-harness.json" >/dev/null
+copy_local n8n publish:workflow --id=phase4TestHarness >/dev/null
+copy_local n8n publish:workflow --id=phase5TestHarness >/dev/null
+copy_local restart >/dev/null
 
 task_list="$(
   curl \
@@ -214,17 +219,14 @@ sed \
   's/01 - START HERE - Learner Checklist/01 - START HERE - Learner Checklist [LOCAL EDIT]/' \
   "${COPY_ROOT}/n8n/workflows/01-start-here-learner-checklist.json" \
   >"${TEMP_ROOT}/custom-checklist.json"
-docker cp \
-  "${TEMP_ROOT}/custom-checklist.json" \
-  "${n8n_container}:/tmp/custom-checklist.json"
-compose exec -T n8n \
-  n8n import:workflow --input=/tmp/custom-checklist.json >/dev/null
+copy_local n8n import:workflow \
+  --input="${TEMP_ROOT}/custom-checklist.json" >/dev/null
 
 second_setup_output="$("${COPY_ROOT}/scripts/setup.sh" 2>&1)"
 expect_contains "${second_setup_output}" \
   "already installed; keeping local edits unchanged" \
   "repeated setup output"
-workflow_list_after_setup="$(compose exec -T n8n n8n list:workflow)"
+workflow_list_after_setup="$(copy_local n8n list:workflow)"
 expect_contains "${workflow_list_after_setup}" \
   "phase6LearnerChecklist|01 - START HERE - Learner Checklist [LOCAL EDIT]" \
   "preserved local workflow"
@@ -241,21 +243,18 @@ latest_export_directory="$(
 )"
 [[ -n "${latest_export_directory}" ]] ||
   fail "workflow export directory was not created"
-docker run --rm \
-  -v "${latest_export_directory}:/exports:ro" \
-  node:24.16.0-alpine3.22@sha256:191c9f0080fcbbc6547a85dc0ff7988072214a355aabdc1d2ec55a7dae5eea8a \
-  node -e "
+node -e "
 const fs = require('fs');
-const files = fs.readdirSync('/exports').filter((file) => file.endsWith('.json'));
+const files = fs.readdirSync('${latest_export_directory}').filter((file) => file.endsWith('.json'));
 if (files.length !== 11) process.exit(1);
 for (const file of files) {
-  const workflow = JSON.parse(fs.readFileSync('/exports/' + file, 'utf8'));
+  const workflow = JSON.parse(fs.readFileSync('${latest_export_directory}/' + file, 'utf8'));
   if (Array.isArray(workflow) || workflow.active !== false) process.exit(1);
   for (const key of ['activeVersionId','createdAt','shared','updatedAt','versionCounter']) {
     if (Object.hasOwn(workflow, key)) process.exit(1);
   }
 }
-const main = JSON.parse(fs.readFileSync('/exports/00-start-here-project-partner.json', 'utf8'));
+const main = JSON.parse(fs.readFileSync('${latest_export_directory}/00-start-here-project-partner.json', 'utf8'));
 const credential = main.nodes.find((node) => node.name === 'Claude - Sonnet 4.6').credentials.anthropicApi;
 if (credential.id !== 'phase3Anthropic' || credential.name !== 'Anthropic account') process.exit(1);
 "
@@ -277,17 +276,11 @@ expect_contains "${diagnostic_before}" \
   "[next] Open 00 - START HERE - Project Partner" \
   "pre-configuration diagnostics"
 
-docker cp \
-  "${COPY_ROOT}/tests/phase3/fixtures/mock-anthropic-credential.json" \
-  "${n8n_container}:/tmp/mock-anthropic-credential.json"
-compose exec -T n8n \
-  n8n import:credentials --input=/tmp/mock-anthropic-credential.json >/dev/null
-compose exec -T n8n \
-  n8n publish:workflow --id=phase3StartHere >/dev/null
-compose exec -T n8n \
-  n8n publish:workflow --id=phase3AgentHealth >/dev/null
-compose restart n8n >/dev/null
-compose up -d --wait --wait-timeout 240 n8n >/dev/null
+copy_local n8n import:credentials \
+  --input="${COPY_ROOT}/tests/phase3/fixtures/mock-anthropic-credential.json" >/dev/null
+copy_local n8n publish:workflow --id=phase3StartHere >/dev/null
+copy_local n8n publish:workflow --id=phase3AgentHealth >/dev/null
+copy_local restart >/dev/null
 
 curl \
   --retry 30 \
@@ -325,24 +318,27 @@ backup_directory="$(
     | tail -n 1
 )"
 [[ -n "${backup_directory}" ]] || fail "backup directory was not created"
-[[ -s "${backup_directory}/n8n-data.tar.gz" ]] ||
+[[ -s "${backup_directory}/n8n-data.tar.gz" || -d "${backup_directory}/n8n-data" ]] ||
   fail "backup archive is missing"
 [[ -s "${backup_directory}/env.backup" ]] ||
   fail "backup environment file is missing"
 
 "${COPY_ROOT}/scripts/reset.sh" --yes >/dev/null
-if docker volume inspect "${COMPOSE_PROJECT_NAME}_n8n_data" >/dev/null 2>&1; then
-  fail "reset did not remove the isolated n8n volume"
+if [[ -e "${COPY_ROOT}/data/n8n" ]]; then
+  fail "reset did not remove the local n8n data folder"
+fi
+if [[ -e "${COPY_ROOT}/data/documents" ]]; then
+  fail "reset did not remove the local document data folder"
 fi
 
 "${COPY_ROOT}/scripts/start.sh" >/dev/null
-fresh_workflow_list="$(compose exec -T n8n n8n list:workflow)"
+fresh_workflow_list="$(copy_local n8n list:workflow)"
 [[ "${fresh_workflow_list}" != *"phase6LearnerChecklist"* ]] ||
   fail "fresh post-reset instance retained workflow data"
 
 printf 'RESTORE\n' | \
   "${COPY_ROOT}/scripts/restore.sh" "${backup_directory}" >/dev/null
-restored_workflow_list="$(compose exec -T n8n n8n list:workflow)"
+restored_workflow_list="$(copy_local n8n list:workflow)"
 expect_contains "${restored_workflow_list}" \
   "phase6LearnerChecklist|01 - START HERE - Learner Checklist [LOCAL EDIT]" \
   "restored workflow state"
@@ -357,21 +353,18 @@ expect_not_contains "${restored_diagnostics}" \
   "${TEST_ENCRYPTION_KEY}" \
   "restored diagnostics"
 
-if compose logs n8n chat | grep -qE \
-  "test-anthropic-key|${TEST_ENCRYPTION_KEY}"; then
-  fail "a test credential or encryption key appeared in container logs"
+if grep -rqE "test-anthropic-key|${TEST_ENCRYPTION_KEY}" \
+  "${COPY_ROOT}/data/logs" 2>/dev/null; then
+  fail "a test credential or encryption key appeared in service logs"
 fi
 
 printf 'Restoring the canonical checklist for optional visual inspection...\n'
-n8n_container="$(compose ps -q n8n)"
-docker cp \
-  "${COPY_ROOT}/n8n/workflows/01-start-here-learner-checklist.json" \
-  "${n8n_container}:/tmp/canonical-checklist.json"
-compose exec -T n8n \
-  n8n import:workflow --input=/tmp/canonical-checklist.json >/dev/null
+copy_local n8n import:workflow \
+  --input="${COPY_ROOT}/n8n/workflows/01-start-here-learner-checklist.json" >/dev/null
 
 printf '\nPhase 6 smoke test passed.\n'
 printf '  Fresh-copy one-click setup:       ok\n'
+printf '  Document reader and extraction:   ok\n'
 printf '  Eleven-workflow automatic import: ok\n'
 printf '  Sample data and enabled skills:   ok\n'
 printf '  Repeatable manual fallback:       ok\n'

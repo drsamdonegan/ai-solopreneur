@@ -15,23 +15,24 @@ Recruit at least five people who did not develop or review this repository.
 Cover both supported environments:
 
 - At least one current macOS computer.
-- At least one current Windows computer using Docker Desktop's WSL2 backend.
+- At least one current Windows computer; include ARM64 when the cohort may use it.
 
 Participants may work in teams, but record one session per participant. Use only
-anonymous participant and team IDs. Ask participants not to use a work computer
-whose policy prevents Docker Desktop, GitHub, or Anthropic access.
+anonymous participant and team IDs. Ask participants to disclose a work computer
+whose policy may prevent GitHub, nodejs.org downloads, project-local executables,
+or Anthropic access so that path can be tested deliberately.
 
 Prepare one extra private Anthropic API key with limited credit for recovery.
 Never put it in the repository, observation notes, chat, or screenshots.
 
-## Stage 1: Docker Desktop preflight
+## Stage 1: project-local setup preflight
 
 Run this as a short session before the main pilot.
 
 1. Give participants only [Workshop prerequisites](WORKSHOP_PREREQUISITES.md).
-2. Ask them to install and open Docker Desktop.
-3. On Windows, confirm Docker Desktop reports the WSL2 backend.
-4. Ask them to clone their repository with GitHub Desktop.
+2. Ask them to create their template copy and bring it into Claude Code.
+3. Ask Claude Code to follow the README and run the one-click setup.
+4. Confirm setup selects an existing Node.js 24+ runtime or prepares the verified private copy.
 5. Run `preflight.command` on macOS or `preflight-windows.cmd` on Windows.
 6. Record every point where an instructor must touch the computer or give a
    direction not present in the guide.
@@ -93,11 +94,11 @@ after each scenario.
 | Exhausted API credit | Use a test Anthropic workspace with no usable credit | Chat shows a safe workflow error; provider billing details remain in the private n8n execution only |
 | Inactive main workflow | Unpublish `00 - START HERE - Project Partner` and send a message | Chat reports that n8n and the active workflow should be checked |
 | Occupied ports | Start another local listener on configured port 3000 or 5678, then run preflight | Preflight names the occupied port and tells the learner to close the app or change `.env` |
-| Container restart | Stop and start the stack | Health checks recover and persistent n8n data remains |
-| No internet | Disconnect networking after images are present and send a message, then test a clean setup separately | Existing UI opens locally; Claude calls fail safely; a clean setup clearly cannot download images |
+| Native-process restart | Stop and start the stack | Health checks recover and persistent n8n data remains |
+| No internet | Disconnect networking after packages are present and send a message, then test a clean setup separately | Existing UI opens locally; Claude calls fail safely; a clean setup clearly names the download it cannot complete |
 
 The automated suite covers the stable error boundary, occupied-port diagnostic,
-inactive workflow, container recovery, and local health. The two real Anthropic
+inactive workflow, native-process recovery, and local health. The two real Anthropic
 account states and clean offline setup remain supervised manual checks because a
 mock cannot prove provider-account behaviour.
 

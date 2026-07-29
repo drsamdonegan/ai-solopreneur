@@ -1,11 +1,10 @@
-. (Join-Path $PSScriptRoot "Common.ps1")
+$ErrorActionPreference = "Stop"
 
-Assert-DockerAvailable
+$projectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
+. (Join-Path $PSScriptRoot "NodeRuntime.ps1")
 
-& docker run --rm `
-    -v "${script:ProjectRoot}:/workspace:ro" `
-    -w /workspace `
-    node:24.16.0-alpine3.22@sha256:191c9f0080fcbbc6547a85dc0ff7988072214a355aabdc1d2ec55a7dae5eea8a `
-    node scripts/evaluate-pilot.mjs
+$nodePath = Resolve-ProjectNode -ProjectRoot $projectRoot -Install
+$env:Path = "$(Split-Path -Parent $nodePath);$env:Path"
 
+& $nodePath (Join-Path $projectRoot "scripts\evaluate-pilot.mjs") @args
 exit $LASTEXITCODE

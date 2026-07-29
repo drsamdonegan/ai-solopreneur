@@ -2,10 +2,10 @@
 
 ## Release identity
 
-- Product version: `0.1.0`
-- Intended tag: `v0.1.0`
+- Product version: `0.2.0`
+- Intended tag: `v0.2.0`
 - Release type: local-first workshop release
-- Release date: 2026-07-27
+- Release date: 2026-07-29
 - Public/cloud deployment: not included
 
 The root `VERSION` file is authoritative. `CHANGELOG.md` records learner-visible
@@ -13,7 +13,12 @@ changes.
 
 ## Reproducibility lock
 
-Runtime and test images use versioned tags plus multi-platform manifest digests:
+The learner path is locked by npm: the root `package.json` and
+`package-lock.json` pin the exact n8n release, and learners install it with
+`npm ci` during setup.
+
+The Docker-based smoke tests and the future cloud deployment additionally use
+versioned image tags plus multi-platform manifest digests:
 
 | Purpose | Image |
 | --- | --- |
@@ -24,8 +29,9 @@ Runtime and test images use versioned tags plus multi-platform manifest digests:
 
 JavaScript dependencies are locked by `apps/chat/package-lock.json`,
 `services/document-worker/package-lock.json`, and
-`tests/phase7/package-lock.json`. The local images are named
-`ai-solopreneur-chat:0.1.0` and
+`tests/phase7/package-lock.json`. The npm pin and the n8n image digest must
+reference the same n8n version; release validation enforces this. The local
+images are named `ai-solopreneur-chat:0.2.0` and
 `ai-solopreneur-document-worker:0.1.0`.
 
 ## Owner release decision
@@ -38,8 +44,14 @@ evaluator remains `NO_GO`; the owner waiver is recorded in
 
 ## Build the instructor kit
 
+The kit packages the optional Docker path (images, workflows, source archive)
+for venues where registries are blocked. Learners on the standard Node.js path
+do not need it — asking them to run `setup.command` or `setup-windows.cmd` at
+home downloads everything in advance instead.
+
 The kit is generated locally and is ignored by Git because its Docker archive
-is large and architecture-specific.
+is large and architecture-specific. Building it requires Docker Desktop on the
+instructor's machine.
 
 ### macOS
 
@@ -59,7 +71,7 @@ The helper:
 6. creates a source archive from the current Git commit;
 7. writes checksums and offline-loading instructions.
 
-The output is below `instructor-pack/v0.1.0-PLATFORM-ARCHITECTURE/`.
+The output is below `instructor-pack/v0.2.0-PLATFORM-ARCHITECTURE/`.
 
 Do not put `.env`, n8n volume data, local backups, API keys, or credentials in
 the kit. The helper refuses to run from a dirty Git worktree so the source
@@ -86,17 +98,17 @@ make Anthropic API calls work offline.
 Tag only the commit whose complete CI run is green:
 
 ```bash
-git tag -a v0.1.0 -m "AI Solopreneur local release v0.1.0"
-git push origin v0.1.0
+git tag -a v0.2.0 -m "AI Solopreneur local release v0.2.0"
+git push origin v0.2.0
 ```
 
 Reproduce the release later:
 
 ```bash
-git clone --branch v0.1.0 --depth 1 \
+git clone --branch v0.2.0 --depth 1 \
   https://github.com/drsamdonegan/ai-solopreneur.git
 cd ai-solopreneur
-docker compose config
+node scripts/local.mjs setup
 ```
 
 Then follow [Getting started](GETTING_STARTED.md) from the cloned tag.
@@ -110,6 +122,6 @@ node scripts/validate-release.mjs
 ./scripts/test-phase8.sh
 ```
 
-CI additionally repeats all Phase 3–7 Docker integration tests. A release is not
-valid if the tag, `VERSION`, image references, documentation, or checksums
-disagree.
+CI additionally repeats the Phase 3–5 and 7 Docker integration tests and the
+Phase 6 native learner-path smoke on Linux and Windows. A release is not valid
+if the tag, `VERSION`, version pins, documentation, or checksums disagree.

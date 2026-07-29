@@ -27,7 +27,7 @@ failed software build; a completed pilot that misses a criterion still fails.
 
 - [ ] Pilot is marked complete.
 - [ ] At least five participants had no involvement in development.
-- [ ] Both macOS and Windows with WSL2 were covered.
+- [ ] Both macOS and Windows were covered.
 - [ ] At least 80% received a real Claude response within 30 minutes.
 - [ ] Every participant completed preflight.
 - [ ] Every team customised the interface.
@@ -40,8 +40,8 @@ failed software build; a completed pilot that misses a criterion still fails.
 
 ## Technical gates
 
-- [x] The latest GitHub Actions run passes contract, static, PowerShell, and all
-      Docker smoke jobs.
+- [x] The latest GitHub Actions run passes contract, static, PowerShell, native
+      learner-path, and Docker contributor smoke jobs.
 - [ ] Invalid key, exhausted credit, inactive workflow, occupied port, restart,
       and no-internet scenarios have dated evidence.
 - [x] Browser checks pass at 375, 768, and 1440 pixels without horizontal

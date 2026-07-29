@@ -6,6 +6,7 @@ import {
 } from "./extractors.mjs";
 
 const port = Number(process.env.PORT ?? 3100);
+const listenAddress = process.env.DOCUMENT_LISTEN_ADDRESS ?? "0.0.0.0";
 
 function sendJson(response, status, body) {
   const payload = JSON.stringify(body);
@@ -95,8 +96,8 @@ const server = createServer((request, response) => {
   })();
 });
 
-server.listen(port, "0.0.0.0", () => {
-  console.log(`Document worker listening on http://0.0.0.0:${port}`);
+server.listen(port, listenAddress, () => {
+  console.log(`Document worker listening on http://${listenAddress}:${port}`);
 });
 
 function shutdown() {

@@ -6,9 +6,10 @@ Run `diagnose.command` on macOS or `diagnose-windows.cmd` on Windows first. It d
 
 | What you see | Most likely cause | First action |
 | --- | --- | --- |
-| `docker: command not found` | Docker Desktop is missing or not on PATH | Install Docker Desktop, restart if requested, then rerun setup |
-| Docker is installed but diagnostics show `[!!]` | Docker's engine is not ready | Open Docker Desktop and wait until it reports Ready |
+| Node.js download fails | nodejs.org is blocked, offline, or interrupted | Check the connection or managed-device policy, then rerun setup |
+| Node.js SHA-256 safety check fails | The archive is incomplete or does not match the reviewed release | Delete nothing; rerun setup once, then ask a facilitator if it repeats |
 | Port 3000 or 5678 is in use | Another local app owns the port | Close that app or change the matching `.env` value |
+| Setup pauses a long time on the npm download | Large first download | Wait; later runs reuse the download. Run setup at home before a workshop |
 | Chat opens but says the agent is not ready | Workflow `00` is not published | Follow the yellow diagnostic action and publish workflow `00` |
 | Upload says the document reader is not ready | `document-worker` is still starting or stopped | Restart the local stack, wait for it to become healthy, then retry |
 | PDF says no readable text was found | The PDF is probably an image-only scan | Create a searchable PDF with trusted OCR software or paste reviewed text |
@@ -19,30 +20,28 @@ Run `diagnose.command` on macOS or `diagnose-windows.cmd` on Windows first. It d
 | Claude returns a credit/rate error | API billing or workspace limit | Check the Anthropic Console balance and limits |
 | Plain `yes` does not create a task | Expected safety behaviour | Send the exact, current `CONFIRM XXXXXXXX` phrase |
 | A skill edit has no effect | Bundle was not synced or conversation memory is old | Run the skill-sync helper and start a new conversation |
-| Data vanished after reset | Reset removed the Docker volume | Restore the latest complete private backup |
+| Data vanished after reset | Reset removed the local data folder | Restore the latest complete private backup |
 | `.command` is blocked on macOS | Gatekeeper has not approved that local script | Control-click it, choose **Open**, then confirm |
-| A `.cmd` window closes or reports an execution error | Docker/PowerShell prerequisite or script failure | Rerun it and read the first red or `[!!]` line |
+| A `.cmd` window closes or reports an execution error | A download, managed-device, or project script failure | Rerun it and read the first red or `[!!]` line |
 
-## Docker command not found
+## The private Node.js download fails
 
-Docker Desktop is not installed, has not finished installing, or its command is not on the system path.
+Every helper uses Node.js 24+ when it is already available. Otherwise it downloads a checksum-verified private copy into `.runtime/` inside this project. Nothing is installed globally.
 
-Install Docker Desktop, restart the computer if requested, then rerun setup.
+If the download fails:
 
-## Docker engine is not running
+1. Confirm the computer can reach `https://nodejs.org`.
+2. Confirm at least 2 GB of free disk space remains.
+3. Rerun `setup.command` on macOS or `setup-windows.cmd` on Windows.
+4. If a company-managed computer blocks downloads or running files inside the project, ask a facilitator. A manual Node.js 24 LTS installer is the fallback, not the default workshop path.
 
-Open Docker Desktop and wait until it reports that the engine is running. The Docker application being installed is not enough; its engine must be active.
-
-Then rerun:
-
-- `setup.command` on macOS.
-- `setup-windows.cmd` on Windows.
+Never bypass a repeated SHA-256 mismatch. It prevents an unexpected archive from running.
 
 ## Port 3000 or 5678 is already in use
 
 Another application is listening on the required local port.
 
-Either close that application or change the matching value in `.env`:
+Either close that application or copy `.env.example` to `.env` and change the matching value:
 
 ```dotenv
 CHAT_PORT=3000
@@ -55,10 +54,11 @@ After changing a port, use the new localhost address in the browser.
 
 1. Open [http://localhost:3000/health](http://localhost:3000/health).
 2. Run the start script again.
-3. Check that Docker Desktop is running.
-4. Run `docker compose ps` if comfortable using a terminal.
+3. Run the diagnostic helper.
+4. Technical helpers can run `node scripts/local.mjs status` and
+   `node scripts/local.mjs logs chat`.
 
-The chat service starts only after n8n and the internal document reader report
+The chat service starts only after n8n and the internal document reader are
 healthy.
 
 ## A document will not upload
@@ -76,8 +76,8 @@ files up to 20 MB.
 Technical helpers can run:
 
 ```bash
-docker compose ps
-docker compose logs --tail 100 document-worker
+node scripts/local.mjs status
+node scripts/local.mjs logs documents
 ```
 
 The original file is processed locally. Extracted text is sent to Claude only
@@ -102,7 +102,7 @@ The browser intentionally does not show raw workflow errors or credentials.
 2. Refresh the n8n Overview.
 3. Check that the local n8n owner account has been created.
 4. Run the import fallback again; the fixed workflow IDs prevent duplicate copies.
-5. Ask a technical helper to run `docker compose logs --tail 100 n8n`.
+5. Ask a technical helper to run `node scripts/local.mjs logs n8n`.
 
 First setup normally imports all eleven workflows automatically. The main agent, health workflow, learner checklist, and temporary setup workflows remain inactive until viewed, run manually, or deliberately published. The import helper publishes the six reviewed runtime dependencies automatically.
 
@@ -202,26 +202,20 @@ Correct the specific field named in the response and retry. Every rejected attem
 3. Confirm the edited words remain inside quotes and prompts remain comma-separated.
 4. Open the browser developer console only if a technical helper is available; a syntax error in the config file causes the safe default settings to load.
 
-Normal changes to the agent name, subtitle, welcome message, colour, and example prompts do not require rebuilding Docker.
+Normal changes to the agent name, subtitle, welcome message, colour, and example prompts do not require any rebuild.
 
 ## n8n does not open
 
 1. Open [http://localhost:5678/healthz](http://localhost:5678/healthz).
-2. Wait another minute on the first start.
+2. Wait another minute on the first start; the first n8n boot prepares its local database.
 3. Run the start script again.
-4. Check Docker Desktop for a stopped or unhealthy n8n container.
+4. Technical helpers can run `node scripts/local.mjs logs n8n` for the exact error.
 
 ## Log says the Python task runner is unavailable
 
-The pinned standard n8n image starts its JavaScript task runner but does not include Python 3. It records a warning that the optional internal Python runner could not start.
+The pinned n8n release starts its JavaScript task runner but may warn that the optional Python runner could not start when Python 3 is absent.
 
 This does not make the service unhealthy and does not affect the visual agent, Claude integration, or JavaScript workflow nodes used by this project. Python Code nodes are outside the local-first release.
-
-## Compose reports a missing encryption key
-
-The private `.env` file is missing or incomplete.
-
-Run the setup script rather than invoking Compose directly. Setup generates the key and protects it from Git.
 
 ## A browser warns about secure cookies
 
@@ -231,7 +225,7 @@ Public deployments require HTTPS and a different security configuration.
 
 ## Data disappeared
 
-Stopping and starting preserves data. Data is removed only when the Docker volume is deleted or the reset script is confirmed.
+Stopping and starting preserves data. Data is removed only when the project's `data/` folder is deleted or the reset script is confirmed.
 
 Look for a recent private backup below `backups/`. Follow [LOCAL_OPERATIONS.md](LOCAL_OPERATIONS.md) to restore it.
 
@@ -239,19 +233,18 @@ Look for a recent private backup below `backups/`. Follow [LOCAL_OPERATIONS.md](
 
 Check:
 
-- Docker Desktop is running.
-- `.env` exists.
-- The selected backup contains both `n8n-data.tar.gz` and `env.backup`.
-- The backup path is local and accessible to Docker Desktop.
+- Setup has prepared a working Node.js runtime and completed once.
+- The selected backup contains `n8n-data.tar.gz` (or an `n8n-data` folder).
+- The backup path is local and accessible.
 - There is enough disk space.
 
-Restore requires the matching encryption-key backup. A data archive alone cannot reliably restore encrypted credentials.
+The backup includes n8n's own encryption-key file, so a complete backup restores encrypted credentials correctly. A partial copy of the database alone cannot.
 
 ## Windows script execution error
 
-Use the supplied `.cmd` wrappers for setup, start, and stop. They invoke the repository's PowerShell scripts without changing the computer's permanent execution policy.
+Use the supplied `.cmd` wrappers for setup, start, and stop. They invoke the repository's PowerShell shims without changing the computer's permanent execution policy, and those shims simply run the shared Node.js runner.
 
-For backup, restore, or reset, open PowerShell in the repository directory and run the documented command.
+For restore, open PowerShell in the repository directory and run the documented command.
 
 ## macOS blocks a command file
 
@@ -264,9 +257,9 @@ Learners should first double-click `diagnose.command` or `diagnose-windows.cmd`.
 ```bash
 ./scripts/diagnose.sh
 ./scripts/preflight.sh
-docker compose ps
-docker compose logs --tail 100 n8n
-docker compose logs --tail 100 chat
+node scripts/local.mjs status
+node scripts/local.mjs logs n8n
+node scripts/local.mjs logs chat
 ```
 
 Do not paste `.env`, credential exports, full backups, or logs containing secrets into a public issue.

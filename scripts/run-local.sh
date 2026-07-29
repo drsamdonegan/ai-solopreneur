@@ -3,8 +3,16 @@
 set -euo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+COMMAND="${1:-}"
+
+if [[ -z "${COMMAND}" ]]; then
+  printf 'A local-runner command is required.\n' >&2
+  exit 2
+fi
+shift
+
 NODE_PATH="$("${PROJECT_ROOT}/scripts/node-runtime.sh" --install)"
 PATH="$(dirname "${NODE_PATH}"):${PATH}"
 export PATH
 
-exec "${NODE_PATH}" "${PROJECT_ROOT}/scripts/evaluate-pilot.mjs" "$@"
+exec "${NODE_PATH}" "${PROJECT_ROOT}/scripts/local.mjs" "${COMMAND}" "$@"

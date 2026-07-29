@@ -20,7 +20,7 @@ test("a complete five-person pilot that meets every criterion is GO", async () =
   assert.equal(result.decision, "GO");
   assert.equal(result.metrics.participantCount, 5);
   assert.equal(result.metrics.responseWithinThirtyPercent, 80);
-  assert.deepEqual(result.metrics.operatingSystems, ["macos", "windows-wsl2"]);
+  assert.deepEqual(result.metrics.operatingSystems, ["macos", "windows"]);
   assert.equal(result.criteria.every((criterion) => criterion.passed), true);
 });
 

@@ -74,14 +74,10 @@ cp \
   n8n/workflows/00-start-here-project-partner.json
 ```
 
-Then validate with the pinned Docker runtime:
+Then validate:
 
 ```bash
-docker run --rm \
-  -v "$PWD:/workspace:ro" \
-  -w /workspace \
-  node:24.16.0-alpine3.22@sha256:191c9f0080fcbbc6547a85dc0ff7988072214a355aabdc1d2ec55a7dae5eea8a \
-  node scripts/validate-workflows.mjs
+node scripts/validate-workflows.mjs
 ```
 
 Run the smoke test for the phase the workflow affects. For current confirmation or skill paths:

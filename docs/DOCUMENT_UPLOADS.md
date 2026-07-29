@@ -48,12 +48,13 @@ deadlines and to separate source facts from inference.
 ## What happens to the document
 
 The document reader extracts and normalises text inside an isolated local
-Docker service. The original file is not forwarded to n8n or Claude.
+Node.js process. The original file is not forwarded to n8n or Claude.
 
-The chat stores extracted text in a local Docker volume for up to 24 hours so
+The chat stores extracted text in the Git-ignored `data/documents/` folder for
+up to 24 hours so
 it can attach that context to the conversation. Starting a new conversation
 requests deletion of its attached records; expired records are also cleaned up
-automatically. Resetting the local stack removes the document volume.
+automatically. Resetting the local stack removes the extracted document data.
 
 When you send a request, the selected extracted text is sent through the local
 n8n workflow to the Claude API. Do not upload passwords, API keys, highly
@@ -89,4 +90,4 @@ Read the message shown in the conversation first. Common causes are:
 - the local document reader has not finished starting.
 
 Run the normal diagnostic, restart the stack, and retry. Technical helpers can
-also run `docker compose logs --tail 100 document-worker`.
+also run `node scripts/local.mjs logs documents`.

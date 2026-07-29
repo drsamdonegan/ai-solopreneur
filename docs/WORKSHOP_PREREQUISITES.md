@@ -2,9 +2,9 @@
 
 ## Outcome
 
-Complete this checklist before the main workshop. A learner who completes it should arrive with a working local Docker environment, access to the repository, and a usable Claude API key.
+Complete this checklist before the main workshop. A learner who completes it should arrive with Claude Desktop, access to the repository, and a usable Claude API key. The project runtime is prepared automatically during setup.
 
-Do not use the main workshop to install or repair Docker Desktop for the first time.
+Install Claude Desktop and GitHub Desktop before the session. Node.js, n8n, and the chat build tools are handled inside the project.
 
 ## Required accounts
 
@@ -28,34 +28,36 @@ The key will be added to n8n during the workshop.
 
 ## Required software
 
+- **Claude Desktop**, signed in with the Code area available.
+- **GitHub Desktop**, signed in for the visual save-and-push workflow.
+- A current Chrome or Edge browser.
+
+Node.js does not need a manual installer. Setup first looks for Node.js 24 or newer. If it is missing or older, setup downloads the pinned official Node.js 24.18.0 archive, checks its SHA-256 fingerprint, and unpacks it into this project's private `.runtime/` folder. Nothing is installed globally and no administrator access or restart is needed.
+
 ### macOS
 
 - macOS 13 or newer.
-- Docker Desktop installed.
-- Docker Desktop opened and reporting that its engine is running.
 - Current Chrome or Edge.
+- Claude Desktop installed and signed in.
 - GitHub Desktop installed and signed in.
 
 Both Apple Silicon and Intel are target environments and must be represented in preflight testing when available.
 
-Learners do not need Node.js, npm, or n8n installed on the host. The repository runs the pinned development and workflow tools inside Docker.
-
 ### Windows
 
-- Windows 11.
-- WSL2 enabled.
-- Docker Desktop configured to use WSL2.
-- Docker Desktop opened and reporting that its engine is running.
+- Windows 10 or 11.
 - Current Chrome or Edge.
+- Claude Desktop installed and signed in.
 - GitHub Desktop installed and signed in.
 
-Windows learners should restart their computer after installing or enabling WSL2 and Docker Desktop.
+WSL2, Docker Desktop, Hyper-V, and BIOS virtualization settings are **not** required. Learners on ARM-based Windows laptops (for example Snapdragon devices) should complete the preflight exercise early so any platform issue is found before the session.
 
 ## Network requirements
 
 The learner's network must permit:
 
-- Pulling Docker images.
+- Downloading packages from registry.npmjs.org.
+- Downloading the pinned Node.js archive from nodejs.org when a suitable runtime is not already available.
 - Accessing GitHub.
 - Accessing the Anthropic API.
 
@@ -68,32 +70,30 @@ The local project uses:
 - `http://localhost:3000` for the learner chat.
 - `http://localhost:5678` for n8n.
 
-Preflight must confirm that these ports are available or provide a documented resolution for applications already using them.
+The setup and preflight helpers confirm that these ports are available or explain how to change them in `.env`.
 
 ## Preflight exercise
 
 Before the main workshop, every learner should:
 
-1. Open Docker Desktop.
-2. Confirm that Docker reports a running engine.
-3. Create a private repository from the released template and clone it with GitHub Desktop.
-4. Start the supplied preflight Compose service.
-5. Open its documented localhost page.
-6. Stop the service.
-7. Sign in to GitHub Desktop.
-8. Confirm possession of a private Claude API key with available credit.
+1. Create a private repository from the released template and bring it into Claude Code.
+2. Ask Claude Code to read the README and run the documented one-click setup.
+3. Wait for `Local stack is healthy`.
+4. Open [http://localhost:3000](http://localhost:3000) and [http://localhost:5678](http://localhost:5678).
+5. Double-click `stop.command` or `stop-windows.cmd`.
+6. Sign in to GitHub Desktop.
+7. Confirm possession of a private Claude API key with available credit.
 
-Use `setup.command` on macOS or `setup-windows.cmd` on Windows for the full local preflight, automatic workflow import, and first start.
+Running setup at home also downloads the large npm packages in advance, which protects the workshop from slow venue wifi.
 
 ## Instructor preparation
 
 The instructor should use [INSTRUCTOR_CHECKLIST.md](INSTRUCTOR_CHECKLIST.md) and prepare:
 
 - At least one tested macOS machine.
-- At least one tested Windows 11 and WSL2 machine.
+- At least one tested Windows machine (include an ARM-based Windows laptop when the cohort may bring them).
 - Screenshots for every setup step.
 - A small number of preconfigured backup machines where practical.
-- A downloaded copy of required Docker images when workshop connectivity is uncertain.
 - A repository archive and exported n8n workflows.
 - A process for helping learners without viewing or copying their API keys.
 
@@ -104,16 +104,16 @@ Record for each learner:
 | Check | Result |
 | --- | --- |
 | Supported operating system | Pass / needs help |
-| Docker Desktop installed | Pass / needs help |
-| Docker engine running | Pass / needs help |
+| Project-local Node.js runtime prepared | Pass / needs help |
+| `setup.command` / `setup-windows.cmd` completed | Pass / needs help |
 | Ports 3000 and 5678 available | Pass / needs help |
 | GitHub access | Pass / needs help |
 | GitHub Desktop access | Pass / needs help |
 | Anthropic Console access | Pass / needs help |
 | Claude API key and credit | Pass / needs help |
-| Preflight local page opened | Pass / needs help |
+| Local chat page opened | Pass / needs help |
 
-Learners with unresolved Docker, account, or network failures should receive support before the main build session.
+Learners with unresolved installation, account, or network failures should receive support before the main build session.
 
 ## Security reminder
 

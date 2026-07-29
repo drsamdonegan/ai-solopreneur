@@ -20,6 +20,9 @@ Use anonymous IDs such as `P01` and `T01`. Do not record names, email addresses,
 phone numbers, API keys, passwords, repository tokens, or screenshots containing
 credentials.
 
+Use `macos` or `windows` for `operatingSystem`. Record a blocked or interrupted
+project-local Node.js download with the `runtime-download` intervention category.
+
 Validate the file without deciding that the workshop is ready (technical
 contributors):
 

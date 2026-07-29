@@ -19,7 +19,7 @@ Allow about 15 minutes after the local stack is running.
 
 Complete [LOCAL_SETUP.md](LOCAL_SETUP.md), then confirm:
 
-- Docker Desktop is running.
+- The local services are running (`start.command` or `start-windows.cmd`).
 - The chat opens at [http://localhost:3000](http://localhost:3000).
 - n8n opens at [http://localhost:5678](http://localhost:5678).
 - A local n8n owner account has been created.
@@ -245,7 +245,7 @@ Run the complete isolated Phase 3 smoke test:
 ./scripts/test-phase3.sh
 ```
 
-The smoke test creates a separate Docker project and a fake local Anthropic endpoint. It proves imports, publication, invalid-input blocking, the browser-to-agent path, memory isolation, output limits, and restart behaviour without consuming API credit.
+The smoke test requires Docker and creates a separate, isolated test stack with a fake local Anthropic endpoint. It proves imports, publication, invalid-input blocking, the browser-to-agent path, memory isolation, output limits, and restart behaviour without consuming API credit.
 
 Run the Phase 4 task-tool smoke test:
 

@@ -27,11 +27,7 @@ Do not squash or merge a later stacked PR directly into `main` before its base. 
 From the repository root:
 
 ```bash
-docker run --rm \
-  -v "$PWD:/workspace:ro" \
-  -w /workspace \
-  node:24.16.0-alpine3.22@sha256:191c9f0080fcbbc6547a85dc0ff7988072214a355aabdc1d2ec55a7dae5eea8a \
-  node scripts/validate-template-readiness.mjs
+node scripts/validate-template-readiness.mjs
 
 ./scripts/test-phase6.sh
 ./scripts/test-phase7.sh
@@ -96,9 +92,9 @@ GitHub documents that generated repositories use the default branch unless the c
 Before teaching:
 
 - Set a concise repository description.
-- Add topics such as `n8n`, `claude`, `docker`, `ai-agent`, and `beginner-friendly`.
-- Record the tested n8n image and release commit.
+- Add topics such as `n8n`, `claude`, `nodejs`, `ai-agent`, and `beginner-friendly`.
+- Record the tested n8n release and release commit.
 - Generate and verify the architecture-specific instructor kit in [RELEASE.md](RELEASE.md).
-- Create the annotated `v0.1.0` tag only after the release commit's CI is green.
+- Create the annotated `v0.2.0` tag only after the release commit's CI is green.
 - Keep the repository private until its intended audience and secret-handling process are agreed.
 - Never include Git LFS assets; GitHub template repositories do not support them.

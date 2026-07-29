@@ -23,7 +23,7 @@ GitHub Actions run `30198827506` passed on 2026-07-26 for evidence commit
 | Pilot evidence | Unit tests prove a complete passing fixture returns `GO`, incomplete evidence returns `NO_GO`, and personal-data fields are rejected | Passing locally and in CI on 2026-07-26 |
 | Browser widths | Pinned Chromium checks at 375, 768, and 1440 pixels | Passing locally and in CI on 2026-07-26 |
 | Windows helpers | PowerShell files are parsed on a Windows GitHub Actions runner | Passing in CI on 2026-07-26 |
-| macOS and Windows learners | Real setup, Claude account state, Docker Desktop behaviour, and instruction clarity | Pending human pilot |
+| macOS and Windows learners | Real setup, Claude account state, project-local runtime download, and instruction clarity | Pending human pilot |
 
 The automated suite proves safe error contracts for simulated invalid-key,
 exhausted-credit, and provider-network failures. It also exercises an inactive
@@ -43,7 +43,7 @@ Date: 2026-07-26.
 | 1440 × 900 | None | Yes | Shift+Enter retained focus and inserted a newline | Pass |
 
 This is an automated Chromium result from `scripts/test-phase7.sh`. It does not
-claim Safari, Edge, assistive-technology, macOS learner, or Windows/WSL2 learner
+claim Safari, Edge, assistive-technology, macOS learner, or Windows learner
 coverage; those remain human-pilot evidence.
 
 ## Human session summary
@@ -53,7 +53,7 @@ Populate this section only from `pilot/results.json`.
 - Participants: 0 / 5 minimum.
 - First Claude response within 30 minutes: 0%.
 - macOS coverage: pending.
-- Windows with WSL2 coverage: pending.
+- Windows coverage: pending.
 - Instructor interventions: none recorded because the pilot has not run.
 - Teams completing interface and skill customisation: 0.
 - Teams demonstrating a read and confirmed write: 0.

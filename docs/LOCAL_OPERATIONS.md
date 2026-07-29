@@ -10,7 +10,7 @@ Double-click `start.command`.
 
 Double-click `start-windows.cmd`.
 
-Starting does not reset n8n. Existing local users, settings, credentials, and workflows remain in the Docker volume.
+Starting does not reset n8n. Existing local users, settings, credentials, and workflows remain in the project's Git-ignored `data/` folder.
 
 ## Stop
 
@@ -22,7 +22,7 @@ Double-click `stop.command`.
 
 Double-click `stop-windows.cmd`.
 
-Stopping containers preserves local data and the private `.env` file.
+Stopping the background services preserves all local data.
 
 ## Check health
 
@@ -35,7 +35,7 @@ Open:
 Technical contributors can also run:
 
 ```bash
-docker compose ps
+node scripts/local.mjs status
 ```
 
 All three services should report `healthy`.
@@ -47,7 +47,7 @@ health response deliberately does not call Claude or expose credentials.
 
 ## Run friendly diagnostics
 
-The diagnostic helper checks more than container health. It also confirms the reviewed checklist and main workflow are installed, the main workflow is published, an existing Anthropic credential is selected, the chat webhook is registered, and the optional health workflow is published.
+The diagnostic helper checks more than process health. It also confirms the reviewed checklist and main workflow are installed, the main workflow is published, an existing Anthropic credential is selected, the chat webhook is registered, and the optional health workflow is published.
 
 It sends only an intentionally invalid session ID to the chat webhook, so validation stops the request before Claude. It never decrypts or displays credential values.
 
@@ -137,7 +137,7 @@ The scripts write timestamped, normalised copies below `n8n/exports/`. That dire
 
 Follow [WORKFLOW_DEVELOPMENT.md](WORKFLOW_DEVELOPMENT.md) for the exact export, comparison, promotion, validation, and pull-request path.
 
-The local task rows are data, not workflow JSON. They remain in the persistent n8n volume and are included by the repository backup process.
+The local task rows are data, not workflow JSON. They live in the persistent `data/` folder and are included by the repository backup process.
 
 ## Conversation memory
 
@@ -146,7 +146,7 @@ The first workflow uses n8n Simple Memory:
 - The browser's `sessionId` separates one conversation from another.
 - The latest six interactions are supplied to the agent.
 - Selecting **New conversation** in the browser creates a fresh session.
-- Memory is held inside the running n8n process, not in the persistent Docker volume.
+- Memory is held inside the running n8n process, not in the persistent data folder.
 - Restarting or stopping n8n clears conversation memory.
 
 Workflows, the n8n owner account, and encrypted credentials do persist across a normal restart. Durable conversation history is deliberately deferred from the local beginner release.
@@ -164,8 +164,8 @@ Running workflow import again does not duplicate the three sample tasks or overw
 
 ## Extracted document context
 
-Uploaded source files are not stored. Their extracted text is held in the
-separate `document_data` Docker volume for up to 24 hours and is removed on
+Uploaded source files are not stored. Their extracted text is held in
+`data/documents/` for up to 24 hours and is removed on
 expiry, when the browser removes it, or when the whole stack is reset.
 
 The normal backup intentionally excludes this temporary document volume. Keep
@@ -179,7 +179,7 @@ A backup contains:
 - Local users and settings.
 - Workflows and execution data.
 - Encrypted credentials.
-- A copy of the n8n encryption key required to decrypt those credentials.
+- n8n's own private encryption-key file, which is required to decrypt those credentials.
 
 Backups are written below `backups/YYYYMMDD-HHMMSS` and ignored by Git.
 
@@ -199,7 +199,7 @@ Double-click `backup-windows.cmd`, or run from PowerShell:
 .\scripts\windows\backup.ps1
 ```
 
-The backup script briefly stops n8n to produce a consistent SQLite and filesystem archive. If n8n was running before the backup, the script starts it again and waits for the stack to become healthy.
+The backup helper briefly stops n8n to produce a consistent database and filesystem archive. If n8n was running before the backup, the helper starts it again and waits for the stack to become healthy.
 
 Treat the backup directory as a secret. Do not commit, upload, or share it casually.
 
@@ -223,7 +223,7 @@ Type `RESTORE` when prompted.
 
 Type `RESTORE` when prompted.
 
-Restore reinstates both the n8n volume data and the matching encryption key, then starts the stack and waits for healthy services.
+Restore reinstates the complete n8n data directory, including the matching encryption key, then starts the stack and waits for healthy services. Backups made by the earlier Docker-based release restore the same way: their archive format and `env.backup` file are both understood.
 
 ## Reset all local app data
 
@@ -233,10 +233,10 @@ Reset permanently removes:
 - Credentials.
 - Workflows.
 - Execution history.
-- Other data in the n8n Docker volume.
-- Temporary extracted document context in the document Docker volume.
+- Everything else inside `data/n8n`.
+- Temporary extracted document context inside `data/documents`.
 
-It preserves `.env`.
+It preserves `.env` when one exists.
 
 Create a backup first if any local state matters.
 
@@ -254,27 +254,27 @@ Type `RESET` when prompted.
 
 After reset, start the stack and create a new local n8n owner account.
 
-## Update container versions
+## Update pinned versions
 
-Container versions are intentionally pinned in `compose.yaml`. Do not change them during a live workshop.
+The n8n version is intentionally pinned in `package.json` (and mirrored by the digest-locked image in `compose.yaml` for the Docker-based smoke tests and future deployment). Do not change it during a live workshop.
 
 To evaluate an update:
 
 1. Create a backup.
-2. Change the exact image tag on a separate branch.
-3. Pull and start the stack.
+2. Change the pinned version on a separate branch (`package.json`, the lockfile, and the matching `compose.yaml` digest).
+3. Run setup and the smoke tests.
 4. Test setup, persistence, backup, restore, and the current workflows.
 5. Record the tested version in the pull request.
 
-Do not replace pinned tags with `latest`.
+Do not replace pinned versions with `latest`.
 
 ## Secret hygiene
 
-- `.env` is ignored by Git.
+- `data/` is ignored by Git and holds the n8n database, encrypted credentials, and the private encryption key.
+- `.env` is ignored by Git and is optional.
 - `backups/` content is ignored by Git.
-- `.env.example` contains a placeholder, not a working key.
-- The chat container has no n8n encryption key or Claude API key.
-- The n8n encryption key is required only by the n8n service.
+- `.env.example` contains placeholders, not working secrets.
+- The chat gateway has no n8n encryption key or Claude API key.
 - Workflow exports can contain credential names and IDs, but never commit a manually created credential export or an API key.
 
-If `.env` or a backup is exposed, replace the local credentials before using that instance again.
+If the `data/` folder or a backup is exposed, replace the local credentials before using that instance again.

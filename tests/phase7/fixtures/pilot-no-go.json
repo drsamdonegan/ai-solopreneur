@@ -22,9 +22,9 @@
       "demonstratedApprovedWrite": false,
       "instructorInterventions": [
         {
-          "category": "docker-desktop",
-          "description": "Docker engine was not running.",
-          "resolution": "Opened Docker Desktop.",
+          "category": "runtime-download",
+          "description": "The venue network blocked the project-local Node.js download.",
+          "resolution": "Switched to the workshop network and reran setup.",
           "minutes": 8
         }
       ],

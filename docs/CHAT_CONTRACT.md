@@ -118,7 +118,9 @@ Successful response:
 ## Gateway-to-n8n request
 
 The gateway resolves document IDs, confirms that each belongs to the current
-session, and selects a workflow from the trusted server registry. It forwards:
+session, and selects a workflow from the trusted server registry. It sends the
+validated request to `N8N_CHAT_WEBHOOK_URL`: the loopback address in the native
+local runner, or the private service address in a Compose deployment.
 
 ```json
 {
@@ -168,7 +170,7 @@ text plus metadata to the gateway. It has no published host port and no n8n or
 Claude credentials.
 
 The gateway stores extracted text as mode-`0600` JSON records in the
-`document_data` Docker volume. Records contain a source hash for diagnostics,
+Git-ignored `data/documents/` folder. Records contain a source hash for diagnostics,
 expire after 24 hours, and are bound to the browser session UUID. The original
 file is not stored.
 
@@ -235,10 +237,57 @@ restarts. A session UUID is not an authenticated user identity.
 Agent replies are inserted with `textContent` as untrusted plain text. If
 Markdown is added later, generated HTML must be sanitised before rendering.
 
-## Acceptance tests
+## Security boundary
+
+- The browser receives no Claude credential.
+- The gateway receives no Claude credential.
+- The n8n credential store owns the Claude API key.
+- The gateway reaches n8n only through `N8N_CHAT_WEBHOOK_URL`: the loopback address in the local runner, or the private service address in a Compose deployment.
+- The chat endpoint uses same-origin browser requests in the local release.
+- Authentication and public ingress are deferred until cloud deployment.
+
+## Compatibility
+
+Changes are backward-compatible when they:
+
+- Add optional response fields.
+- Add ignored request fields.
+- Improve error prose without changing error codes.
+
+Changes require a versioned contract when they:
+
+- Rename or remove required fields.
+- Change validation limits.
+- Change session semantics.
+- Make the workflow asynchronous.
+- Require browser authentication.
+
+## Contract acceptance tests
 
 Automated tests cover gateway validation, stable error handling, response
 filtering, static-file safety, text extraction, invalid binary input, workflow
-structure, prompt boundaries, and size limits. Docker smoke testing must also
-prove all three services become healthy and an uploaded text record can travel
-through the gateway.
+structure, prompt boundaries, and size limits. The contract suite proves:
+
+- A valid request is forwarded and returned.
+- Whitespace is trimmed.
+- Missing, invalid, empty, and oversized inputs are rejected.
+- n8n is not called for invalid input.
+- An unavailable n8n service returns `AGENT_UNAVAILABLE`.
+- A timed-out n8n request returns `AGENT_TIMEOUT`.
+- A malformed n8n response returns `AGENT_ERROR`.
+- Raw upstream errors and secrets are not returned.
+- The response session identifier must match the request.
+- Document IDs are session-bound and document text is wrapped as untrusted
+  source material.
+- The local document reader rejects unsupported, oversized, or malformed input.
+
+The native packaging smoke and Docker workflow smoke additionally prove:
+
+- Both exported workflows import and publish in the pinned n8n image.
+- n8n, the document reader, and chat all become healthy.
+- An uploaded or pasted text record can travel through the gateway.
+- A malformed direct webhook request returns a safe error without calling the model.
+- A valid browser request travels through the gateway and workflow.
+- A session recalls its own conversation while a different session remains isolated.
+- Agent output is capped.
+- Restarting n8n clears the documented Simple Memory state.

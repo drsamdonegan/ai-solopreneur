@@ -5,6 +5,7 @@ set -euo pipefail
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROJECT_NAME="ai-solopreneur-phase7-smoke"
 CHAT_PORT="3350"
+DOCUMENT_WORKER_PORT="3191"
 N8N_PORT="5728"
 TEST_ENCRYPTION_KEY="789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456"
 SESSION_ID="77777777-7777-4777-8777-777777777777"
@@ -129,30 +130,28 @@ tar \
   --exclude='./.env' \
   --exclude='./backups/*' \
   --exclude='./n8n/exports/*' \
+  --exclude='./node_modules' \
+  --exclude='./data' \
+  --exclude='./apps/chat/node_modules' \
+  --exclude='./apps/chat/dist' \
+  --exclude='./services/document-worker/node_modules' \
   -cf - . | tar -C "${COPY_ROOT}" -xf -
 {
-  printf 'COMPOSE_PROJECT_NAME=ai-solopreneur-phase7-port-check\n'
   printf 'CHAT_PORT=%s\n' "${CHAT_PORT}"
+  printf 'DOCUMENT_WORKER_PORT=%s\n' "${DOCUMENT_WORKER_PORT}"
   printf 'N8N_PORT=%s\n' "${N8N_PORT}"
   printf 'GENERIC_TIMEZONE=Australia/Melbourne\n'
   printf 'N8N_ENCRYPTION_KEY=%s\n' "${TEST_ENCRYPTION_KEY}"
 } >"${COPY_ROOT}/.env"
+# The running Compose stack occupies both configured ports, so the native
+# preflight's connection test must report them as taken.
 set +e
-preflight_path="${PATH}"
-if ! lsof -nP -iTCP:"${CHAT_PORT}" -sTCP:LISTEN -t >/dev/null 2>&1; then
-  mkdir -p "${TEMP_ROOT}/conflict-fixture-bin"
-  ln -s \
-    "${COPY_ROOT}/tests/phase7/lsof-conflict-fixture.sh" \
-    "${TEMP_ROOT}/conflict-fixture-bin/lsof"
-  preflight_path="${TEMP_ROOT}/conflict-fixture-bin:${PATH}"
-fi
 preflight_output="$(
   env \
     -u COMPOSE_PROJECT_NAME \
     -u CHAT_PORT \
     -u N8N_PORT \
     -u N8N_ENCRYPTION_KEY \
-    PATH="${preflight_path}" \
     "${COPY_ROOT}/scripts/preflight.sh" 2>&1
 )"
 preflight_status=$?

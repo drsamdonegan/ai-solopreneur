@@ -36,19 +36,19 @@ Beginner simplicity must come from packaging and clear boundaries, not from maki
 The first release targets:
 
 - macOS 13 or newer on Apple Silicon or Intel.
-- Windows 11 with Docker Desktop and WSL2 enabled.
+- Windows 10 or 11 on x64 or ARM64.
 - Current Chrome or Edge.
 
 Linux is a best-effort technical-contributor environment until it is included in the learner pilot.
 
-The local project must not require Node.js, npm, n8n, PostgreSQL, or another runtime to be installed directly on the learner's computer. Docker provides the runtime.
+The local project must not require Node.js, npm, n8n, PostgreSQL, Docker, or another runtime to be installed globally on the learner's computer. The one-click helpers provide a checksum-verified Node.js runtime inside the project when Node.js 24+ is not already available.
 
 ## Required learner prerequisites
 
 Every learner needs:
 
 - A GitHub account.
-- Docker Desktop installed and running.
+- Claude Desktop with Code mode available.
 - An Anthropic Console account.
 - A Claude API key with available credit.
 - A supported browser.
@@ -91,9 +91,10 @@ The local release uses these default rules:
 
 ## First-release scope
 
-The first release includes:
+The current local release includes:
 
-- A local Docker Compose stack.
+- A native local stack run by the shared Node.js runner.
+- A verified, project-local Node.js bootstrap for macOS and Windows.
 - A custom browser chat.
 - A small local chat gateway.
 - An isolated PDF, DOCX, TXT, and pasted-text reader.
@@ -169,7 +170,7 @@ The local-first release is complete only when current evidence proves that:
 - The learner can change the interface and one skill.
 - The agent can retrieve factual local task data.
 - Creating or updating a task requires an exact, unexpired confirmation.
-- Docker restart, reset, backup, restore, workflow import, and workflow export are tested and documented.
+- Native restart, reset, backup, restore, workflow import, and workflow export are tested and documented.
 - Automated contract and health checks pass.
 - A second team can run the repository using its documentation without verbal help.
 - Cloud deployment and external-channel code remain outside the release.

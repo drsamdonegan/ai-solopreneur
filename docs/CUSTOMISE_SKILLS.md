@@ -2,7 +2,7 @@
 
 ## Outcome
 
-A skill is a small Markdown file that tells the agent how to behave in one situation. You can change an enabled skill without editing JavaScript or rebuilding a Docker image.
+A skill is a small Markdown file that tells the agent how to behave in one situation. You can change an enabled skill without editing JavaScript or rebuilding anything.
 
 The starter agent includes:
 
@@ -20,7 +20,7 @@ The starter agent includes:
    > Finish planning replies with one recommended next action.
 
 3. Save the file.
-4. Make sure Docker Desktop and the local app are running.
+4. Make sure the local app is running (`start.command` or `start-windows.cmd`).
 5. Sync the enabled skills:
 
    - macOS: double-click `sync-skills.command`.
@@ -114,11 +114,7 @@ The previously synced bundle remains active when validation fails.
 Technical contributors can validate without changing n8n:
 
 ```bash
-docker run --rm \
-  -v "$PWD:/workspace:ro" \
-  -w /workspace \
-  node:24.16.0-alpine3.22@sha256:191c9f0080fcbbc6547a85dc0ff7988072214a355aabdc1d2ec55a7dae5eea8a \
-  node tests/phase5/test-skills.mjs
+node tests/phase5/test-skills.mjs
 ```
 
 The [finished Launch Partner example](../examples/finished-solo-project-assistant/README.md) includes an alternative project-assistant skill for comparison. After testing a learner change in a new conversation, use [GitHub Desktop](GITHUB_DESKTOP.md) to commit and push the Markdown file.

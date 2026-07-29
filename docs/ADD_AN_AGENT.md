@@ -57,7 +57,7 @@ its workflow and safety tests are ready.
    `status` from `coming-soon` to `active`.
 7. Run `node scripts/validate-workflows.mjs`, the gateway tests, and a Docker
    smoke test.
-8. Rebuild with `docker compose up -d --build --wait`.
+8. Restart with `./scripts/run-local.sh restart`.
 9. Verify the new button starts an isolated conversation and reaches only its
    intended webhook.
 
