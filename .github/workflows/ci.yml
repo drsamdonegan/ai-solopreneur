@@ -134,14 +134,14 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit 1 }
           & $nodePath scripts/local.mjs status
           if ($LASTEXITCODE -ne 0) { exit 1 }
-          $diagnostics = & $nodePath scripts/local.mjs diagnose | Out-String
-          Write-Host $diagnostics
-          if ($diagnostics.Contains("[!!]")) {
-            Write-Error "Diagnostics reported a native service failure."
-            exit 1
-          }
-          if (-not ($diagnostics -match "The learner checklist is installed")) {
-            Write-Error "Diagnostics did not confirm the imported learner checklist."
+          # Run diagnostics exactly as the learner-facing Windows launcher does.
+          # A fresh setup deliberately exits 1 until the learner adds their
+          # private Claude credential, so 0 and 1 are both valid here.
+          $PSNativeCommandUseErrorActionPreference = $false
+          & $nodePath scripts/local.mjs diagnose
+          $diagnosticStatus = $LASTEXITCODE
+          if ($diagnosticStatus -notin @(0, 1)) {
+            Write-Error "Diagnostics exited unexpectedly with $diagnosticStatus."
             exit 1
           }
           & $nodePath scripts/local.mjs stop

@@ -3,9 +3,10 @@
 set -euo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+VERSION="$(tr -d '[:space:]' <"${PROJECT_ROOT}/VERSION")"
 TEMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/ai-solopreneur-phase8.XXXXXX")"
 PACK_ROOT="${TEMP_ROOT}/kit"
-PACK_DIR="${PACK_ROOT}/v0.1.0-metadata-test"
+PACK_DIR="${PACK_ROOT}/v${VERSION}-metadata-test"
 
 cleanup() {
   if [[ -n "${TEMP_ROOT}" && "${TEMP_ROOT}" == "${TMPDIR:-/tmp}/ai-solopreneur-phase8."* ]]; then

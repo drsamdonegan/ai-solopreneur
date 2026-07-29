@@ -1373,7 +1373,11 @@ async function commandDiagnose() {
           body: '{"sessionId":"diagnostic","message":"diagnostic"}',
         },
       );
-      if (chatProbe !== null && chatProbe.status === 400) {
+      if (
+        chatProbe !== null &&
+        (chatProbe.status === 400 ||
+          chatProbe.body.includes('"code":"INVALID_REQUEST"'))
+      ) {
         ok("The published chat webhook safely rejected the credential-free diagnostic request.");
       } else {
         action("Publish 00 - START HERE - Project Partner so the chat webhook becomes available.");

@@ -41,7 +41,7 @@ diagnostics_until_green() {
   local output=""
   local status=1
   local attempt
-  for attempt in $(seq 1 30); do
+  for attempt in $(seq 1 10); do
     set +e
     output="$("${COPY_ROOT}/scripts/diagnose.sh" 2>&1)"
     status=$?
