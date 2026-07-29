@@ -330,7 +330,7 @@ expect_contains "${diagnostic_after}" \
   "Anthropic credential exists and is selected" \
   "configured diagnostics"
 expect_contains "${diagnostic_after}" \
-  "published chat webhook safely rejected" \
+  "Project Partner workflow is published" \
   "configured diagnostics"
 expect_contains "${diagnostic_after}" \
   "All checks are green" \

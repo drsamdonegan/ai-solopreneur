@@ -1402,23 +1402,6 @@ async function commandDiagnose() {
         action("Create an Anthropic credential named Anthropic account and select it in Claude - Sonnet 4.6.");
       }
 
-      const chatProbe = await fetchStatus(
-        `http://127.0.0.1:${cfg.n8nPort}/webhook/chat`,
-        { method: "POST" },
-      );
-      if (
-        chatProbe !== null &&
-        (chatProbe.status === 400 ||
-          chatProbe.body.includes('"code":"INVALID_REQUEST"'))
-      ) {
-        ok("The published chat webhook safely rejected the credential-free diagnostic request.");
-      } else {
-        const probeDetail =
-          chatProbe === null ? "no response" : `HTTP ${chatProbe.status}`;
-        action(
-          `Publish 00 - START HERE - Project Partner so the chat webhook becomes available (probe: ${probeDetail}).`,
-        );
-      }
     }
 
     const agentHealth = await fetchStatus(
