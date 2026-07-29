@@ -94,6 +94,7 @@ jobs:
       matrix:
         os:
           - ubuntu-latest
+          - macos-latest
           - windows-latest
     steps:
       - name: Check out repository
@@ -149,10 +150,10 @@ jobs:
           & $nodePath scripts/local.mjs reset --yes
           if ($LASTEXITCODE -ne 0) { exit 1 }
 
-  docker-smoke:
-    name: Docker workflow smoke
+  native-integration:
+    name: Native agent and resilience smoke
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
@@ -161,20 +162,23 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: 24.16.0
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            apps/chat/package-lock.json
+            services/document-worker/package-lock.json
+            tests/phase7/package-lock.json
 
-      - name: Install smoke-test host tools
-        run: sudo apt-get update && sudo apt-get install --yes jq lsof
+      - name: Install browser checks
+        run: |
+          npm ci --prefix tests/phase7 --ignore-scripts
+          cd tests/phase7
+          npx playwright install --with-deps chromium
 
-      - name: Run Phase 3 agent smoke
-        run: ./scripts/test-phase3.sh
-
-      - name: Run Phase 4 tool smoke
-        run: ./scripts/test-phase4.sh
-
-      - name: Run Phase 5 safety smoke
+      - name: Run native agent and safety smoke
         run: ./scripts/test-phase5.sh
 
-      - name: Run Phase 7 validation smoke
+      - name: Run native resilience and browser smoke
         run: ./scripts/test-phase7.sh
 
       - name: Run Phase 8 release smoke

@@ -34,7 +34,7 @@ printf 'Building a metadata-only instructor kit...\n'
 
 for required in \
   RELEASE-METADATA.txt \
-  LOAD_IMAGES.md \
+  START_HERE.md \
   SHA256SUMS; do
   [[ -s "${PACK_DIR}/${required}" ]] ||
     fail "instructor kit is missing ${required}"
@@ -74,7 +74,7 @@ if find "${PACK_DIR}" -type f \( \
 fi
 
 printf '\nPhase 8 release test passed.\n'
-printf '  Version and image digests:       locked\n'
+printf '  Runtime and package versions:    locked\n'
 printf '  Beginner getting-started guide:  complete\n'
 printf '  Incremental course exercises:    8\n'
 printf '  Canonical workflow backup:       11 files\n'

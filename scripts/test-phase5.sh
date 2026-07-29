@@ -3,40 +3,48 @@
 set -euo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PROJECT_NAME="ai-solopreneur-phase5-smoke"
 CHAT_PORT="3330"
+DOCUMENT_WORKER_PORT="3185"
 N8N_PORT="5708"
 TEST_ENCRYPTION_KEY="0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 SESSION_A="11111111-1111-4111-8111-111111111111"
 SESSION_B="22222222-2222-4222-8222-222222222222"
 SESSION_C="33333333-3333-4333-8333-333333333333"
 SESSION_D="44444444-4444-4444-8444-444444444444"
-TEMP_DIRECTORY="$(mktemp -d)"
+TEMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/ai-solopreneur-phase5.XXXXXX")"
+COPY_ROOT="${TEMP_ROOT}/project-copy"
+TEMP_DIRECTORY="${TEMP_ROOT}/results"
+MOCK_LOG="${TEMP_ROOT}/anthropic-mock.log"
+MOCK_PID=""
 
-export COMPOSE_PROJECT_NAME="${PROJECT_NAME}"
-export CHAT_PORT
-export N8N_PORT
-export GENERIC_TIMEZONE="Australia/Melbourne"
-export N8N_ENCRYPTION_KEY="${TEST_ENCRYPTION_KEY}"
-
-compose() {
-  docker compose \
-    --project-directory "${PROJECT_ROOT}" \
-    -p "${PROJECT_NAME}" \
-    -f "${PROJECT_ROOT}/compose.yaml" \
-    -f "${PROJECT_ROOT}/tests/phase5/compose.mock.yaml" \
-    "$@"
+copy_local() {
+  (
+    cd "${COPY_ROOT}"
+    AI_SOLO_FORCE_PORTABLE_NODE=1 \
+      NPM_CONFIG_LOGLEVEL=error \
+      ./scripts/run-local.sh "$@"
+  )
 }
 
 cleanup() {
   if [[ "${KEEP_PHASE5_SMOKE:-0}" == "1" ]]; then
-    printf '\nKeeping the isolated Phase 5 smoke stack running for inspection.\n'
+    printf '\nKeeping the isolated Phase 5 native stack running for inspection.\n'
     printf '  Chat: http://localhost:%s\n' "${CHAT_PORT}"
     printf '  n8n:  http://localhost:%s\n' "${N8N_PORT}"
+    printf '  Copy: %s\n' "${COPY_ROOT}"
   else
-    compose down --volumes --remove-orphans >/dev/null 2>&1 || true
+    if [[ -f "${COPY_ROOT}/scripts/local.mjs" ]]; then
+      copy_local stop >/dev/null 2>&1 || true
+    fi
+    if [[ -n "${MOCK_PID}" ]]; then
+      kill "${MOCK_PID}" >/dev/null 2>&1 || true
+      wait "${MOCK_PID}" >/dev/null 2>&1 || true
+    fi
+    if [[ -n "${TEMP_ROOT}" && "${TEMP_ROOT}" == "${TMPDIR:-/tmp}/ai-solopreneur-phase5."* ]]; then
+      find "${TEMP_ROOT}" -depth -mindepth 1 -delete >/dev/null 2>&1 || true
+      rmdir "${TEMP_ROOT}" >/dev/null 2>&1 || true
+    fi
   fi
-  rm -rf "${TEMP_DIRECTORY}"
 }
 
 fail() {
@@ -89,12 +97,11 @@ chat() {
 }
 
 publish_workflow() {
-  compose exec -T n8n n8n publish:workflow --id="$1" >/dev/null
+  copy_local n8n publish:workflow --id="$1" >/dev/null
 }
 
 mock_metrics() {
-  compose exec -T anthropic-mock \
-    node -e "fetch('http://127.0.0.1:3401/metrics').then(r=>r.text()).then(console.log)"
+  curl --fail --silent --show-error "http://127.0.0.1:3401/metrics"
 }
 
 list_tasks() {
@@ -106,46 +113,66 @@ list_tasks() {
 
 trap cleanup EXIT INT TERM
 
-if ! docker info >/dev/null 2>&1; then
-  fail "Docker Desktop is not running."
-fi
-
-printf 'Resetting the isolated Phase 5 smoke project...\n'
-compose down --volumes --remove-orphans >/dev/null 2>&1 || true
-
 printf 'Validating workflows, skills, and tool policy...\n'
-docker run --rm \
-  -v "${PROJECT_ROOT}:/workspace:ro" \
-  -w /workspace \
-  node:24.16.0-alpine3.22@sha256:191c9f0080fcbbc6547a85dc0ff7988072214a355aabdc1d2ec55a7dae5eea8a \
-  node scripts/validate-workflows.mjs
-docker run --rm \
-  -v "${PROJECT_ROOT}:/workspace:ro" \
-  -w /workspace \
-  node:24.16.0-alpine3.22@sha256:191c9f0080fcbbc6547a85dc0ff7988072214a355aabdc1d2ec55a7dae5eea8a \
-  node tests/phase5/test-skills.mjs
+node "${PROJECT_ROOT}/scripts/validate-workflows.mjs"
+node "${PROJECT_ROOT}/tests/phase5/test-skills.mjs"
 
-printf 'Starting isolated n8n and the Anthropic API mock...\n'
-compose up -d --wait --wait-timeout 240 anthropic-mock n8n
+printf 'Creating an isolated native project and Anthropic API mock...\n'
+mkdir -p "${COPY_ROOT}" "${TEMP_DIRECTORY}"
+tar \
+  -C "${PROJECT_ROOT}" \
+  --exclude='./.git' \
+  --exclude='./.env' \
+  --exclude='./backups/*' \
+  --exclude='./n8n/exports/*' \
+  --exclude='./node_modules' \
+  --exclude='./.runtime' \
+  --exclude='./data' \
+  --exclude='./apps/chat/node_modules' \
+  --exclude='./apps/chat/dist' \
+  --exclude='./services/document-worker/node_modules' \
+  -cf - . | tar -C "${COPY_ROOT}" -xf -
+{
+  printf 'CHAT_PORT=%s\n' "${CHAT_PORT}"
+  printf 'DOCUMENT_WORKER_PORT=%s\n' "${DOCUMENT_WORKER_PORT}"
+  printf 'N8N_PORT=%s\n' "${N8N_PORT}"
+  printf 'GENERIC_TIMEZONE=Australia/Melbourne\n'
+  printf 'N8N_ENCRYPTION_KEY=%s\n' "${TEST_ENCRYPTION_KEY}"
+} >"${COPY_ROOT}/.env"
+node -e "
+const fs = require('fs');
+const path = '${COPY_ROOT}/tests/phase3/fixtures/mock-anthropic-credential.json';
+const rows = JSON.parse(fs.readFileSync(path, 'utf8'));
+rows[0].data.url = 'http://127.0.0.1:3401';
+fs.writeFileSync(path, JSON.stringify(rows, null, 2) + '\\n');
+"
+node "${COPY_ROOT}/tests/phase5/anthropic-mock.mjs" >"${MOCK_LOG}" 2>&1 &
+MOCK_PID=$!
+for attempt in $(seq 1 30); do
+  if curl --fail --silent "http://127.0.0.1:3401/health" >/dev/null 2>&1; then
+    break
+  fi
+  sleep 1
+done
+curl --fail --silent --show-error "http://127.0.0.1:3401/health" >/dev/null
+
+printf 'Installing and starting the isolated native stack...\n'
+copy_local setup >/dev/null
 
 printf 'Importing the test credential, workflows, and test harnesses...\n'
-compose exec -T n8n \
-  n8n import:credentials \
-  --input=/opt/phase3-test/fixtures/mock-anthropic-credential.json >/dev/null
-compose exec -T n8n \
-  n8n import:workflow \
+copy_local n8n import:credentials \
+  --input="${COPY_ROOT}/tests/phase3/fixtures/mock-anthropic-credential.json" >/dev/null
+copy_local n8n import:workflow \
   --separate \
-  --input=/opt/ai-solopreneur/workflows >/dev/null
-compose exec -T n8n \
-  n8n import:workflow \
+  --input="${COPY_ROOT}/n8n/workflows" >/dev/null
+copy_local n8n import:workflow \
   --separate \
-  --input=/opt/phase4-test/workflows >/dev/null
-compose exec -T n8n \
-  n8n import:workflow \
+  --input="${COPY_ROOT}/tests/phase4/workflows" >/dev/null
+copy_local n8n import:workflow \
   --separate \
-  --input=/opt/phase5-test/workflows >/dev/null
+  --input="${COPY_ROOT}/tests/phase5/workflows" >/dev/null
 
-workflow_list="$(compose exec -T n8n n8n list:workflow)"
+workflow_list="$(copy_local n8n list:workflow)"
 for expected_workflow in \
   "phase3StartHere|00 - START HERE - Project Partner" \
   "phase4TaskSetup|10 - SETUP - Local Task Data" \
@@ -176,8 +203,7 @@ for workflow_id in \
   phase3StartHere; do
   publish_workflow "${workflow_id}"
 done
-compose restart n8n >/dev/null
-compose up -d --wait --wait-timeout 240 n8n >/dev/null
+copy_local restart >/dev/null
 
 printf 'Creating local tables and syncing only enabled skills...\n'
 setup_response="$(
@@ -197,43 +223,39 @@ repeat_setup_response="$(
 expect_contains "${setup_response}" '"ok":true' "task setup response"
 expect_contains "${repeat_setup_response}" '"ok":true' "repeated task setup response"
 
-skill_bundle="$(
-  docker run --rm \
-    -v "${PROJECT_ROOT}:/workspace:ro" \
-    -w /workspace \
-    node:24.16.0-alpine3.22@sha256:191c9f0080fcbbc6547a85dc0ff7988072214a355aabdc1d2ec55a7dae5eea8a \
-    node scripts/compile-skills.mjs
-)"
-skill_response="$(
-  curl --fail --silent --show-error \
-    -X POST "http://127.0.0.1:${N8N_PORT}/webhook/sync-enabled-skills" \
-    -H 'Content-Type: application/json' \
-    --data-binary "${skill_bundle}"
-)"
-repeat_skill_response="$(
-  curl --fail --silent --show-error \
-    -X POST "http://127.0.0.1:${N8N_PORT}/webhook/sync-enabled-skills" \
-    -H 'Content-Type: application/json' \
-    --data-binary "${skill_bundle}"
-)"
-expect_contains "${skill_response}" '"ok":true' "skill sync response"
-expect_contains "${skill_response}" '"project-assistant"' "skill sync response"
-expect_contains "${skill_response}" '"task-capture"' "skill sync response"
-expect_contains "${skill_response}" '"weekly-status"' "skill sync response"
-expect_contains "${repeat_skill_response}" '"ok":true' "repeated skill sync response"
+skill_bundle="$(node "${PROJECT_ROOT}/scripts/compile-skills.mjs")"
+expect_contains "${skill_bundle}" '"project-assistant"' "compiled skill bundle"
+expect_contains "${skill_bundle}" '"task-capture"' "compiled skill bundle"
+expect_contains "${skill_bundle}" '"weekly-status"' "compiled skill bundle"
+expect_contains "${skill_bundle}" '"meeting-analysis"' "compiled skill bundle"
+copy_local n8n unpublish:workflow --id=phase5SyncEnabledSkills >/dev/null
+skill_response="$(copy_local sync-skills)"
+repeat_skill_response="$(copy_local sync-skills)"
+expect_contains \
+  "${skill_response}" \
+  "Enabled skills synced successfully" \
+  "skill sync response"
+expect_contains \
+  "${repeat_skill_response}" \
+  "Enabled skills synced successfully" \
+  "repeated skill sync response"
 
 config_response="$(
-  curl --fail --silent --show-error \
+  curl \
+    --retry 30 \
+    --retry-delay 1 \
+    --retry-all-errors \
+    --fail \
+    --silent \
+    --show-error \
     "http://127.0.0.1:${N8N_PORT}/webhook/phase5-test-config"
 )"
 expect_contains "${config_response}" '"count":1' "agent config"
 expect_contains "${config_response}" 'project-assistant' "agent config"
 expect_not_contains "${config_response}" 'DISABLED_SKILL_MARKER' "agent config"
 
-compose exec -T n8n n8n unpublish:workflow --id=phase4TaskSetup >/dev/null
-compose exec -T n8n n8n unpublish:workflow --id=phase5SyncEnabledSkills >/dev/null
-compose restart n8n >/dev/null
-compose up -d --wait --wait-timeout 240 n8n >/dev/null
+copy_local n8n unpublish:workflow --id=phase4TaskSetup >/dev/null
+copy_local restart >/dev/null
 setup_status="$(
   curl --silent --output /dev/null --write-out '%{http_code}' \
     -X POST "http://127.0.0.1:${N8N_PORT}/webhook/setup-task-data"
@@ -247,8 +269,17 @@ skill_sync_status="$(
 [[ "${skill_sync_status}" == "404" ]] ||
   fail "temporary skill-sync webhook remained available (${skill_sync_status})"
 
+curl \
+  --retry 30 \
+  --retry-delay 1 \
+  --retry-all-errors \
+  --fail \
+  --silent \
+  --show-error \
+  "http://127.0.0.1:${N8N_PORT}/webhook/phase5-test-config" >/dev/null
+
 printf 'Starting the learner chat with three seeded tasks...\n'
-compose up -d --build --wait --wait-timeout 240 chat >/dev/null
+copy_local status >/dev/null
 initial_list="$(list_tasks "${SESSION_A}")"
 expect_contains "${initial_list}" '"count":3' "initial task list"
 
@@ -440,12 +471,12 @@ expect_contains "${metrics}" '# Task Capture' "agent system instructions"
 expect_contains "${metrics}" '# Weekly Status' "agent system instructions"
 expect_not_contains "${metrics}" 'DISABLED_SKILL_MARKER' "agent system instructions"
 
-if compose logs anthropic-mock n8n chat | grep -q "${TEST_ENCRYPTION_KEY}"; then
-  fail "a test encryption key appeared in container logs"
+if rg -F "${TEST_ENCRYPTION_KEY}" "${COPY_ROOT}/data/logs" "${MOCK_LOG}" >/dev/null 2>&1; then
+  fail "a test encryption key appeared in service logs"
 fi
 
 printf '\nPhase 5 smoke test passed.\n'
-printf '  Enabled Markdown skills:       3\n'
+printf '  Enabled Markdown skills:       4\n'
 printf '  Automatic read tools:          list_tasks\n'
 printf '  Confirmation-gated writes:     create and status update\n'
 printf '  Cross-session/altered/old yes: rejected\n'

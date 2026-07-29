@@ -16,7 +16,7 @@ The primary learner:
 - Wants to build an agent for a real solo-business or team workflow.
 - Benefits from immediate visual feedback.
 
-The learner is not expected to understand Docker networking, HTTP servers, databases, JavaScript package management, or cloud infrastructure.
+The learner is not expected to understand process management, HTTP servers, databases, JavaScript package management, or cloud infrastructure.
 
 ## Technical contributor
 
@@ -41,7 +41,7 @@ The first release targets:
 
 Linux is a best-effort technical-contributor environment until it is included in the learner pilot.
 
-The local project must not require Node.js, npm, n8n, PostgreSQL, Docker, or another runtime to be installed globally on the learner's computer. The one-click helpers provide a checksum-verified Node.js runtime inside the project when Node.js 24+ is not already available.
+The local project must not require Node.js, npm, n8n, PostgreSQL, or another runtime to be installed globally on the learner's computer. The one-click helpers provide a checksum-verified Node.js runtime inside the project when Node.js 24+ is not already available.
 
 ## Required learner prerequisites
 

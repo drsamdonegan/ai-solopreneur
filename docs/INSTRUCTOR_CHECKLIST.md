@@ -44,7 +44,7 @@ Resolve account access and any managed-device restriction on project-local execu
 
 - [ ] Released template repository and a ZIP archive fallback.
 - [ ] Current repository commit ID recorded.
-- [ ] Downloaded copies of pinned container images if venue connectivity is uncertain.
+- [ ] Ran setup once on workshop machines if venue connectivity is uncertain.
 - [ ] One spare supported Mac and one spare Windows computer where practical.
 - [ ] Private process for assisting with keys without seeing or copying them.
 - [ ] Projector-safe demo credential that can be revoked immediately.

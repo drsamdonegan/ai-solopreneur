@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Cross-platform local runner for AI Solopreneur.
 //
-// One Node.js script replaces the previous Docker Compose path for learners:
-// it installs the pinned n8n engine with npm, builds the dependency-free chat
+// One Node.js script provides the complete local runtime: it installs the
+// pinned n8n engine with npm, builds the dependency-free chat
 // gateway and document reader, runs all three as background processes, and
 // provides the same setup,
 // import, diagnose, backup, restore, and reset helpers on macOS and Windows.
@@ -149,9 +149,9 @@ function config() {
   const documentWorkerPort = Number(value("DOCUMENT_WORKER_PORT", "3100"));
   const timezone = value("GENERIC_TIMEZONE", systemTimezone());
 
-  // The Docker path stored the n8n encryption key in .env. Native n8n manages
-  // its own key inside data/n8n, but honouring an existing real key keeps old
-  // backups restorable. Placeholders from .env.example are ignored.
+  // n8n normally manages its own key inside data/n8n. An explicit key remains
+  // supported for controlled backup/restore workflows. The placeholder from
+  // .env.example is ignored.
   const envKey = value("N8N_ENCRYPTION_KEY", "");
   const encryptionKey =
     envKey.length >= 32 && !envKey.startsWith("replace-") ? envKey : "";
@@ -615,8 +615,8 @@ async function stopService(name) {
 
   politeStop();
   // taskkill without /f usually cannot stop console services, so Windows
-  // moves to a forced, tree-wide stop quickly. POSIX gives n8n the same 30
-  // seconds of graceful shutdown the Docker path allowed.
+  // moves to a forced, tree-wide stop quickly. POSIX gives n8n 30 seconds for
+  // a graceful shutdown.
   const graceMs = isWindows ? 5_000 : 30_000;
   const deadline = Date.now() + graceMs;
   while (Date.now() < deadline && pidIsRunning(record.pid)) {
@@ -1401,13 +1401,10 @@ async function commandDiagnose() {
       } else {
         action("Create an Anthropic credential named Anthropic account and select it in Claude - Sonnet 4.6.");
       }
-
     }
 
-    const agentHealth = await fetchStatus(
-      `http://127.0.0.1:${cfg.n8nPort}/webhook/agent-health`,
-    );
-    if (agentHealth !== null && agentHealth.ok) {
+    const agentHealth = exportedWorkflow(workflowIds.health);
+    if (agentHealth?.active === true) {
       ok("The optional agent-health workflow is published.");
     } else {
       action("Publish 90 - DEBUG - Agent Health for the safe local health check.");

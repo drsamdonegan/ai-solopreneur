@@ -239,29 +239,17 @@ Validate workflow structure without starting n8n:
 node scripts/validate-workflows.mjs
 ```
 
-Run the complete isolated Phase 3 smoke test:
-
-```bash
-./scripts/test-phase3.sh
-```
-
-The smoke test requires Docker and creates a separate, isolated test stack with a fake local Anthropic endpoint. It proves imports, publication, invalid-input blocking, the browser-to-agent path, memory isolation, output limits, and restart behaviour without consuming API credit.
-
-Run the Phase 4 task-tool smoke test:
-
-```bash
-./scripts/test-phase4.sh
-```
-
-It proves repeatable table setup, exact task reads, invalid-input rejection, idempotent creation, narrow status updates, complete audit rows, and the agent's read-only tool path.
-
-Run the Phase 5 skills and confirmation smoke test:
+Run the complete isolated native agent smoke test:
 
 ```bash
 ./scripts/test-phase5.sh
 ```
 
-It proves enabled-only skill loading, proposal-only model tools, exact session binding, expiry, supersession, single use, simultaneous retry protection, and the absence of destructive tools.
+It creates a temporary project copy and local Anthropic mock. It proves imports,
+publication, invalid-input blocking, browser-to-agent behavior, task reads,
+idempotent writes, enabled-only skill loading, exact session binding, expiry,
+supersession, single use, simultaneous retry protection, and the absence of
+destructive tools without consuming API credit.
 
 Run the Phase 6 beginner-package smoke test:
 

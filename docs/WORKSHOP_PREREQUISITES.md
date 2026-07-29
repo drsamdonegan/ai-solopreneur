@@ -50,7 +50,7 @@ Both Apple Silicon and Intel are target environments and must be represented in 
 - Claude Desktop installed and signed in.
 - GitHub Desktop installed and signed in.
 
-WSL2, Docker Desktop, Hyper-V, and BIOS virtualization settings are **not** required. Learners on ARM-based Windows laptops (for example Snapdragon devices) should complete the preflight exercise early so any platform issue is found before the session.
+WSL2, Hyper-V, and BIOS virtualization settings are **not** required. Learners on ARM-based Windows laptops (for example Snapdragon devices) should complete the preflight exercise early so any platform issue is found before the session.
 
 ## Network requirements
 

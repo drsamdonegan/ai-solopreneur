@@ -41,15 +41,17 @@ node scripts/local.mjs status
 All three services should report `healthy`.
 
 The first endpoint checks the chat service, the second checks n8n itself, and
-the third checks that n8n can run a published workflow. The document reader has
-no host port; the diagnostic checks its health from inside Docker. The workflow
+the third checks that n8n can run a published workflow. The document reader is
+bound to a loopback-only port and diagnostics check it directly. The workflow
 health response deliberately does not call Claude or expose credentials.
 
 ## Run friendly diagnostics
 
-The diagnostic helper checks more than process health. It also confirms the reviewed checklist and main workflow are installed, the main workflow is published, an existing Anthropic credential is selected, the chat webhook is registered, and the optional health workflow is published.
-
-It sends only an intentionally invalid session ID to the chat webhook, so validation stops the request before Claude. It never decrypts or displays credential values.
+The diagnostic helper checks more than process health. It also confirms the
+reviewed checklist and main workflow are installed, the main workflow is
+published, an existing Anthropic credential is selected, and the optional
+health workflow is published. It never calls Claude, decrypts credentials, or
+displays credential values.
 
 ### macOS
 
@@ -223,7 +225,7 @@ Type `RESTORE` when prompted.
 
 Type `RESTORE` when prompted.
 
-Restore reinstates the complete n8n data directory, including the matching encryption key, then starts the stack and waits for healthy services. Backups made by the earlier Docker-based release restore the same way: their archive format and `env.backup` file are both understood.
+Restore reinstates the complete n8n data directory, including the matching encryption key, then starts the stack and waits for healthy services.
 
 ## Reset all local app data
 
@@ -256,12 +258,12 @@ After reset, start the stack and create a new local n8n owner account.
 
 ## Update pinned versions
 
-The n8n version is intentionally pinned in `package.json` (and mirrored by the digest-locked image in `compose.yaml` for the Docker-based smoke tests and future deployment). Do not change it during a live workshop.
+The n8n version is intentionally pinned in `package.json` and `package-lock.json`. Do not change it during a live workshop.
 
 To evaluate an update:
 
 1. Create a backup.
-2. Change the pinned version on a separate branch (`package.json`, the lockfile, and the matching `compose.yaml` digest).
+2. Change the pinned version on a separate branch (`package.json` and the lockfile).
 3. Run setup and the smoke tests.
 4. Test setup, persistence, backup, restore, and the current workflows.
 5. Record the tested version in the pull request.

@@ -6,7 +6,7 @@ import {
 } from "./extractors.mjs";
 
 const port = Number(process.env.PORT ?? 3100);
-const listenAddress = process.env.DOCUMENT_LISTEN_ADDRESS ?? "0.0.0.0";
+const listenAddress = process.env.DOCUMENT_LISTEN_ADDRESS ?? "127.0.0.1";
 
 function sendJson(response, status, body) {
   const payload = JSON.stringify(body);

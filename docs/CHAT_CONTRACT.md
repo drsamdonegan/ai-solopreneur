@@ -119,8 +119,8 @@ Successful response:
 
 The gateway resolves document IDs, confirms that each belongs to the current
 session, and selects a workflow from the trusted server registry. It sends the
-validated request to `N8N_CHAT_WEBHOOK_URL`: the loopback address in the native
-local runner, or the private service address in a Compose deployment.
+validated request to `N8N_CHAT_WEBHOOK_URL`, which is a loopback address in the
+local runner.
 
 ```json
 {
@@ -175,7 +175,7 @@ expire after 24 hours, and are bound to the browser session UUID. The original
 file is not stored.
 
 This is workshop privacy, not multi-user authentication. Anyone who can execute
-code on the local computer or access its Docker data can inspect local records.
+code on the local computer or access its local data can inspect records.
 
 ## Document safety
 
@@ -242,7 +242,7 @@ Markdown is added later, generated HTML must be sanitised before rendering.
 - The browser receives no Claude credential.
 - The gateway receives no Claude credential.
 - The n8n credential store owns the Claude API key.
-- The gateway reaches n8n only through `N8N_CHAT_WEBHOOK_URL`: the loopback address in the local runner, or the private service address in a Compose deployment.
+- The gateway reaches n8n only through the loopback `N8N_CHAT_WEBHOOK_URL`.
 - The chat endpoint uses same-origin browser requests in the local release.
 - Authentication and public ingress are deferred until cloud deployment.
 
@@ -281,9 +281,9 @@ structure, prompt boundaries, and size limits. The contract suite proves:
   source material.
 - The local document reader rejects unsupported, oversized, or malformed input.
 
-The native packaging smoke and Docker workflow smoke additionally prove:
+The native packaging and agent smoke tests additionally prove:
 
-- Both exported workflows import and publish in the pinned n8n image.
+- Both exported workflows import and publish in the pinned n8n package.
 - n8n, the document reader, and chat all become healthy.
 - An uploaded or pasted text record can travel through the gateway.
 - A malformed direct webhook request returns a safe error without calling the model.

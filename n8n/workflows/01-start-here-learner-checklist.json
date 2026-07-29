@@ -19,7 +19,7 @@
     },
     {
       "parameters": {
-        "content": "## 1. Create the local owner\nIf this is your first n8n visit, complete **Set up owner account**.\n\nUse a private password. The account exists only in this computer's Docker volume.",
+        "content": "## 1. Create the local owner\nIf this is your first n8n visit, complete **Set up owner account**.\n\nUse a private password. The account exists only in this project's private local data folder.",
         "height": 250,
         "width": 330,
         "color": 5

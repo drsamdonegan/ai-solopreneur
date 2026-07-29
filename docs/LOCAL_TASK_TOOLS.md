@@ -132,10 +132,10 @@ Delete, archive, bulk-write, arbitrary SQL, arbitrary HTTP, shell, and filesyste
 Run:
 
 ```bash
-./scripts/test-phase4.sh
+./scripts/test-phase5.sh
 ```
 
-The test requires Docker; it uses a separate, isolated Compose project and a fake Anthropic endpoint. It verifies:
+The test creates a separate native project copy and fake local Anthropic endpoint. It verifies:
 
 - Workflow import in n8n 2.30.5.
 - Repeatable setup without duplicate samples.
@@ -147,4 +147,4 @@ The test requires Docker; it uses a separate, isolated Compose project and a fak
 - The browser-to-agent-to-`list_tasks` path.
 - Model-visible create and update names resolve only to proposal workflows.
 
-Run `./scripts/test-phase5.sh` for the confirmation, expiry, single-use, skill-loading, and destructive-tool checks.
+The same test also covers confirmation, expiry, single-use, skill-loading, and destructive-tool checks.

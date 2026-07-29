@@ -18,8 +18,8 @@ same.
 | P1 | A new n8n instance previously required manual workflow import | One-click setup now imports reviewed workflows, sample data, and enabled skills | Phase 6 clean-copy smoke | Fixed |
 | P1 | Learners could not tell whether the credential and workflows were ready | Added learner checklist plus non-secret diagnostics | Phase 6 diagnostics smoke | Fixed |
 | P1 | Provider and connection errors could expose technical output or be meaningless | Gateway normalises errors and suppresses upstream bodies; explicit credential, credit, and network contracts were added | Gateway contract tests | Fixed |
-| P1 | Port collisions appeared only as Docker startup failures | Preflight names each occupied port and remediation | Phase 7 occupied-port smoke | Fixed |
-| P1 | n8n could report healthy briefly before newly published webhooks were registered | macOS and Windows import helpers retry only the idempotent setup and skill-sync calls; smoke tests wait on a published endpoint after restart | Linux CI and local Docker smoke | Fixed |
+| P1 | Port collisions appeared only after startup failed | Preflight names each occupied port and remediation | Phase 7 occupied-port smoke | Fixed |
+| P1 | n8n could report healthy briefly before newly published webhooks were registered | macOS and Windows import helpers retry only the idempotent setup and skill-sync calls; smoke tests wait on a published endpoint after restart | Native CI smoke | Fixed |
 | P2 | Pilot readiness could be declared from incomplete or invented notes | Added anonymous structured evidence and a fail-closed evaluator | Phase 7 evaluator tests | Fixed |
 
 ## Human-pilot fixes

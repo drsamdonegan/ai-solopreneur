@@ -33,5 +33,5 @@ coverage/
 *.log
 *.tmp
 
-# Generated release kits contain large, architecture-specific Docker archives
+# Generated release kits contain source archives and checksums
 instructor-pack/

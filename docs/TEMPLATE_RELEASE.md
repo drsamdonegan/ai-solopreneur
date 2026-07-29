@@ -9,7 +9,7 @@ This repository becomes a safe GitHub template only after the complete learner e
 Merge the stacked pull requests from the bottom upward:
 
 1. Product baseline into `main`.
-2. Local Docker foundation.
+2. Local native runtime foundation.
 3. Learner chat interface.
 4. Visual n8n agent.
 5. Local task tools.
@@ -82,7 +82,7 @@ GitHub documents that generated repositories use the default branch unless the c
 1. Select **Use this template → Create a new repository**.
 2. Create a private disposable repository with **Include all branches** off.
 3. Clone it with GitHub Desktop.
-4. Confirm the root includes `README.md`, `compose.yaml`, `setup.command`, `setup-windows.cmd`, `diagnose.command`, and `diagnose-windows.cmd`.
+4. Confirm the root includes `README.md`, `package.json`, `setup.command`, `setup-windows.cmd`, `diagnose.command`, and `diagnose-windows.cmd`.
 5. Follow only its README through first setup.
 6. Confirm no inherited open phase branches or Git history are needed.
 7. Delete the disposable repository when the check is complete.
@@ -94,7 +94,7 @@ Before teaching:
 - Set a concise repository description.
 - Add topics such as `n8n`, `claude`, `nodejs`, `ai-agent`, and `beginner-friendly`.
 - Record the tested n8n release and release commit.
-- Generate and verify the architecture-specific instructor kit in [RELEASE.md](RELEASE.md).
+- Generate and verify the source instructor kit in [RELEASE.md](RELEASE.md).
 - Create the annotated `v0.2.0` tag only after the release commit's CI is green.
 - Keep the repository private until its intended audience and secret-handling process are agreed.
 - Never include Git LFS assets; GitHub template repositories do not support them.

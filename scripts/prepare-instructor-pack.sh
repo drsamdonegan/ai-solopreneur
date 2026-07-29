@@ -4,12 +4,10 @@ set -euo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VERSION="$(tr -d '[:space:]' <"${PROJECT_ROOT}/VERSION")"
+NODE_VERSION="$(tr -d '[:space:]' <"${PROJECT_ROOT}/.node-version")"
+N8N_VERSION="$(node -p "require('${PROJECT_ROOT}/package.json').dependencies.n8n")"
 OUTPUT_ROOT="${PROJECT_ROOT}/instructor-pack"
 METADATA_ONLY=false
-N8N_IMAGE="docker.n8n.io/n8nio/n8n:2.30.5@sha256:450853cd21a2ce36587c4c860eb26927c1ceba9496bf55f4c213b5d3a6dc8c6f"
-NODE_IMAGE="node:24.16.0-alpine3.22@sha256:191c9f0080fcbbc6547a85dc0ff7988072214a355aabdc1d2ec55a7dae5eea8a"
-CHAT_IMAGE="ai-solopreneur-chat:${VERSION}"
-DOCUMENT_IMAGE="ai-solopreneur-document-worker:${VERSION}"
 
 usage() {
   printf 'Usage: ./scripts/prepare-instructor-pack.sh [--output DIRECTORY] [--metadata-only]\n'
@@ -42,7 +40,7 @@ while [[ "$#" -gt 0 ]]; do
 done
 
 if [[ "${METADATA_ONLY}" == "true" ]]; then
-  PLATFORM="metadata-test"
+  PACK_KIND="metadata-test"
   COMMIT="uncommitted-validation"
 else
   if [[ -n "$(git -C "${PROJECT_ROOT}" status --porcelain)" ]]; then
@@ -50,18 +48,11 @@ else
     printf 'Commit or discard them before creating a release kit so its source and commit agree.\n' >&2
     exit 1
   fi
-  if ! docker info >/dev/null 2>&1; then
-    printf 'Docker Desktop is not running. Open it, wait until ready, and try again.\n' >&2
-    exit 1
-  fi
-  PLATFORM="$(
-    docker info --format '{{.OSType}}-{{.Architecture}}' |
-      tr '[:upper:]/' '[:lower:]-'
-  )"
+  PACK_KIND="source"
   COMMIT="$(git -C "${PROJECT_ROOT}" rev-parse HEAD)"
 fi
 
-PACK_DIR="${OUTPUT_ROOT}/v${VERSION}-${PLATFORM}"
+PACK_DIR="${OUTPUT_ROOT}/v${VERSION}-${PACK_KIND}"
 if [[ -e "${PACK_DIR}" ]]; then
   printf 'Instructor pack already exists:\n  %s\n' "${PACK_DIR}" >&2
   printf 'Move or remove that specific folder before creating it again.\n' >&2
@@ -69,82 +60,39 @@ if [[ -e "${PACK_DIR}" ]]; then
 fi
 
 mkdir -p "${PACK_DIR}/workflows"
-
-if [[ "${METADATA_ONLY}" == "true" ]]; then
-  node "${PROJECT_ROOT}/scripts/validate-release.mjs"
-  node "${PROJECT_ROOT}/scripts/validate-workflows.mjs"
-else
-  docker run --rm \
-    -v "${PROJECT_ROOT}:/workspace:ro" \
-    -w /workspace \
-    "${NODE_IMAGE}" \
-    node scripts/validate-release.mjs
-  docker run --rm \
-    -v "${PROJECT_ROOT}:/workspace:ro" \
-    -w /workspace \
-    "${NODE_IMAGE}" \
-    node scripts/validate-workflows.mjs
-fi
-
+node "${PROJECT_ROOT}/scripts/validate-release.mjs"
+node "${PROJECT_ROOT}/scripts/validate-workflows.mjs"
 cp "${PROJECT_ROOT}"/n8n/workflows/*.json "${PACK_DIR}/workflows/"
 
 {
   printf 'AI Solopreneur instructor kit\n'
   printf 'Version: %s\n' "${VERSION}"
   printf 'Commit: %s\n' "${COMMIT}"
-  printf 'Platform: %s\n' "${PLATFORM}"
-  printf 'n8n image: %s\n' "${N8N_IMAGE}"
-  printf 'Node image: %s\n' "${NODE_IMAGE}"
-  printf 'Chat image: %s\n' "${CHAT_IMAGE}"
-  printf 'Document reader image: %s\n' "${DOCUMENT_IMAGE}"
+  printf 'Node.js runtime: %s\n' "${NODE_VERSION}"
+  printf 'n8n package: %s\n' "${N8N_VERSION}"
   printf 'Generated UTC: %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 } >"${PACK_DIR}/RELEASE-METADATA.txt"
 
-cat >"${PACK_DIR}/LOAD_IMAGES.md" <<EOF
-# Load the workshop images
+cat >"${PACK_DIR}/START_HERE.md" <<EOF
+# Start the workshop project
 
-This kit is for **${PLATFORM}** and AI Solopreneur **v${VERSION}**.
+This kit contains AI Solopreneur **v${VERSION}**, the reviewed workflow exports,
+and checksums for every included file.
 
-1. Install and open Docker Desktop.
-2. Wait until its engine reports ready.
-3. Open a terminal in this folder.
-4. Load the archive:
+For a full release kit:
 
-\`\`\`bash
-gunzip -c docker-images-${PLATFORM}.tar.gz | docker load
-\`\`\`
+1. Extract \`ai-solopreneur-v${VERSION}-source.tar.gz\`.
+2. Open the extracted folder in Claude Code.
+3. Ask Claude Code to run the setup helper for this project.
+4. Open the local chat URL printed by setup.
 
-5. Confirm these images appear:
-
-- \`${N8N_IMAGE}\`
-- \`${CHAT_IMAGE}\`
-- \`${DOCUMENT_IMAGE}\`
-
-The archive reduces workshop downloads. Real Claude messages still require
-internet access and each learner's private Anthropic API key.
+The setup helper uses an existing Node.js 24+ runtime when available. Otherwise
+it downloads a checksum-verified private runtime into the project. The first
+setup requires internet access for the runtime/packages and real Claude messages
+require each learner's private Anthropic API key.
 EOF
 
 if [[ "${METADATA_ONLY}" == "false" ]]; then
-  printf 'Pulling locked images...\n'
-  docker pull "${N8N_IMAGE}"
-  docker pull "${NODE_IMAGE}"
-
-  printf 'Building the versioned local app images...\n'
-  docker build \
-    --tag "${CHAT_IMAGE}" \
-    "${PROJECT_ROOT}/apps/chat"
-  docker build \
-    --tag "${DOCUMENT_IMAGE}" \
-    "${PROJECT_ROOT}/services/document-worker"
-
-  printf 'Saving runtime images for %s...\n' "${PLATFORM}"
-  docker image save \
-    "${N8N_IMAGE}" \
-    "${NODE_IMAGE}" \
-    "${CHAT_IMAGE}" \
-    "${DOCUMENT_IMAGE}" |
-    gzip -9 >"${PACK_DIR}/docker-images-${PLATFORM}.tar.gz"
-
   git -C "${PROJECT_ROOT}" archive \
     --format=tar.gz \
     --prefix="ai-solopreneur-v${VERSION}/" \
@@ -163,7 +111,7 @@ fi
 
 printf '\nInstructor kit created at:\n  %s\n' "${PACK_DIR}"
 if [[ "${METADATA_ONLY}" == "true" ]]; then
-  printf 'Metadata-only mode did not save Docker images or the Git source archive.\n'
+  printf 'Metadata-only mode did not save the Git source archive.\n'
 else
   printf 'Keep the kit private until you have checked it and copied it securely.\n'
 fi

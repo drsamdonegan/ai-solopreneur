@@ -25,7 +25,6 @@ const requiredFiles = [
   "services/document-worker/package-lock.json",
   "services/document-worker/src/server.mjs",
   "apps/chat/config/agents.json",
-  "compose.yaml",
   ".env.example",
   ".gitignore",
   "setup.command",
@@ -66,6 +65,7 @@ const requiredFiles = [
   "scripts/diagnose.sh",
   "scripts/normalise-workflow-exports.mjs",
   "scripts/windows/diagnose.ps1",
+  "scripts/test-phase5.sh",
   "scripts/test-phase6.sh",
   "scripts/test-phase7.sh",
   "scripts/evaluate-pilot.mjs",
@@ -78,7 +78,6 @@ const requiredFiles = [
   "pilot/README.md",
   "pilot/results.json",
   "pilot/session-template.json",
-  "tests/phase7/Dockerfile.browser",
   "tests/phase7/browser-widths.mjs",
   "tests/phase7/package-lock.json",
   "tests/phase7/package.json",
@@ -99,6 +98,7 @@ const executableFiles = [
   "scripts/run-local.sh",
   "scripts/setup.sh",
   "scripts/diagnose.sh",
+  "scripts/test-phase5.sh",
   "scripts/test-phase6.sh",
   "scripts/test-phase7.sh",
   "scripts/evaluate-pilot.mjs",
@@ -179,7 +179,7 @@ for (const requiredText of [
   "CONFIRM XXXXXXXX",
   "backup.command",
   "reset.command",
-  "No Docker or manual Node.js install",
+  "No manual Node.js install",
   "Complete beginner getting-started guide",
   "Eight-exercise course guide",
   "v0.2.0",
@@ -287,7 +287,7 @@ for (const launcher of learnerLaunchers) {
   const source = await readFile(join(projectRoot, launcher), "utf8");
   check(
     !/\bdocker(?:\.exe)?\b|\bdocker\s+compose\b/i.test(source),
-    `${launcher} must not invoke Docker on the learner path`,
+    `${launcher} must not invoke a container engine`,
   );
 }
 
@@ -298,9 +298,28 @@ const ciWorkflow = await readFile(
 check(
   ciWorkflow.includes('AI_SOLO_FORCE_PORTABLE_NODE = "1"') &&
     ciWorkflow.includes("Resolve-ProjectNode") &&
+    ciWorkflow.includes("macos-latest") &&
+    ciWorkflow.includes("Native agent and resilience smoke") &&
     ciWorkflow.includes("windows-latest"),
-  "CI must exercise the Windows project-local Node.js bootstrap",
+  "CI must exercise the native runtime on macOS, Windows, and the integration runner",
 );
+
+for (const removedArtifact of [
+  "compose.yaml",
+  "apps/chat/Dockerfile",
+  "services/document-worker/Dockerfile",
+  "services/document-worker/.dockerignore",
+  "tests/phase3/compose.mock.yaml",
+  "tests/phase4/compose.mock.yaml",
+  "tests/phase5/compose.mock.yaml",
+  "tests/phase7/Dockerfile.browser",
+  "scripts/windows/Common.ps1",
+]) {
+  check(
+    !(await exists(join(projectRoot, removedArtifact))),
+    `Obsolete container artifact must stay removed: ${removedArtifact}`,
+  );
+}
 
 check(
   !localRunner.includes("--decrypted"),

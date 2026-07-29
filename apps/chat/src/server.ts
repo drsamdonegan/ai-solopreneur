@@ -5,8 +5,8 @@ import { DocumentStore } from "./documents.js";
 
 const DEFAULT_PORT = 3_000;
 const DEFAULT_TIMEOUT_MS = 120_000;
-const DEFAULT_UPSTREAM_URL = "http://n8n:5678/webhook/chat";
-const DEFAULT_DOCUMENT_WORKER_URL = "http://document-worker:3100";
+const DEFAULT_UPSTREAM_URL = "http://127.0.0.1:5678/webhook/chat";
+const DEFAULT_DOCUMENT_WORKER_URL = "http://127.0.0.1:3100";
 
 function positiveInteger(value: string | undefined, fallback: number): number {
   if (value === undefined) {
@@ -22,15 +22,14 @@ const timeoutMs = positiveInteger(
   DEFAULT_TIMEOUT_MS,
 );
 const upstreamUrl = process.env.N8N_CHAT_WEBHOOK_URL ?? DEFAULT_UPSTREAM_URL;
-// Containers must accept connections from the published port mapping; the
-// native local runner narrows this to the loopback interface instead.
-const listenAddress = process.env.CHAT_LISTEN_ADDRESS ?? "0.0.0.0";
+const listenAddress = process.env.CHAT_LISTEN_ADDRESS ?? "127.0.0.1";
 const publicDirectory = fileURLToPath(new URL("../public", import.meta.url));
 const agentRegistryPath =
   process.env.AGENT_REGISTRY_PATH ??
   fileURLToPath(new URL("../config/agents.json", import.meta.url));
 const documentDirectory =
-  process.env.DOCUMENT_DATA_DIRECTORY ?? "/app/data/documents";
+  process.env.DOCUMENT_DATA_DIRECTORY ??
+  fileURLToPath(new URL("../../../data/documents", import.meta.url));
 const documentWorkerUrl =
   process.env.DOCUMENT_WORKER_URL ?? DEFAULT_DOCUMENT_WORKER_URL;
 

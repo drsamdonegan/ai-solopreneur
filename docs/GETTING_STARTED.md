@@ -42,7 +42,7 @@ Have these ready:
 - [ ] A stable internet connection for the first download and Claude calls.
 
 Follow the [prerequisite guide](WORKSHOP_PREREQUISITES.md) if any checkbox is
-unfamiliar. No Docker, WSL2, or virtualization setup is needed.
+unfamiliar. No WSL2 or virtualization setup is needed.
 
 Keep the API key private. Never paste it into GitHub, GitHub Desktop, a chat
 message, `.env`, a screenshot, or an issue. It belongs only in the n8n

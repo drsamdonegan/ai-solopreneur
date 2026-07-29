@@ -39,7 +39,7 @@ window.AGENT_CONFIG = Object.freeze({
 
 Change the words between the quotation marks. Keep the quotation marks, commas, square brackets, and other punctuation in place.
 
-Save the file, then refresh [http://localhost:3000](http://localhost:3000). The local Compose setup shares this folder with the chat container, so these settings update without rebuilding the image.
+Save the file, restart the local services, then refresh [http://localhost:3000](http://localhost:3000).
 
 ## Choose a colour
 

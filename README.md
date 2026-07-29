@@ -1,6 +1,6 @@
 # AI Solopreneur
 
-Build and personalise a useful Claude-powered project assistant on your own computer. No Docker or manual Node.js install is required: Claude Code or the one-click setup uses an existing Node.js 24+ runtime when available, otherwise it downloads a verified private copy inside this project.
+Build and personalise a useful Claude-powered project assistant on your own computer. No manual Node.js install is required: Claude Code or the one-click setup uses an existing Node.js 24+ runtime when available, otherwise it downloads a verified private copy inside this project.
 
 **Local release:** `v0.2.0`
 
@@ -205,15 +205,10 @@ Reset asks you to type `RESET`. The [operations and recovery guide](docs/LOCAL_O
 - Automatic reads and exact, expiring, single-use confirmation for writes.
 - Local diagnostics, backup, restore, reset, import, export, and skill-sync helpers.
 - macOS and Windows entry points.
-- An optional, pinned Docker Compose recipe (`compose.yaml`) kept for the workflow smoke tests and a later cloud deployment.
 
 Deliberately deferred: OCR for scanned PDFs, cloud deployment, public access,
 Slack, WhatsApp, Telegram, email, external project-management accounts,
 multi-user authentication, RAG, queues, and autonomous background work.
-
-### Where Docker fits now
-
-Learners never need Docker. The `compose.yaml` file and its digest-pinned images remain in the repository as the reviewed recipe for the Docker-based workflow smoke tests and for the day this stack moves to a cloud computer — Docker then runs on the server, not on anyone's laptop.
 
 ## Guides
 
@@ -259,6 +254,7 @@ Technical checks run directly with the same Node.js installation learners alread
 ```bash
 node scripts/validate-workflows.mjs
 
+./scripts/test-phase5.sh
 ./scripts/test-phase6.sh
 ./scripts/test-phase7.sh
 ./scripts/test-phase8.sh
@@ -268,13 +264,13 @@ node scripts/validate-workflows.mjs
 ./scripts/evaluate-pilot.sh
 ```
 
-The maintenance helpers are also available directly: `node scripts/local.mjs help` lists setup, start, stop, status, logs, diagnose, and the import, export, backup, restore, and reset commands. Phase 3–5 and 7 workflow smoke tests still use the pinned Docker images and are aimed at contributors and CI.
+The maintenance helpers are also available directly: `node scripts/local.mjs help` lists setup, start, stop, status, logs, diagnose, and the import, export, backup, restore, and reset commands. Contributor and CI smoke tests use isolated native project copies and local mock services.
 
 ## Current milestone
 
 Phases 0–8 of the local-first implementation plan are implemented for local
-release `v0.2.0`, which replaces the Docker Desktop learner requirement with a
-verified project-local Node.js runtime. The repository owner reviewed the experience and
+release `v0.2.0`, using a verified project-local Node.js runtime throughout.
+The repository owner reviewed the experience and
 explicitly authorised Phase 8 without the planned five-person pilot. That
 waiver is recorded transparently: `pilot/results.json` remains `not_run` and
 the evaluator remains `NO_GO`. Cloud deployment, external chat channels, and

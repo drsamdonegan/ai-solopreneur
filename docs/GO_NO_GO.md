@@ -41,7 +41,7 @@ failed software build; a completed pilot that misses a criterion still fails.
 ## Technical gates
 
 - [x] The latest GitHub Actions run passes contract, static, PowerShell, native
-      learner-path, and Docker contributor smoke jobs.
+      learner-path, agent, resilience, and browser smoke jobs.
 - [ ] Invalid key, exhausted credit, inactive workflow, occupied port, restart,
       and no-internet scenarios have dated evidence.
 - [x] Browser checks pass at 375, 768, and 1440 pixels without horizontal
