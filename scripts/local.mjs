@@ -300,6 +300,14 @@ function portInUse(port) {
 
 function fetchStatus(url, options = {}, timeoutMs = 5_000) {
   return new Promise((resolveStatus) => {
+    const body = options.body;
+    const headers = { ...(options.headers ?? {}) };
+    if (
+      body !== undefined &&
+      !Object.keys(headers).some((name) => name.toLowerCase() === "content-length")
+    ) {
+      headers["Content-Length"] = Buffer.byteLength(body);
+    }
     let settled = false;
     const finish = (value) => {
       if (!settled) {
@@ -311,7 +319,7 @@ function fetchStatus(url, options = {}, timeoutMs = 5_000) {
       url,
       {
         method: options.method ?? "GET",
-        headers: options.headers ?? {},
+        headers,
       },
       (response) => {
         const chunks = [];
@@ -332,8 +340,8 @@ function fetchStatus(url, options = {}, timeoutMs = 5_000) {
       request.destroy(new Error("Local health request timed out"));
     });
     request.on("error", () => finish(null));
-    if (options.body !== undefined) {
-      request.write(options.body);
+    if (body !== undefined) {
+      request.write(body);
     }
     request.end();
   });
