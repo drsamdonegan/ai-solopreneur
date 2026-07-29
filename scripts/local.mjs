@@ -298,15 +298,19 @@ function portInUse(port) {
 }
 
 async function fetchStatus(url, options = {}, timeoutMs = 5_000) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(url, {
       ...options,
-      signal: AbortSignal.timeout(timeoutMs),
+      signal: controller.signal,
     });
     const body = await response.text();
     return { status: response.status, ok: response.ok, body };
   } catch {
     return null;
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
@@ -1380,7 +1384,11 @@ async function commandDiagnose() {
       ) {
         ok("The published chat webhook safely rejected the credential-free diagnostic request.");
       } else {
-        action("Publish 00 - START HERE - Project Partner so the chat webhook becomes available.");
+        const probeDetail =
+          chatProbe === null ? "no response" : `HTTP ${chatProbe.status}`;
+        action(
+          `Publish 00 - START HERE - Project Partner so the chat webhook becomes available (probe: ${probeDetail}).`,
+        );
       }
     }
 

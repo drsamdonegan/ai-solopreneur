@@ -34,7 +34,10 @@ expect_not_contains() {
 }
 
 copy_local() {
-  (cd "${COPY_ROOT}" && node scripts/local.mjs "$@")
+  (
+    cd "${COPY_ROOT}"
+    AI_SOLO_FORCE_PORTABLE_NODE=1 ./scripts/run-local.sh "$@"
+  )
 }
 
 diagnostics_until_green() {
