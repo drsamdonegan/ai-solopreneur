@@ -87,6 +87,7 @@ const requiredFiles = [
   "tests/phase7/package.json",
   "tests/phase7/test-pilot-evaluator.mjs",
   "tests/windows/native-smoke.ps1",
+  "tests/windows/native-dependencies-smoke.ps1",
   "tests/windows/node-runtime.tests.ps1",
   "tests/windows/windows-contracts.test.mjs",
   ".github/workflows/ci.yml",
@@ -316,7 +317,7 @@ const ciWorkflow = await readFile(
   "utf8",
 );
 check(
-  ciWorkflow.includes("tests/windows/native-smoke.ps1") &&
+  ciWorkflow.includes("tests/windows/native-dependencies-smoke.ps1") &&
     ciWorkflow.includes("tests/windows/node-runtime.tests.ps1") &&
     ciWorkflow.includes("tests/windows/windows-contracts.test.mjs") &&
     ciWorkflow.includes("windows-11-arm") &&
@@ -325,7 +326,7 @@ check(
     ciWorkflow.includes("macos-latest") &&
     ciWorkflow.includes("Native agent and resilience smoke") &&
     ciWorkflow.includes("windows-latest"),
-  "CI must exercise the learner launchers through Windows PowerShell 5.1 on x64 and ARM, including incompatible-system-Node fallback",
+  "CI must exercise Windows PowerShell 5.1 runtime fallback and native dependencies on x64 and ARM",
 );
 
 for (const removedArtifact of [

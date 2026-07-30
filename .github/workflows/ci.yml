@@ -95,15 +95,13 @@ jobs:
   native-smoke:
     name: Native learner-path smoke (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
         os:
           - ubuntu-latest
           - macos-latest
-          - windows-latest
-          - windows-11-arm
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
@@ -111,9 +109,7 @@ jobs:
       - name: Install Node.js
         uses: actions/setup-node@v6
         with:
-          # Windows deliberately starts with an incompatible system Node.js.
-          # The learner helper must reject it and select pinned Node/npm.
-          node-version: ${{ runner.os == 'Windows' && '25.2.1' || '24.16.0' }}
+          node-version: 24.16.0
           cache: npm
           cache-dependency-path: |
             package-lock.json
@@ -121,14 +117,31 @@ jobs:
             services/document-worker/package-lock.json
 
       - name: Run the Phase 6 packaging smoke (native path)
-        if: runner.os != 'Windows'
         run: ./scripts/test-phase6.sh
 
-      - name: Run the project-local Node bootstrap and native setup
-        if: runner.os == 'Windows'
+  windows-native:
+    name: Windows native dependencies (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - windows-latest
+          - windows-11-arm
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Install an intentionally incompatible Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '25.2.1'
+
+      - name: Verify the private runtime and native binaries
         shell: powershell
         run: |
-          powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/windows/native-smoke.ps1
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/windows/native-dependencies-smoke.ps1
           if ($LASTEXITCODE -ne 0) { exit 1 }
 
   native-integration:

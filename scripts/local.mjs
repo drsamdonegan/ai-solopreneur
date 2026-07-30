@@ -53,7 +53,7 @@ const pinnedNpmVersion = readFileSync(
 const runtimeRoot = resolve(
   process.env.AI_SOLO_RUNTIME_DIR || join(projectRoot, ".runtime"),
 );
-const npmInstallTimeoutMs = 20 * 60 * 1_000;
+const npmInstallTimeoutMs = 30 * 60 * 1_000;
 const npmCommandTimeoutMs = 10 * 60 * 1_000;
 const n8nCliTimeoutMs = 5 * 60 * 1_000;
 
@@ -492,7 +492,7 @@ function npmEnvironment() {
   setControlled("NPM_CONFIG_FETCH_RETRY_MINTIMEOUT", "2000");
   setControlled("NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT", "30000");
   setControlled("NPM_CONFIG_FETCH_TIMEOUT", "120000");
-  setControlled("NPM_CONFIG_MAXSOCKETS", "8");
+  setControlled("NPM_CONFIG_MAXSOCKETS", "16");
   setControlled("NPM_CONFIG_LOGLEVEL", "error");
   return env;
 }
