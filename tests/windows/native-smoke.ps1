@@ -20,12 +20,23 @@ function Invoke-Launcher {
     }
 
     $output = New-Object "System.Collections.Generic.List[string]"
-    & $env:ComSpec /d /s /c $commandLine 2>&1 | ForEach-Object {
-        $line = [string]$_
-        Write-Host $line
-        $output.Add($line)
+    $nativeStatus = 0
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        # Windows PowerShell 5.1 wraps native stderr as non-terminating
+        # NativeCommandError records. Keep streaming those records instead of
+        # allowing the test's global Stop policy to discard the real message.
+        $ErrorActionPreference = "Continue"
+        & $env:ComSpec /d /s /c $commandLine 2>&1 | ForEach-Object {
+            $line = [string]$_
+            Write-Host $line
+            $output.Add($line)
+        }
+        $nativeStatus = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previousErrorActionPreference
     }
-    $status = $LASTEXITCODE
+    $status = $nativeStatus
     if ($status -notin $ExpectedStatus) {
         throw "$Name exited with $status; expected $($ExpectedStatus -join ' or ')."
     }

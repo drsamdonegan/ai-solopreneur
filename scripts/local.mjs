@@ -539,6 +539,7 @@ function runNpm(args, { cwd, label, timeout = npmCommandTimeoutMs }) {
       throw new Error(
         `${label} did not finish within ${Math.ceil(timeout / 60_000)} minutes and was stopped.` +
           (log ? `\nDetailed npm log: ${log}` : "") +
+          (log ? `\nLast npm log lines:\n${tailOfFile(log, 60)}` : "") +
           "\nCheck the network requirements, free disk space, and whether antivirus or OneDrive is scanning the project, then rerun setup.",
       );
     }
