@@ -19,9 +19,13 @@ function Invoke-Launcher {
         $commandLine += " " + ($quotedArguments -join " ")
     }
 
-    $output = @(& $env:ComSpec /d /s /c $commandLine 2>&1)
+    $output = New-Object "System.Collections.Generic.List[string]"
+    & $env:ComSpec /d /s /c $commandLine 2>&1 | ForEach-Object {
+        $line = [string]$_
+        Write-Host $line
+        $output.Add($line)
+    }
     $status = $LASTEXITCODE
-    $output | ForEach-Object { Write-Host $_ }
     if ($status -notin $ExpectedStatus) {
         throw "$Name exited with $status; expected $($ExpectedStatus -join ' or ')."
     }

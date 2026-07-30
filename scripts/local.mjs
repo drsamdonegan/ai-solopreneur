@@ -53,6 +53,9 @@ const pinnedNpmVersion = readFileSync(
 const runtimeRoot = resolve(
   process.env.AI_SOLO_RUNTIME_DIR || join(projectRoot, ".runtime"),
 );
+const npmInstallTimeoutMs = 20 * 60 * 1_000;
+const npmCommandTimeoutMs = 10 * 60 * 1_000;
+const n8nCliTimeoutMs = 5 * 60 * 1_000;
 
 const paths = {
   envFile: join(projectRoot, ".env"),
@@ -528,9 +531,17 @@ function runNpmRaw(args, { cwd, stdio = "inherit", timeout } = {}) {
   });
 }
 
-function runNpm(args, { cwd, label }) {
-  const result = runNpmRaw(args, { cwd });
+function runNpm(args, { cwd, label, timeout = npmCommandTimeoutMs }) {
+  const result = runNpmRaw(args, { cwd, timeout });
   if (result.error) {
+    const log = latestNpmLog();
+    if (result.error.code === "ETIMEDOUT") {
+      throw new Error(
+        `${label} did not finish within ${Math.ceil(timeout / 60_000)} minutes and was stopped.` +
+          (log ? `\nDetailed npm log: ${log}` : "") +
+          "\nCheck the network requirements, free disk space, and whether antivirus or OneDrive is scanning the project, then rerun setup.",
+      );
+    }
     throw new Error(
       `npm is not available (${result.error.message}). ` +
         "Rerun the command through the supplied project helper so it can use the matching private npm copy.",
@@ -710,19 +721,27 @@ function recordSuccessfulN8nInstall() {
   );
 }
 
-function runN8nCli(args, { capture = false } = {}) {
+function runN8nCli(args, { capture = false, timeout = n8nCliTimeoutMs } = {}) {
   const cfg = config();
   const result = spawnSync(process.execPath, [paths.n8nBin, ...args], {
     env: { ...process.env, ...n8nEnv(cfg) },
     encoding: "utf8",
     stdio: capture ? ["ignore", "pipe", "pipe"] : ["ignore", "inherit", "inherit"],
     maxBuffer: 64 * 1024 * 1024,
+    timeout,
   });
   return result;
 }
 
 function n8nCliOrThrow(args, label) {
   const result = runN8nCli(args, { capture: true });
+  if (result.error) {
+    const timeoutHelp =
+      result.error.code === "ETIMEDOUT"
+        ? ` The command exceeded ${Math.ceil(n8nCliTimeoutMs / 60_000)} minutes and was stopped.`
+        : "";
+    throw new Error(`${label} could not run (${result.error.message}).${timeoutHelp}`);
+  }
   if (result.status !== 0) {
     const detail = `${result.stderr || ""}${result.stdout || ""}`
       .split(/\r?\n/)
@@ -1375,6 +1394,7 @@ async function commandSetupUnlocked() {
     runNpm(rootInstallArgs, {
       cwd: projectRoot,
       label: "Installing the local n8n engine",
+      timeout: npmInstallTimeoutMs,
     });
     if (!n8nNativeDependenciesWork()) {
       throw new Error(
