@@ -35,7 +35,9 @@ $env:NPM_CONFIG_CACHE = Join-Path $testRoot "npm-cache"
 try {
     . (Join-Path $projectRoot "scripts\windows\NodeRuntime.ps1")
     $nodePath = Resolve-ProjectNode -ProjectRoot $projectRoot -Install
-    $npmCli = Join-Path (Split-Path -Parent $nodePath) "node_modules\npm\bin\npm-cli.js"
+    $nodeDirectory = Split-Path -Parent $nodePath
+    $env:Path = "$nodeDirectory;$env:Path"
+    $npmCli = Join-Path $nodeDirectory "node_modules\npm\bin\npm-cli.js"
 
     if ((& $nodePath --version) -ne "v24.18.0") {
         throw "The focused smoke did not select Node.js 24.18.0."
