@@ -16,10 +16,14 @@
     {
       "id": "sales",
       "name": "Sales",
-      "description": "Sales research, preparation, and follow-up workflows.",
-      "status": "coming-soon",
-      "workflowPath": "",
-      "examplePrompts": []
+      "description": "Researches prospects, drafts replies, and turns calls into proposals.",
+      "status": "active",
+      "workflowPath": "/webhook/chat",
+      "examplePrompts": [
+        "Draft a reply to this enquiry that just came in",
+        "Turn these call notes into a recap and a proposal",
+        "Write a cold email to this person"
+      ]
     },
     {
       "id": "marketing",

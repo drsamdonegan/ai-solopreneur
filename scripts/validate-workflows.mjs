@@ -187,7 +187,9 @@ if (agentWorkflow) {
     "Validation: document count and text-size limits are missing",
   );
   check(
-    /agentId !== 'project-manager'/.test(validationCode),
+    /\[\s*'project-manager',\s*'sales'\s*\]\.includes\(agentId\)/.test(
+      validationCode,
+    ),
     "Validation: active agent allow-list check is missing",
   );
   check(
@@ -891,16 +893,34 @@ if (confirmWorkflow) {
   );
 }
 
+const REVIEWED_SKILL_IDS = [
+  "project-assistant",
+  "meeting-analysis",
+  "task-capture",
+  "weekly-status",
+];
+// Skills that ship switched off. A learner may enable any of them, so the
+// check below guarantees the reviewed set is still present and that nothing
+// unreviewed has been enabled, rather than demanding an exact list.
+const OPTIONAL_SKILL_IDS = [
+  "my-business",
+  "lead-conversion",
+  "prospect-research",
+  "deal-desk",
+  "customer-support",
+];
+
 const skillBundle = await compileSkills(join(projectRoot, "skills"));
+const enabledSkillIds = skillBundle.enabledSkills.map((skill) => skill.id);
 check(
-  JSON.stringify(skillBundle.enabledSkills.map((skill) => skill.id)) ===
-    JSON.stringify([
-      "project-assistant",
-      "meeting-analysis",
-      "task-capture",
-      "weekly-status",
-    ]),
+  REVIEWED_SKILL_IDS.every((id) => enabledSkillIds.includes(id)),
   "Enabled skill list must contain the reviewed Project Manager skills",
+);
+check(
+  enabledSkillIds.every(
+    (id) => REVIEWED_SKILL_IDS.includes(id) || OPTIONAL_SKILL_IDS.includes(id),
+  ),
+  "Enabled skill list must contain only reviewed or shipped optional skills",
 );
 check(
   skillBundle.combinedInstructions.length <= 24_000 &&
