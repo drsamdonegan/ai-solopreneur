@@ -51,12 +51,13 @@ At least one skill must remain enabled.
 
 ## Optional extra skills
 
-Four further skills ship with the project but are switched **off**. Each one is a folder under `skills/` with its own `README.md` explaining what it does, a demo you can paste straight into the chat, and the exact characters to look for to prove it loaded.
+Five further skills ship with the project but are switched **off**. Each one is a folder under `skills/` with its own `README.md` explaining what it does, a demo you can paste straight into the chat, and the exact characters to look for to prove it loaded.
 
 | Skill | What it does | Read first |
 | --- | --- | --- |
 | `my-business` | Holds your own prices, hours, and terms so the agent stops guessing them | [README](../skills/my-business/README.md) |
 | `lead-conversion` | Turns a new website enquiry or DM into a first reply you can send | [README](../skills/lead-conversion/README.md) |
+| `prospect-research` | Turns a name, a company, and text you paste into a cold email you send yourself | [README](../skills/prospect-research/README.md) |
 | `deal-desk` | Turns notes from a sales call into a recap email and a proposal skeleton | [README](../skills/deal-desk/README.md) |
 | `customer-support` | Turns a customer complaint into a calm draft reply that promises nothing you have not decided | [README](../skills/customer-support/README.md) |
 
@@ -68,6 +69,8 @@ Two rules make these work well:
 - **Enable one of the other three at a time.** Every enabled skill sits in the prompt for every message, so three competing reply formats make the agent answer an ordinary project question as though it were a sales enquiry.
 
 None of these skills can send an email, read an inbox, or look a company up. There is no internet access in this project. They work only from what you type, paste, or upload, and they say `Not stated` rather than inventing a fact.
+
+`prospect-research` is the clearest example of that boundary. It cannot find anyone for you. You open the profile or company page yourself, copy the part that matters, and paste it in; the skill then does the research thinking and the writing. Given nothing to work from, it writes `No hook found` instead of inventing a detail.
 
 ### Add one to a project you have already cloned
 
