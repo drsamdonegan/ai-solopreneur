@@ -131,6 +131,77 @@ textarea:focus-visible,
   height: 2.8rem;
 }
 
+.brand__mark--photo,
+.mobile-mark.brand__mark--photo {
+  background-position: center;
+  background-size: cover;
+  color: transparent;
+}
+
+.profile-dialog .paste-dialog__card {
+  max-height: min(86vh, 60rem);
+  overflow-y: auto;
+}
+
+/* The paste dialog wants one very tall box; this form wants many short ones,
+   so let each textarea's own rows attribute decide its height. Both class
+   names are needed to outrank ".paste-dialog textarea" further down. */
+.paste-dialog.profile-dialog textarea {
+  min-height: 0;
+  max-height: none;
+}
+
+.profile-warning {
+  margin: 0;
+  padding: 0.6rem 0.7rem;
+  border-radius: 0.6rem;
+  background: rgb(255 214 102 / 22%);
+  color: #6b5a1f;
+  font-size: 0.83rem;
+}
+
+.profile-identity {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.9rem;
+}
+
+.profile-identity__fields {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.profile-avatar {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 4rem;
+  height: 4rem;
+  border: 1px solid rgb(83 62 135 / 14%);
+  border-radius: 50%;
+  background-color: rgb(255 255 255 / 70%);
+  background-position: center;
+  background-size: cover;
+  color: var(--brand-primary);
+  font-weight: 800;
+}
+
+.profile-avatar__clear {
+  align-self: flex-start;
+  margin-top: 0.15rem;
+}
+
+.profile-status {
+  margin: 0;
+  min-height: 1.2rem;
+  color: #5f586f;
+  font-size: 0.85rem;
+}
+
 .brand__eyebrow,
 .chat-header__kicker,
 .section-label {
@@ -222,6 +293,52 @@ textarea:focus-visible,
   display: grid;
   gap: 0.55rem;
   margin-top: 0.7rem;
+}
+
+.agent-row {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+/* .agent-button sets width:100%, which inside a flex row would size it to the
+   whole row and push the cog outside the panel. */
+.agent-row > .agent-button {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+}
+
+.agent-settings {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 2.1rem;
+  height: 2.1rem;
+  padding: 0;
+  border: 1px solid rgb(83 62 135 / 10%);
+  border-radius: 50%;
+  background: rgb(255 255 255 / 54%);
+  color: #6c6480;
+  cursor: pointer;
+}
+
+.agent-settings:hover:not(:disabled),
+.agent-settings:focus-visible {
+  border-color: color-mix(in srgb, var(--brand-primary) 34%, transparent);
+  background: white;
+  color: var(--brand-primary);
+}
+
+.agent-settings:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.agent-settings svg {
+  width: 1.15rem;
+  height: 1.15rem;
 }
 
 .agent-button {

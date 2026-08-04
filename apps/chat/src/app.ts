@@ -27,8 +27,12 @@ import {
   type HistoryMessage,
   type StoredAttachment,
 } from "./chat-store.js";
+import { ProfileStore, ProfileValidationError } from "./profile.js";
 
 const MAX_MESSAGE_LENGTH = 8_000;
+// A saved picture is base64 inside the JSON body, so this endpoint alone needs
+// more room than the 64 KB used by every other request.
+const MAX_PROFILE_REQUEST_BYTES = 512 * 1_024;
 const MAX_REQUEST_BYTES = 65_536;
 const MAX_UPSTREAM_BYTES = 65_536;
 const UUID_PATTERN =
@@ -112,6 +116,7 @@ export interface ChatGatewayOptions {
   agents?: readonly AgentDefinition[];
   documentStore?: DocumentStore;
   chatStore?: ChatStore;
+  profileStore?: ProfileStore;
 }
 
 class PublicError extends Error {
@@ -739,6 +744,7 @@ export function createChatHandler(options: ChatGatewayOptions): RequestListener 
   const fetchImplementation = options.fetchImplementation ?? fetch;
   const agents = options.agents ?? DEFAULT_AGENTS;
   const documentStore = options.documentStore;
+  const profileStore = options.profileStore;
   if (!options.chatStore) {
     throw new Error("Chat history store is required.");
   }
@@ -781,6 +787,80 @@ export function createChatHandler(options: ChatGatewayOptions): RequestListener 
           schemaVersion: 1,
           agents: publicAgentDefinitions(agents),
         });
+        return;
+      }
+
+      if (url.pathname === "/api/profile") {
+        if (profileStore === undefined) {
+          sendJson(response, 503, {
+            error: {
+              code: "AGENT_UNAVAILABLE",
+              message: "Saved agent details are not available.",
+            },
+          });
+          return;
+        }
+        try {
+          if (request.method === "GET") {
+            sendJson(response, 200, {
+              schemaVersion: 1,
+              profile: await profileStore.read(),
+            });
+            return;
+          }
+          if (request.method === "PUT") {
+            const body = await readRequestBody(
+              request,
+              MAX_PROFILE_REQUEST_BYTES,
+            );
+            if (
+              typeof body !== "object" ||
+              body === null ||
+              Array.isArray(body)
+            ) {
+              throw new PublicError(
+                400,
+                "INVALID_REQUEST",
+                "The agent details could not be saved.",
+              );
+            }
+            const saved = await profileStore.write(
+              (body as Record<string, unknown>).profile ?? body,
+            );
+            sendJson(response, 200, { schemaVersion: 1, profile: saved });
+            return;
+          }
+          sendJson(
+            response,
+            405,
+            {
+              error: {
+                code: "INVALID_REQUEST",
+                message: "That method is not supported.",
+              },
+            },
+            { Allow: "GET, PUT" },
+          );
+        } catch (error) {
+          if (error instanceof ProfileValidationError) {
+            sendError(
+              response,
+              new PublicError(400, "INVALID_REQUEST", error.message),
+            );
+          } else if (error instanceof PublicError) {
+            sendError(response, error);
+          } else {
+            options.logError?.("Could not save the agent profile", error);
+            sendError(
+              response,
+              new PublicError(
+                500,
+                "AGENT_ERROR",
+                "Your agent details could not be saved.",
+              ),
+            );
+          }
+        }
         return;
       }
 

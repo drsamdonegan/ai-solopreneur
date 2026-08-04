@@ -88,6 +88,23 @@
     pastedName: document.querySelector("#pasted-name"),
     pastedText: document.querySelector("#pasted-text"),
     pasteForm: document.querySelector("#paste-form"),
+    profileAgentName: document.querySelector("#profile-agent-name"),
+    profileAvatar: document.querySelector("#profile-avatar"),
+    profileAvatarClear: document.querySelector("#profile-avatar-clear"),
+    profileAvatarPreview: document.querySelector("#profile-avatar-preview"),
+    profileCancel: document.querySelector("#profile-cancel"),
+    profileDialog: document.querySelector("#profile-dialog"),
+    profileForm: document.querySelector("#profile-form"),
+    profileHours: document.querySelector("#profile-hours"),
+    profilePrice: document.querySelector("#profile-price"),
+    profileSample1: document.querySelector("#profile-sample-1"),
+    profileSample2: document.querySelector("#profile-sample-2"),
+    profileSave: document.querySelector("#profile-save"),
+    profileSells: document.querySelector("#profile-sells"),
+    profileStatus: document.querySelector("#profile-status"),
+    profileTerms: document.querySelector("#profile-terms"),
+    profileTone: document.querySelector("#profile-tone"),
+    profileWin: document.querySelector("#profile-win"),
     requestStatus: document.querySelector("#request-status"),
     resetButton: document.querySelector("#reset-button"),
     sendButton: document.querySelector("#send-button"),
@@ -105,6 +122,8 @@
   let activeAgentId = "project-manager";
   let uploadedDocuments = [];
   let sessionDocuments = [];
+  let profile = null;
+  let pendingAvatarDataUrl = "";
   let conversations = [];
   let nextConversationCursor = null;
   let currentMessages = [];
@@ -170,6 +189,12 @@
   }
 
   function displayAgentName() {
+    // A name saved through the settings form wins over both the registry and
+    // agent.config.js, so renaming the agent needs no file editing.
+    const saved = profile?.agentName ?? "";
+    if (saved.length > 0) {
+      return saved;
+    }
     return activeAgentId === "project-manager"
       ? config.name
       : activeAgent()?.name ?? config.name;
@@ -232,11 +257,30 @@
     elements.conversationAgentName.textContent = name;
     elements.conversationTitleText.textContent = activeConversationTitle;
     elements.input.setAttribute("aria-label", `Message ${name}`);
-    elements.input.placeholder = `What should the ${name} do?`;
+    // "the Project Manager" reads well; "the Coombe Studio" does not, so drop
+    // the article once the learner has named the agent themselves.
+    elements.input.placeholder =
+      (profile?.agentName ?? "").length > 0
+        ? `What should ${name} do?`
+        : `What should the ${name} do?`;
 
     const initials = getInitials(name);
     elements.agentInitials.textContent = initials;
     elements.mobileAgentInitials.textContent = initials;
+    applySavedAvatar();
+  }
+
+  function applySavedAvatar() {
+    const avatar = profile?.avatarDataUrl ?? "";
+    for (const mark of [elements.agentInitials, elements.mobileAgentInitials]) {
+      if (avatar.length > 0) {
+        mark.style.backgroundImage = `url("${avatar}")`;
+        mark.classList.add("brand__mark--photo");
+      } else {
+        mark.style.removeProperty("background-image");
+        mark.classList.remove("brand__mark--photo");
+      }
+    }
   }
 
   function scrollConversation() {
@@ -869,7 +913,36 @@
           void createConversation(agent.id);
         });
       }
-      elements.agentList.append(button);
+
+      // A cog cannot live inside the chip button, so the chip becomes a row
+      // holding the selector button and its own settings control.
+      const row = document.createElement("div");
+      row.className = "agent-row";
+      row.append(button);
+
+      if (agent.status === "active") {
+        const settings = document.createElement("button");
+        settings.className = "agent-settings";
+        settings.type = "button";
+        settings.disabled = requestInProgress || documentRequestInProgress;
+        settings.title = `Edit what ${agent.name} knows about you`;
+        settings.innerHTML =
+          '<svg viewBox="0 0 24 24" aria-hidden="true">' +
+          '<circle cx="12" cy="12" r="3.2" fill="none" stroke="currentColor" stroke-width="1.7" />' +
+          '<path d="M12 2.6v2.2M12 19.2v2.2M21.4 12h-2.2M4.8 12H2.6m14.7-6.6-1.6 1.6M8.1 15.9l-1.6 1.6m10.8 0-1.6-1.6M8.1 8.1 6.5 6.5" ' +
+          'fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.7" />' +
+          "</svg>";
+        const label = document.createElement("span");
+        label.className = "visually-hidden";
+        label.textContent = `Edit what ${agent.name} knows about you`;
+        settings.append(label);
+        settings.addEventListener("click", () => {
+          void openProfileDialog();
+        });
+        row.append(settings);
+      }
+
+      elements.agentList.append(row);
     }
   }
 
@@ -1277,6 +1350,143 @@
     elements.pasteDialog.close();
   });
 
+  const MAX_AVATAR_CHARACTERS = 256 * 1024;
+
+  async function loadProfile() {
+    try {
+      const response = await fetch("/api/profile", {
+        headers: { Accept: "application/json" },
+      });
+      const body = await parseResponse(
+        response,
+        "Saved agent details could not be loaded.",
+      );
+      profile = body.profile ?? null;
+    } catch {
+      // A missing profile must never stop the chat from loading.
+      profile = null;
+    }
+    applySavedAvatar();
+  }
+
+  function setAvatarPreview(dataUrl) {
+    if (dataUrl.length > 0) {
+      elements.profileAvatarPreview.style.backgroundImage = `url("${dataUrl}")`;
+      elements.profileAvatarPreview.textContent = "";
+    } else {
+      elements.profileAvatarPreview.style.removeProperty("background-image");
+      elements.profileAvatarPreview.textContent = getInitials(
+        elements.profileAgentName.value || displayAgentName(),
+      );
+    }
+  }
+
+  async function openProfileDialog() {
+    if (profile === null) {
+      await loadProfile();
+    }
+    const saved = profile ?? {};
+    elements.profileAgentName.value = saved.agentName ?? "";
+    elements.profileTone.value = saved.tone ?? "";
+    elements.profileSells.value = saved.sells ?? "";
+    elements.profilePrice.value = saved.priceGuide ?? "";
+    elements.profileHours.value = saved.hours ?? "";
+    elements.profileTerms.value = saved.terms ?? "";
+    const samples = Array.isArray(saved.voiceSamples) ? saved.voiceSamples : [];
+    elements.profileSample1.value = samples[0] ?? "";
+    elements.profileSample2.value = samples[1] ?? "";
+    elements.profileWin.value = saved.winStory ?? "";
+    pendingAvatarDataUrl = saved.avatarDataUrl ?? "";
+    setAvatarPreview(pendingAvatarDataUrl);
+    elements.profileAvatar.value = "";
+    elements.profileStatus.textContent = "";
+    elements.profileDialog.showModal();
+    elements.profileAgentName.focus();
+  }
+
+  elements.profileAgentName.addEventListener("input", () => {
+    if (pendingAvatarDataUrl.length === 0) {
+      setAvatarPreview("");
+    }
+  });
+
+  elements.profileAvatar.addEventListener("change", () => {
+    const file = elements.profileAvatar.files?.[0];
+    if (!file) {
+      return;
+    }
+    const reader = new FileReader();
+    reader.addEventListener("load", () => {
+      const result = typeof reader.result === "string" ? reader.result : "";
+      if (result.length > MAX_AVATAR_CHARACTERS) {
+        elements.profileStatus.textContent =
+          "That picture is too large. Choose one under 180 KB.";
+        elements.profileAvatar.value = "";
+        return;
+      }
+      pendingAvatarDataUrl = result;
+      setAvatarPreview(result);
+      elements.profileStatus.textContent = "";
+    });
+    reader.addEventListener("error", () => {
+      elements.profileStatus.textContent = "That picture could not be read.";
+    });
+    reader.readAsDataURL(file);
+  });
+
+  elements.profileAvatarClear.addEventListener("click", () => {
+    pendingAvatarDataUrl = "";
+    elements.profileAvatar.value = "";
+    setAvatarPreview("");
+  });
+
+  elements.profileCancel.addEventListener("click", () => {
+    elements.profileDialog.close();
+  });
+
+  elements.profileForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    void (async () => {
+      elements.profileSave.disabled = true;
+      elements.profileStatus.textContent = "Saving...";
+      try {
+        const response = await fetch("/api/profile", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            profile: {
+              agentName: elements.profileAgentName.value,
+              avatarDataUrl: pendingAvatarDataUrl,
+              tone: elements.profileTone.value,
+              sells: elements.profileSells.value,
+              priceGuide: elements.profilePrice.value,
+              hours: elements.profileHours.value,
+              terms: elements.profileTerms.value,
+              voiceSamples: [
+                elements.profileSample1.value,
+                elements.profileSample2.value,
+              ],
+              winStory: elements.profileWin.value,
+            },
+          }),
+        });
+        const body = await parseResponse(
+          response,
+          "Your agent details could not be saved.",
+        );
+        profile = body.profile ?? null;
+        applySavedAvatar();
+        elements.profileStatus.textContent =
+          "Saved. Run the skill sync helper, then start a new conversation.";
+      } catch (error) {
+        elements.profileStatus.textContent =
+          error?.message ?? "Your agent details could not be saved.";
+      } finally {
+        elements.profileSave.disabled = false;
+      }
+    })();
+  });
+
   document.addEventListener("click", (event) => {
     if (
       !elements.attachmentMenu.hidden &&
@@ -1352,6 +1562,7 @@
   async function initialise() {
     syncHistoryPanelAccess();
     await loadAgents();
+    await loadProfile();
     applyAgentIdentity();
     renderAgentList();
     renderSuggestions();

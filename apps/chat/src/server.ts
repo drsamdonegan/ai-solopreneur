@@ -4,6 +4,7 @@ import { loadAgentRegistry } from "./agents.js";
 import { createChatServer } from "./app.js";
 import { ChatStore } from "./chat-store.js";
 import { DocumentStore } from "./documents.js";
+import { ProfileStore } from "./profile.js";
 
 const DEFAULT_PORT = 3_000;
 const DEFAULT_TIMEOUT_MS = 120_000;
@@ -37,6 +38,12 @@ const documentWorkerUrl =
 const chatDataDirectory =
   process.env.CHAT_DATA_DIRECTORY ??
   fileURLToPath(new URL("../../../data/chat", import.meta.url));
+const profileDataDirectory =
+  process.env.PROFILE_DATA_DIRECTORY ??
+  fileURLToPath(new URL("../../../data/profile", import.meta.url));
+const myBusinessSkillDirectory =
+  process.env.MY_BUSINESS_SKILL_DIRECTORY ??
+  fileURLToPath(new URL("../../../skills/my-business", import.meta.url));
 
 try {
   new URL(upstreamUrl);
@@ -52,11 +59,16 @@ const documentStore = new DocumentStore(
 );
 await documentStore.cleanupExpired();
 const chatStore = new ChatStore(join(chatDataDirectory, "chat.sqlite"));
+const profileStore = new ProfileStore(
+  profileDataDirectory,
+  myBusinessSkillDirectory,
+);
 
 const server = createChatServer({
   agents,
   chatStore,
   documentStore,
+  profileStore,
   publicDirectory,
   upstreamUrl,
   timeoutMs,

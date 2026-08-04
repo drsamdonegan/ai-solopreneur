@@ -306,5 +306,133 @@
         </div>
       </form>
     </dialog>
+
+    <dialog class="paste-dialog profile-dialog" id="profile-dialog">
+      <form class="paste-dialog__card" id="profile-form">
+        <div>
+          <p class="section-label">Agent details</p>
+          <h2 id="profile-dialog-title">Teach the agent about you</h2>
+          <p>
+            Saved on this computer. The agent uses these details in every draft
+            it writes, instead of guessing.
+          </p>
+        </div>
+
+        <p class="profile-warning">
+          These answers are saved in your project folder. Remove customer names
+          and contact details from anything you paste here.
+        </p>
+
+        <div class="profile-identity">
+          <span class="profile-avatar" id="profile-avatar-preview" aria-hidden="true"></span>
+          <div class="profile-identity__fields">
+            <label for="profile-agent-name">What is this agent called?</label>
+            <input
+              id="profile-agent-name"
+              name="profile-agent-name"
+              maxlength="80"
+              placeholder="Sales"
+              autocomplete="off"
+            />
+            <label for="profile-avatar">Picture (optional)</label>
+            <input
+              id="profile-avatar"
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif"
+            />
+            <button
+              class="secondary-button profile-avatar__clear"
+              id="profile-avatar-clear"
+              type="button"
+            >
+              Remove picture
+            </button>
+          </div>
+        </div>
+
+        <label for="profile-tone">How do you want it to sound?</label>
+        <textarea
+          id="profile-tone"
+          name="profile-tone"
+          maxlength="400"
+          rows="2"
+          placeholder="Warm but straight to the point. No jargon. I never use exclamation marks."
+        ></textarea>
+
+        <label for="profile-sells">What does your business sell?</label>
+        <textarea
+          id="profile-sells"
+          name="profile-sells"
+          maxlength="300"
+          rows="2"
+          placeholder="Wedding and family photography across Victoria."
+        ></textarea>
+
+        <label for="profile-price">Your typical price or day rate</label>
+        <textarea
+          id="profile-price"
+          name="profile-price"
+          maxlength="300"
+          rows="2"
+          placeholder="Full day from $2,400. Half day $1,400. Albums from $600."
+        ></textarea>
+
+        <label for="profile-hours">Lead time, availability, and working hours</label>
+        <textarea
+          id="profile-hours"
+          name="profile-hours"
+          maxlength="200"
+          rows="2"
+          placeholder="Booked 3 to 6 months ahead. I reply Monday to Thursday."
+        ></textarea>
+
+        <label for="profile-terms">Deposit, cancellation, or refund terms</label>
+        <textarea
+          id="profile-terms"
+          name="profile-terms"
+          maxlength="400"
+          rows="2"
+          placeholder="30% deposit to hold the date, refundable up to 60 days before."
+        ></textarea>
+
+        <label for="profile-sample-1">
+          An email you sent that worked (this teaches it your voice)
+        </label>
+        <textarea
+          id="profile-sample-1"
+          name="profile-sample-1"
+          maxlength="1500"
+          rows="6"
+          placeholder="Paste a real email you wrote, with names removed."
+        ></textarea>
+
+        <label for="profile-sample-2">A second example (optional)</label>
+        <textarea
+          id="profile-sample-2"
+          name="profile-sample-2"
+          maxlength="1500"
+          rows="6"
+          placeholder="Another one, with names removed."
+        ></textarea>
+
+        <label for="profile-win">A job that went well, and why you won it</label>
+        <textarea
+          id="profile-win"
+          name="profile-win"
+          maxlength="800"
+          rows="4"
+          placeholder="Booked a 130-guest wedding at Coombe Lodge. They chose me because I offered fast family group shots."
+        ></textarea>
+
+        <p class="profile-status" id="profile-status" role="status" aria-live="polite"></p>
+
+        <div class="paste-dialog__actions">
+          <button class="secondary-button" id="profile-cancel" type="button">
+            Cancel
+          </button>
+          <button class="send-button" id="profile-save" type="submit">Save</button>
+        </div>
+      </form>
+    </dialog>
   </body>
 </html>
