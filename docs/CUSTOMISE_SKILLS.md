@@ -49,6 +49,45 @@ Run the skill-sync helper after every change. Only IDs in this file are compiled
 
 At least one skill must remain enabled.
 
+## Optional extra skills
+
+Four further skills ship with the project but are switched **off**. Each one is a folder under `skills/` with its own `README.md` explaining what it does, a demo you can paste straight into the chat, and the exact characters to look for to prove it loaded.
+
+| Skill | What it does | Read first |
+| --- | --- | --- |
+| `my-business` | Holds your own prices, hours, and terms so the agent stops guessing them | [README](../skills/my-business/README.md) |
+| `lead-conversion` | Turns a new website enquiry or DM into a first reply you can send | [README](../skills/lead-conversion/README.md) |
+| `deal-desk` | Turns notes from a sales call into a recap email and a proposal skeleton | [README](../skills/deal-desk/README.md) |
+| `customer-support` | Turns a customer complaint into a calm draft reply that promises nothing you have not decided | [README](../skills/customer-support/README.md) |
+
+To switch one on, add its ID to `skills/enabled.txt` and run the skill-sync helper. Nothing else needs installing, and no new account is required.
+
+Two rules make these work well:
+
+- **Fill in `my-business` first.** The other three take every price, lead time, and term from it. Without it they leave a bracket such as `[YOU FILL IN: day rate]` for you to complete by hand.
+- **Enable one of the other three at a time.** Every enabled skill sits in the prompt for every message, so three competing reply formats make the agent answer an ordinary project question as though it were a sales enquiry.
+
+None of these skills can send an email, read an inbox, or look a company up. There is no internet access in this project. They work only from what you type, paste, or upload, and they say `Not stated` rather than inventing a fact.
+
+### Add one to a project you have already cloned
+
+If your copy of the project predates these skills, ask Claude Code to fetch just the folder you want:
+
+```text
+Add the Deal Desk skill to this project from the AI Solopreneur template.
+
+Do exactly this and nothing else. Do not merge, do not pull, do not create a
+branch, do not add a git remote:
+
+1. Run: git fetch https://github.com/drsamdonegan/ai-solopreneur.git skill/deal-desk
+2. Run: git checkout FETCH_HEAD -- skills/deal-desk
+3. Show me skills/deal-desk/README.md and then stop.
+```
+
+Swap `deal-desk` for `my-business`, `lead-conversion`, or `customer-support`. The template is public, so this needs no password. It adds only that one folder and leaves your own `skills/enabled.txt` untouched.
+
+Do not re-run those commands to update a skill you have already edited. `git checkout` overwrites your version without warning, which would discard the facts you typed into `my-business`.
+
 ## Skill folder convention
 
 Every skill has two files:
