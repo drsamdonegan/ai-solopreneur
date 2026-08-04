@@ -87,7 +87,7 @@ branch, do not add a git remote:
 3. Show me skills/deal-desk/README.md and then stop.
 ```
 
-Swap `deal-desk` for `my-business`, `lead-conversion`, or `customer-support`. The template is public, so this needs no password. It adds only that one folder and leaves your own `skills/enabled.txt` untouched.
+Swap `deal-desk` for `my-business`, `lead-conversion`, `prospect-research`, or `customer-support`. The template is public, so this needs no password. It adds only that one folder and leaves your own `skills/enabled.txt` untouched.
 
 Do not re-run those commands to update a skill you have already edited. `git checkout` overwrites your version without warning, which would discard the facts you typed into `my-business`.
 
