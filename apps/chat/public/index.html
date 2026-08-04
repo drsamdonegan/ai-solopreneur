@@ -324,7 +324,32 @@
         </p>
 
         <div class="profile-identity">
-          <span class="profile-avatar" id="profile-avatar-preview" aria-hidden="true"></span>
+          <button
+            class="profile-avatar"
+            id="profile-avatar-button"
+            type="button"
+            aria-label="Choose a picture for this agent"
+          >
+            <span class="profile-avatar__initials" id="profile-avatar-initials" aria-hidden="true"></span>
+            <span class="profile-avatar__edit" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <path
+                  d="M4 20h4l10-10a2.1 2.1 0 0 0-3-3L5 17v3Zm10.5-12.5 3 3"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="1.9"
+                />
+              </svg>
+            </span>
+          </button>
+          <input
+            id="profile-avatar"
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/gif"
+            hidden
+          />
           <div class="profile-identity__fields">
             <label for="profile-agent-name">What is this agent called?</label>
             <input
@@ -334,19 +359,6 @@
               placeholder="Sales"
               autocomplete="off"
             />
-            <label for="profile-avatar">Picture (optional)</label>
-            <input
-              id="profile-avatar"
-              type="file"
-              accept="image/png,image/jpeg,image/webp,image/gif"
-            />
-            <button
-              class="secondary-button profile-avatar__clear"
-              id="profile-avatar-clear"
-              type="button"
-            >
-              Remove picture
-            </button>
           </div>
         </div>
 
@@ -368,33 +380,6 @@
           placeholder="Wedding and family photography across Victoria."
         ></textarea>
 
-        <label for="profile-price">Your typical price or day rate</label>
-        <textarea
-          id="profile-price"
-          name="profile-price"
-          maxlength="300"
-          rows="2"
-          placeholder="Full day from $2,400. Half day $1,400. Albums from $600."
-        ></textarea>
-
-        <label for="profile-hours">Lead time, availability, and working hours</label>
-        <textarea
-          id="profile-hours"
-          name="profile-hours"
-          maxlength="200"
-          rows="2"
-          placeholder="Booked 3 to 6 months ahead. I reply Monday to Thursday."
-        ></textarea>
-
-        <label for="profile-terms">Deposit, cancellation, or refund terms</label>
-        <textarea
-          id="profile-terms"
-          name="profile-terms"
-          maxlength="400"
-          rows="2"
-          placeholder="30% deposit to hold the date, refundable up to 60 days before."
-        ></textarea>
-
         <label for="profile-sample-1">
           An email you sent that worked (this teaches it your voice)
         </label>
@@ -413,15 +398,6 @@
           maxlength="1500"
           rows="6"
           placeholder="Another one, with names removed."
-        ></textarea>
-
-        <label for="profile-win">A job that went well, and why you won it</label>
-        <textarea
-          id="profile-win"
-          name="profile-win"
-          maxlength="800"
-          rows="4"
-          placeholder="Booked a 130-guest wedding at Coombe Lodge. They chose me because I offered fast family group shots."
         ></textarea>
 
         <p class="profile-status" id="profile-status" role="status" aria-live="polite"></p>

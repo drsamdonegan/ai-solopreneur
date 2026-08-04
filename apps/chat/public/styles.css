@@ -175,12 +175,15 @@ textarea:focus-visible,
 }
 
 .profile-avatar {
+  position: relative;
   display: flex;
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
   width: 4rem;
   height: 4rem;
+  padding: 0;
+  overflow: hidden;
   border: 1px solid rgb(83 62 135 / 14%);
   border-radius: 50%;
   background-color: rgb(255 255 255 / 70%);
@@ -188,11 +191,35 @@ textarea:focus-visible,
   background-size: cover;
   color: var(--brand-primary);
   font-weight: 800;
+  cursor: pointer;
 }
 
-.profile-avatar__clear {
-  align-self: flex-start;
-  margin-top: 0.15rem;
+.profile-avatar__edit {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(28 20 48 / 55%);
+  color: white;
+  opacity: 0;
+  transition: opacity 120ms ease-in-out;
+}
+
+.profile-avatar:hover .profile-avatar__edit,
+.profile-avatar:focus-visible .profile-avatar__edit {
+  opacity: 1;
+}
+
+.profile-avatar__edit svg {
+  width: 1.4rem;
+  height: 1.4rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .profile-avatar__edit {
+    transition: none;
+  }
 }
 
 .profile-status {

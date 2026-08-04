@@ -90,21 +90,17 @@
     pasteForm: document.querySelector("#paste-form"),
     profileAgentName: document.querySelector("#profile-agent-name"),
     profileAvatar: document.querySelector("#profile-avatar"),
-    profileAvatarClear: document.querySelector("#profile-avatar-clear"),
-    profileAvatarPreview: document.querySelector("#profile-avatar-preview"),
+    profileAvatarButton: document.querySelector("#profile-avatar-button"),
+    profileAvatarInitials: document.querySelector("#profile-avatar-initials"),
     profileCancel: document.querySelector("#profile-cancel"),
     profileDialog: document.querySelector("#profile-dialog"),
     profileForm: document.querySelector("#profile-form"),
-    profileHours: document.querySelector("#profile-hours"),
-    profilePrice: document.querySelector("#profile-price"),
     profileSample1: document.querySelector("#profile-sample-1"),
     profileSample2: document.querySelector("#profile-sample-2"),
     profileSave: document.querySelector("#profile-save"),
     profileSells: document.querySelector("#profile-sells"),
     profileStatus: document.querySelector("#profile-status"),
-    profileTerms: document.querySelector("#profile-terms"),
     profileTone: document.querySelector("#profile-tone"),
-    profileWin: document.querySelector("#profile-win"),
     requestStatus: document.querySelector("#request-status"),
     resetButton: document.querySelector("#reset-button"),
     sendButton: document.querySelector("#send-button"),
@@ -1371,11 +1367,11 @@
 
   function setAvatarPreview(dataUrl) {
     if (dataUrl.length > 0) {
-      elements.profileAvatarPreview.style.backgroundImage = `url("${dataUrl}")`;
-      elements.profileAvatarPreview.textContent = "";
+      elements.profileAvatarButton.style.backgroundImage = `url("${dataUrl}")`;
+      elements.profileAvatarInitials.textContent = "";
     } else {
-      elements.profileAvatarPreview.style.removeProperty("background-image");
-      elements.profileAvatarPreview.textContent = getInitials(
+      elements.profileAvatarButton.style.removeProperty("background-image");
+      elements.profileAvatarInitials.textContent = getInitials(
         elements.profileAgentName.value || displayAgentName(),
       );
     }
@@ -1389,13 +1385,9 @@
     elements.profileAgentName.value = saved.agentName ?? "";
     elements.profileTone.value = saved.tone ?? "";
     elements.profileSells.value = saved.sells ?? "";
-    elements.profilePrice.value = saved.priceGuide ?? "";
-    elements.profileHours.value = saved.hours ?? "";
-    elements.profileTerms.value = saved.terms ?? "";
     const samples = Array.isArray(saved.voiceSamples) ? saved.voiceSamples : [];
     elements.profileSample1.value = samples[0] ?? "";
     elements.profileSample2.value = samples[1] ?? "";
-    elements.profileWin.value = saved.winStory ?? "";
     pendingAvatarDataUrl = saved.avatarDataUrl ?? "";
     setAvatarPreview(pendingAvatarDataUrl);
     elements.profileAvatar.value = "";
@@ -1434,15 +1426,24 @@
     reader.readAsDataURL(file);
   });
 
-  elements.profileAvatarClear.addEventListener("click", () => {
-    pendingAvatarDataUrl = "";
-    elements.profileAvatar.value = "";
-    setAvatarPreview("");
+  elements.profileAvatarButton.addEventListener("click", () => {
+    elements.profileAvatar.click();
   });
 
   elements.profileCancel.addEventListener("click", () => {
     elements.profileDialog.close();
   });
+
+  // A <dialog> backdrop is painted by the dialog itself, so a click on it
+  // reports the dialog as the target. Anything inside the card reports that
+  // card instead, which is what separates "outside" from "inside".
+  for (const dialog of [elements.profileDialog, elements.pasteDialog]) {
+    dialog.addEventListener("click", (event) => {
+      if (event.target === dialog) {
+        dialog.close();
+      }
+    });
+  }
 
   elements.profileForm.addEventListener("submit", (event) => {
     event.preventDefault();
@@ -1459,14 +1460,10 @@
               avatarDataUrl: pendingAvatarDataUrl,
               tone: elements.profileTone.value,
               sells: elements.profileSells.value,
-              priceGuide: elements.profilePrice.value,
-              hours: elements.profileHours.value,
-              terms: elements.profileTerms.value,
               voiceSamples: [
                 elements.profileSample1.value,
                 elements.profileSample2.value,
               ],
-              winStory: elements.profileWin.value,
             },
           }),
         });
