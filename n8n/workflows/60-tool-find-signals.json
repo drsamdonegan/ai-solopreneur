@@ -625,5 +625,5 @@
     "externalWrite": "none-read-only-public-comments",
     "localWrite": "signals-table-append-only"
   },
-  "tags": []
+  "tags": [{ "id": "tagAgentCanDo", "name": "What your agent can do" }]
 }

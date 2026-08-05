@@ -232,5 +232,5 @@
     "localWrite": "conversation-bound-completed-research-only"
   },
   "id": "phase9CompleteDomainResearch",
-  "tags": []
+  "tags": [{ "id": "tagAgentCanDo", "name": "What your agent can do" }]
 }

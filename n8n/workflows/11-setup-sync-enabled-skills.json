@@ -285,6 +285,6 @@
     "testedWithN8n": "2.30.5",
     "setupPurpose": "enabled-skills"
   },
-  "tags": [],
+  "tags": [{ "id": "tagSetupOnce", "name": "Set up once" }],
   "pinData": {}
 }

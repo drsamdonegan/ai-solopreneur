@@ -90,5 +90,5 @@
     "testedWithN8n": "2.30.5"
   },
   "id": "phase3AgentHealth",
-  "tags": []
+  "tags": [{ "id": "tagBehindScenes", "name": "Behind the scenes" }]
 }

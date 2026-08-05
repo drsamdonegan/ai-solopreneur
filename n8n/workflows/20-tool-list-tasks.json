@@ -374,5 +374,5 @@
     "toolRisk": "read"
   },
   "id": "phase4ListTasks",
-  "tags": []
+  "tags": [{ "id": "tagAgentCanDo", "name": "What your agent can do" }]
 }

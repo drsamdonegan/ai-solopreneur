@@ -940,5 +940,5 @@
     "confirmationWorkflow": "phase5ConfirmTaskWrite"
   },
   "id": "phase3StartHere",
-  "tags": []
+  "tags": [{ "id": "tagStartHere", "name": "Start here" }]
 }

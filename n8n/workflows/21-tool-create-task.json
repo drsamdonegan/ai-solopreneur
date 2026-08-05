@@ -585,5 +585,5 @@
     "agentConnection": "confirmation-executor-only"
   },
   "id": "phase4CreateTask",
-  "tags": []
+  "tags": [{ "id": "tagAgentCanDo", "name": "What your agent can do" }]
 }

@@ -167,5 +167,5 @@
     "testedWithN8n": "2.30.5"
   },
   "id": "phase6LearnerChecklist",
-  "tags": []
+  "tags": [{ "id": "tagStartHere", "name": "Start here" }]
 }

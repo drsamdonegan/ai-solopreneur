@@ -1045,6 +1045,6 @@
       "update_task_status"
     ]
   },
-  "tags": [],
+  "tags": [{ "id": "tagSafety", "name": "Safety checks" }],
   "pinData": {}
 }

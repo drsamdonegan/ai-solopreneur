@@ -173,5 +173,5 @@
     "dataSource": "local-sqlite-business-memory"
   },
   "id": "phase9GetBusinessMemory",
-  "tags": []
+  "tags": [{ "id": "tagAgentCanDo", "name": "What your agent can do" }]
 }

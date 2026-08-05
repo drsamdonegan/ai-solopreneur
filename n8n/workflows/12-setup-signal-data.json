@@ -101,5 +101,5 @@
     "phase": 10,
     "testedWithN8n": "2.30.5"
   },
-  "tags": []
+  "tags": [{ "id": "tagSetupOnce", "name": "Set up once" }]
 }

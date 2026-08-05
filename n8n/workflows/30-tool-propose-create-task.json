@@ -607,6 +607,6 @@
     "taskMutation": "none",
     "confirmation": "required-before-execution"
   },
-  "tags": [],
+  "tags": [{ "id": "tagSafety", "name": "Safety checks" }],
   "pinData": {}
 }

@@ -241,5 +241,5 @@
     "localWrite": "conversation-bound-job-registration"
   },
   "id": "phase9StartDomainResearch",
-  "tags": []
+  "tags": [{ "id": "tagAgentCanDo", "name": "What your agent can do" }]
 }
