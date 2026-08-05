@@ -68,7 +68,11 @@ To see everything it found, open n8n, select **Data tables** in the sidebar, and
 
 This is the part worth practising. The tool is simple; choosing what to search for is the skill.
 
-**Search for the problem, not for your product.** Searching for what you sell finds videos about your solution, whose comments fill up with people who already know about it — and with your competitors. Searching for the problem finds people who are still stuck.
+**Describe a video, not a feeling.** This is the one that catches everybody out, and it is worth reading twice.
+
+You are searching YouTube. What you type is matched against video titles, so it has to look like the title of a video somebody would actually watch. `frustrated with bookkeeping software` returns nothing at all, because nobody titles a video that. `bookkeeping software for small business review` returns plenty — and the frustrated people are sitting in the comments underneath it.
+
+Think about what your customer would search for the evening they got fed up. Then avoid your own product name too, or you will mostly find people who already bought it, plus your competitors.
 
 Four kinds of video reliably have good comments:
 

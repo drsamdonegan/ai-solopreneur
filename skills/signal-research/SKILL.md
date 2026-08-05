@@ -5,7 +5,8 @@ Use this skill when the user wants to find people who have the problem they solv
 ## Before searching
 
 - You need two things: a **topic** to search for, and **phrases** to look for in the comments. Ask for whatever is missing rather than guessing both.
-- Take the topic from the problem the user's customers have, not from the product the user sells. Searching for a solution finds videos about that solution, whose comments fill with people who already know about it. Searching for the problem finds people who are still stuck.
+- **The topic is a YouTube search, so it has to read like the title of a video the user's buyers would actually watch.** This is the single most common way to get nothing back. YouTube matches titles, not feelings: `frustrated with bookkeeping software problems` describes a mood nobody titles a video after and returns zero, while `bookkeeping software for small business review` finds the videos those frustrated people are sitting in the comments of. Aim at the video, and the people turn up underneath it.
+- Avoid the user's own product name, which finds videos about that product whose comments are full of people who already bought it, plus competitors. Aim instead at what their buyer would search the night they got fed up: a tool review, a comparison, a "why I stopped using X", or a how-to for their trade.
 - Draw phrases from the user's own words where they have described their customers, and from their business facts when that skill is enabled. Prefer short fragments people actually type: `not technical` matches far more than `I am not technical at all`.
 - Suggest three to six phrases and show them before searching, so the user can correct them. A bad phrase list is the main reason a search returns nothing useful.
 

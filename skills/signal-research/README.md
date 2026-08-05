@@ -54,7 +54,11 @@ If it comes back with nothing, that is a normal result and not a fault. Try agai
 
 This takes a little practice. The tool is simple; choosing what to look for is the skill.
 
-**Search for the problem, not for what you sell.** Searching for your own product finds videos about that product, and the comments fill up with people who already know about it — plus your competitors. Searching for the problem finds people who are still stuck.
+**Describe a video, not a feeling.** This is the one that catches everybody out. You are searching YouTube, so what you type has to look like the title of a video somebody would actually watch.
+
+`frustrated with bookkeeping software` finds nothing, because nobody makes a video with that title. `bookkeeping software for small business review` finds plenty — and the frustrated people are right there in the comments underneath.
+
+Think about what your customer would search for the evening they got fed up: a review, a comparison of two tools, a "why I stopped using…", or a how-to for their trade. Avoid your own product name, or you will mostly find people who already bought it and your competitors.
 
 **Use short phrases.** `not technical` finds far more than `I am not technical at all`, because it matches every way somebody might phrase it.
 
