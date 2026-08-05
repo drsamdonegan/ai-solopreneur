@@ -88,14 +88,17 @@ async function patchAgentWorkflow() {
   // this file, which makes it a reliable place to add a node without needing to
   // know which other tools a learner already has.
   const nodeAnchor = '\n  ],\n  "pinData":';
-  const connAnchor = '\n  "connections": {\n';
+  // The tool connections are listed before the agent's own entry, and the
+  // workflow checker compares that order exactly. Adding find_signals here puts
+  // it last among the tools, which is where the checker expects a new one.
+  const connAnchor = '\n    "Project Partner Agent": {';
   if (!raw.includes(nodeAnchor) || !raw.includes(connAnchor)) {
     problems.push("The agent workflow has an unexpected shape and was left untouched.");
     return;
   }
 
   raw = raw.replace(nodeAnchor, `,\n${TOOL_NODE}\n  ],\n  "pinData":`);
-  raw = raw.replace(connAnchor, `\n  "connections": {\n${TOOL_CONNECTION}\n`);
+  raw = raw.replace(connAnchor, `\n${TOOL_CONNECTION}\n    "Project Partner Agent": {`);
 
   try {
     JSON.parse(raw);
@@ -128,20 +131,22 @@ async function patchValidator() {
     raw = raw.replace(anchor, replacement);
   }
 
-  // The list of tools allowed to reach the agent is written as an array literal,
-  // so add to it rather than replacing it — a learner may have others.
-  if (!/"find_signals"[\s\S]{0,400}Agent: only the reviewed/.test(raw)) {
-    raw = raw.replace(
-      /(\n\s*"get_business_memory",)(\n\s*\]\),)/,
-      '$1\n        "find_signals",$2',
-    );
-    if (!raw.includes('"find_signals",\n      ]),') && !/"find_signals"/.test(raw)) {
-      raw = raw.replace(
-        /(\n\s*"update_task_status",)(\n\s*\]\),\n\s*"Agent: only the reviewed)/,
-        '$1\n        "find_signals",$2',
-      );
-    }
-  }
+  // The list of tools allowed to reach the agent is an array literal, and it is
+  // written on one line in some versions and across several in others depending
+  // on how many tools are listed. Add to whichever shape is present rather than
+  // replacing it, because a learner may have tools this installer knows nothing
+  // about.
+  raw = raw.replace(
+    /(JSON\.stringify\(connectedToolNames\)\s*===\s*\n?\s*JSON\.stringify\(\[)([\s\S]*?)(\n?\s*\]\),)/,
+    (whole, head, body, tail) => {
+      if (/"find_signals"/.test(body)) return whole;
+      const indent = (body.match(/\n(\s*)"/) ?? [null, "        "])[1];
+      const addition = body.includes("\n")
+        ? `${body.replace(/,?\s*$/, "")},\n${indent}"find_signals",`
+        : `${body.replace(/\s*$/, "")}, "find_signals"`;
+      return head + addition + tail;
+    },
+  );
 
   if (raw === before) {
     skipped.push("The workflow checker already allowed everything needed");
