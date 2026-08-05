@@ -102,6 +102,15 @@ textarea:focus-visible,
     var(--panel);
 }
 
+/* The panel is the scroll container, so its sections must keep their content
+   height. Flex items shrink by default, and these sections set min-height: 0,
+   so once there are enough agents or saved chats they get squeezed far below
+   their content. Their overflow stays visible, so the agent list and the chat
+   list then paint on top of each other instead of scrolling. */
+.agent-panel > * {
+  flex-shrink: 0;
+}
+
 .history-close {
   display: none;
 }
