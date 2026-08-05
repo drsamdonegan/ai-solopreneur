@@ -26,10 +26,7 @@
       "name": "Tool Input",
       "type": "n8n-nodes-base.executeWorkflowTrigger",
       "typeVersion": 1.2,
-      "position": [
-        -1120,
-        0
-      ]
+      "position": [-1120, 0]
     },
     {
       "parameters": {
@@ -41,10 +38,7 @@
       "name": "Validate Signal Input",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        -900,
-        0
-      ]
+      "position": [-900, 0]
     },
     {
       "parameters": {
@@ -75,10 +69,7 @@
       "name": "Input Is Valid?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [
-        -680,
-        0
-      ]
+      "position": [-680, 0]
     },
     {
       "parameters": {
@@ -124,10 +115,7 @@
       "name": "Search Videos",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
-      "position": [
-        -460,
-        -100
-      ],
+      "position": [-460, -100],
       "credentials": {
         "httpQueryAuth": {
           "id": "youtubeApiKey",
@@ -145,10 +133,7 @@
       "name": "List Videos",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        -240,
-        -100
-      ]
+      "position": [-240, -100]
     },
     {
       "parameters": {
@@ -190,10 +175,7 @@
       "name": "Get Comments",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
-      "position": [
-        -20,
-        -100
-      ],
+      "position": [-20, -100],
       "credentials": {
         "httpQueryAuth": {
           "id": "youtubeApiKey",
@@ -213,10 +195,7 @@
       "name": "Match Phrases",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        200,
-        -100
-      ]
+      "position": [200, -100]
     },
     {
       "parameters": {
@@ -247,19 +226,26 @@
       "name": "Found Anything?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [
-        420,
-        -100
-      ]
+      "position": [420, -100]
     },
     {
       "parameters": {
         "resource": "row",
-        "operation": "insert",
+        "operation": "upsert",
         "dataTableId": {
           "__rl": true,
           "value": "signals",
           "mode": "name"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "permalink",
+              "condition": "eq",
+              "keyValue": "={{ $json.permalink }}"
+            }
+          ]
         },
         "columns": {
           "mappingMode": "defineBelow",
@@ -284,10 +270,7 @@
       "name": "Save Signals",
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1.1,
-      "position": [
-        640,
-        -200
-      ]
+      "position": [640, -200]
     },
     {
       "parameters": {
@@ -299,10 +282,7 @@
       "name": "Shape Signal Result",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        860,
-        -100
-      ]
+      "position": [860, -100]
     },
     {
       "parameters": {
@@ -314,10 +294,7 @@
       "name": "Shape Invalid Input",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        -460,
-        140
-      ]
+      "position": [-460, 140]
     },
     {
       "parameters": {
@@ -329,10 +306,7 @@
       "name": "Prepare Audit",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        1080,
-        0
-      ]
+      "position": [1080, 0]
     },
     {
       "parameters": {
@@ -361,10 +335,7 @@
       "name": "Write Tool Audit",
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1.1,
-      "position": [
-        1300,
-        0
-      ]
+      "position": [1300, 0]
     },
     {
       "parameters": {
@@ -376,10 +347,7 @@
       "name": "Return Tool Result",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        1520,
-        0
-      ]
+      "position": [1520, 0]
     },
     {
       "parameters": {
@@ -392,14 +360,11 @@
       "name": "Sticky 0f",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [
-        -1140,
-        -420
-      ]
+      "position": [-1140, -420]
     },
     {
       "parameters": {
-        "content": "## Your API key\n\nBoth blue boxes below need the **YouTube API Key** credential.\n\nIf they show a red warning, open each one, click the Credential dropdown, and pick it. Create it once under **Credentials \u2192 Query Auth** with the name `key`.\n\nFull instructions: `docs/YOUTUBE_SIGNALS.md`",
+        "content": "## Your API key\n\nBoth blue boxes below need the **YouTube API Key** credential.\n\nIf they show a red warning, open each one, click the Credential dropdown, and pick it. Create it once under **Credentials → Query Auth** with the name `key`.\n\nFull instructions: `docs/YOUTUBE_SIGNALS.md`",
         "height": 300,
         "width": 380,
         "color": 3
@@ -408,10 +373,7 @@
       "name": "Sticky 10",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [
-        -700,
-        -420
-      ]
+      "position": [-700, -420]
     },
     {
       "parameters": {
@@ -424,10 +386,7 @@
       "name": "Sticky 11",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [
-        200,
-        -420
-      ]
+      "position": [200, -420]
     },
     {
       "parameters": {
@@ -440,10 +399,7 @@
       "name": "Sticky 12",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [
-        860,
-        -420
-      ]
+      "position": [860, -420]
     }
   ],
   "connections": {
@@ -625,5 +581,5 @@
     "externalWrite": "none-read-only-public-comments",
     "localWrite": "signals-table-append-only"
   },
-  "tags": [{ "id": "tagAgentCanDo", "name": "What your agent can do" }]
+  "tags": []
 }
