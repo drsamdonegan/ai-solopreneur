@@ -3,7 +3,7 @@
   "nodes": [
     {
       "parameters": {
-        "content": "## Check and save one registered research job\nReads one Content Factory job. Queued/running jobs are reported honestly. Completed or partial results are sent to the local chat gateway, which saves them only if the job ID and domain are already bound to this conversation.",
+        "content": "## Report a saved research job\nReads one conversation-bound research job from local business memory and reports exactly what was saved for it. Research itself finishes inside `start_domain_research`, so this tool never crawls, never calls a model, and never fills a gap.\n\nA job that was registered but never saved is reported as unfinished, not as a result.",
         "height": 260,
         "width": 560,
         "color": 4
@@ -19,9 +19,18 @@
         "inputSource": "workflowInputs",
         "workflowInputs": {
           "values": [
-            { "name": "sessionId", "type": "string" },
-            { "name": "requestId", "type": "string" },
-            { "name": "jobId", "type": "string" }
+            {
+              "name": "sessionId",
+              "type": "string"
+            },
+            {
+              "name": "requestId",
+              "type": "string"
+            },
+            {
+              "name": "jobId",
+              "type": "string"
+            }
           ]
         }
       },
@@ -46,13 +55,22 @@
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 3 },
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
           "conditions": [
             {
               "id": "95100000-0000-4000-8000-000000000004",
               "leftValue": "={{ $json.valid }}",
               "rightValue": "",
-              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
             }
           ],
           "combinator": "and"
@@ -67,26 +85,30 @@
     },
     {
       "parameters": {
-        "url": "={{ 'http://127.0.0.1:8000/api/domain-research/jobs/' + encodeURIComponent($('Validate Completion Input').item.json.jobId) }}",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "options": { "timeout": 20000 }
+        "method": "GET",
+        "url": "={{ 'http://127.0.0.1:3000/api/business-memory/jobs?sessionId=' + encodeURIComponent($('Validate Completion Input').item.json.sessionId) + '&jobId=' + encodeURIComponent($('Validate Completion Input').item.json.jobId) }}",
+        "options": {
+          "timeout": 10000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [200, -60],
       "id": "95100000-0000-4000-8000-000000000006",
-      "name": "Read Content Factory Research",
-      "credentials": {
-        "httpHeaderAuth": { "id": "contentFactoryApi", "name": "Content Factory API" }
-      },
+      "name": "Read Saved Research Job",
       "onError": "continueRegularOutput"
     },
     {
       "parameters": {
         "mode": "runOnceForEachItem",
         "language": "javaScript",
-        "jsCode": "const input = $('Validate Completion Input').first().json;\nconst status = String($json.status ?? '');\nconst sameJob = $json.jobId === input.jobId;\nlet shouldSave = false;\nlet response;\nif (sameJob && ['completed', 'partial'].includes(status)) {\n  shouldSave = true;\n  response = { ok: true, jobId: input.jobId, domain: String($json.domain ?? ''), status, saved: false, message: 'Research is ready and is being saved to local business memory.' };\n} else if (sameJob && ['queued', 'running'].includes(status)) {\n  response = { ok: true, jobId: input.jobId, domain: String($json.domain ?? ''), status, saved: false, currentStep: String($json.currentStep ?? ''), message: String($json.message ?? 'Domain research is still running. Check again shortly.') };\n} else if (sameJob && status === 'failed') {\n  response = { ok: false, jobId: input.jobId, status, error: { code: 'RESEARCH_FAILED', message: String($json.error ?? 'Domain research failed.') } };\n} else {\n  response = { ok: false, error: { code: 'RESEARCH_STATUS_FAILED', message: String($json.message ?? $json.error?.message ?? 'The research job could not be read.') } };\n}\nreturn { json: { ...input, research: $json, shouldSave, response } };"
+        "jsCode": "const input = $('Validate Completion Input').first().json;\nconst statusCode = Number($json.statusCode ?? 0);\n// n8n puts text responses on `data` and parsed JSON on `body`; accept either.\nconst body = $json.body ?? $json.data ?? {};\nconst job = body.job ?? {};\nconst memory = body.memory;\n\n// Research now finishes inside start_domain_research, so a job is either saved\n// or it never got that far. Nothing here may invent a result.\nlet response;\nif (statusCode === 404) {\n  response = { ok: false, jobId: input.jobId, error: { code: 'RESEARCH_JOB_NOT_FOUND', message: 'No research job with that ID belongs to this conversation. Check the ID, or start the research again.' } };\n} else if (statusCode < 200 || statusCode >= 300) {\n  response = { ok: false, jobId: input.jobId, error: { code: 'RESEARCH_STATUS_FAILED', message: String(body?.error?.message ?? 'The research job could not be read.') } };\n} else if (job.jobId !== input.jobId) {\n  response = { ok: false, jobId: input.jobId, error: { code: 'RESEARCH_STATUS_FAILED', message: 'The research job could not be matched to this conversation.' } };\n} else if (['completed', 'partial'].includes(String(job.status)) && memory && memory.domain === job.domain) {\n  response = { ok: true, jobId: job.jobId, domain: job.domain, status: String(job.status), saved: true, researchedAt: String(memory.researchedAt ?? ''), memory,\n    message: job.status === 'partial'\n      ? 'This research was saved as partial. Report its warnings and thin evidence rather than filling the gaps.'\n      : 'This research was saved to local business memory.' };\n} else if (String(job.status) === 'queued') {\n  // Registered but never saved: start_domain_research failed after registering.\n  response = { ok: false, jobId: job.jobId, domain: job.domain, status: 'queued', saved: false, error: { code: 'RESEARCH_NOT_SAVED', message: 'That research job was registered but no findings were ever saved, so the run did not finish. Start the research again.' } };\n} else {\n  response = { ok: false, jobId: input.jobId, status: String(job.status ?? 'unknown'), saved: false, error: { code: 'RESEARCH_NOT_SAVED', message: 'That research job has no saved findings. Nothing can be reported for it.' } };\n}\nreturn { json: { ...input, job, response } };"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -96,64 +118,13 @@
     },
     {
       "parameters": {
-        "conditions": {
-          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 3 },
-          "conditions": [
-            {
-              "id": "95100000-0000-4000-8000-000000000008",
-              "leftValue": "={{ $json.shouldSave }}",
-              "rightValue": "",
-              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
-            }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
-      },
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.2,
-      "position": [700, -60],
-      "id": "95100000-0000-4000-8000-000000000009",
-      "name": "Research Is Ready?"
-    },
-    {
-      "parameters": {
-        "method": "PUT",
-        "url": "http://127.0.0.1:3000/api/business-memory",
-        "sendBody": true,
-        "contentType": "json",
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ ...$('Evaluate Research Status').item.json.research, sessionId: $('Validate Completion Input').item.json.sessionId }) }}",
-        "options": { "timeout": 10000 }
-      },
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.4,
-      "position": [940, -140],
-      "id": "95100000-0000-4000-8000-000000000010",
-      "name": "Save Local Business Memory",
-      "onError": "continueRegularOutput"
-    },
-    {
-      "parameters": {
-        "mode": "runOnceForEachItem",
-        "language": "javaScript",
-        "jsCode": "const evaluated = $('Evaluate Research Status').first().json;\nconst memory = $json.memory;\nconst saved = memory && memory.jobId === evaluated.jobId && memory.domain === evaluated.response.domain;\nconst response = saved\n  ? { ok: true, jobId: evaluated.jobId, domain: memory.domain, status: memory.status, saved: true, memory, message: memory.status === 'partial' ? 'Partial domain research was saved to local business memory with its warnings.' : 'Domain research was saved to local business memory.' }\n  : { ok: false, jobId: evaluated.jobId, error: { code: 'MEMORY_SAVE_FAILED', message: String($json.error?.message ?? 'Completed research could not be saved to local business memory.') } };\nreturn { json: { ...evaluated, response } };"
-      },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1180, -140],
-      "id": "95100000-0000-4000-8000-000000000011",
-      "name": "Shape Saved Research"
-    },
-    {
-      "parameters": {
         "mode": "runOnceForEachItem",
         "language": "javaScript",
         "jsCode": "const input = $('Validate Completion Input').first().json;\nconst response = $json.response ?? { ok: false, error: { code: 'RESEARCH_STATUS_FAILED', message: 'The research job could not be checked.' } };\nreturn { json: { occurredAt: new Date().toISOString(), sessionId: input.sessionId, requestId: input.requestId, toolName: 'complete_domain_research', proposedInput: JSON.stringify(input.proposedInput ?? {}), result: JSON.stringify(response), error: response.ok === false ? String(response.error?.message ?? 'Tool failed') : '', response } };"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1420, 20],
+      "position": [940, 20],
       "id": "95100000-0000-4000-8000-000000000012",
       "name": "Prepare Audit"
     },
@@ -161,7 +132,11 @@
       "parameters": {
         "resource": "row",
         "operation": "insert",
-        "dataTableId": { "__rl": true, "value": "tool_audit", "mode": "name" },
+        "dataTableId": {
+          "__rl": true,
+          "value": "tool_audit",
+          "mode": "name"
+        },
         "columns": {
           "mappingMode": "defineBelow",
           "value": {
@@ -182,7 +157,7 @@
       },
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1.1,
-      "position": [1660, 20],
+      "position": [1180, 20],
       "id": "95100000-0000-4000-8000-000000000013",
       "name": "Write Tool Audit",
       "onError": "continueRegularOutput"
@@ -195,28 +170,102 @@
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1900, 20],
+      "position": [1420, 20],
       "id": "95100000-0000-4000-8000-000000000014",
       "name": "Return Tool Result"
     }
   ],
   "pinData": {},
   "connections": {
-    "Tool Input": { "main": [[{ "node": "Validate Completion Input", "type": "main", "index": 0 }]] },
-    "Validate Completion Input": { "main": [[{ "node": "Input Is Valid?", "type": "main", "index": 0 }]] },
-    "Input Is Valid?": { "main": [[{ "node": "Read Content Factory Research", "type": "main", "index": 0 }], [{ "node": "Prepare Audit", "type": "main", "index": 0 }]] },
-    "Read Content Factory Research": { "main": [[{ "node": "Evaluate Research Status", "type": "main", "index": 0 }]] },
-    "Evaluate Research Status": { "main": [[{ "node": "Research Is Ready?", "type": "main", "index": 0 }]] },
-    "Research Is Ready?": { "main": [[{ "node": "Save Local Business Memory", "type": "main", "index": 0 }], [{ "node": "Prepare Audit", "type": "main", "index": 0 }]] },
-    "Save Local Business Memory": { "main": [[{ "node": "Shape Saved Research", "type": "main", "index": 0 }]] },
-    "Shape Saved Research": { "main": [[{ "node": "Prepare Audit", "type": "main", "index": 0 }]] },
-    "Prepare Audit": { "main": [[{ "node": "Write Tool Audit", "type": "main", "index": 0 }]] },
-    "Write Tool Audit": { "main": [[{ "node": "Return Tool Result", "type": "main", "index": 0 }]] }
+    "Tool Input": {
+      "main": [
+        [
+          {
+            "node": "Validate Completion Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Completion Input": {
+      "main": [
+        [
+          {
+            "node": "Input Is Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Input Is Valid?": {
+      "main": [
+        [
+          {
+            "node": "Read Saved Research Job",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Saved Research Job": {
+      "main": [
+        [
+          {
+            "node": "Evaluate Research Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate Research Status": {
+      "main": [
+        [
+          {
+            "node": "Prepare Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Audit": {
+      "main": [
+        [
+          {
+            "node": "Write Tool Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Tool Audit": {
+      "main": [
+        [
+          {
+            "node": "Return Tool Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
   "active": false,
   "settings": {
     "executionOrder": "v1",
-    "executionTimeout": 45,
+    "executionTimeout": 30,
     "saveDataErrorExecution": "all",
     "saveDataSuccessExecution": "all",
     "saveExecutionProgress": true,
@@ -227,10 +276,16 @@
     "templateCredsSetupCompleted": false,
     "phase": 9,
     "testedWithN8n": "2.30.5",
-    "toolRisk": "bounded_local_write",
+    "toolRisk": "read",
     "authorization": "explicit-current-user-request",
-    "localWrite": "conversation-bound-completed-research-only"
+    "localWrite": "none",
+    "reads": "conversation-bound-saved-research-only"
   },
   "id": "phase9CompleteDomainResearch",
-  "tags": [{ "id": "tagAgentCanDo", "name": "What your agent can do" }]
+  "tags": [
+    {
+      "id": "tagAgentCanDo",
+      "name": "What your agent can do"
+    }
+  ]
 }

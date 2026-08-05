@@ -404,8 +404,8 @@ if (agentWorkflow) {
       /Delete, archive, bulk changes/.test(contextCode) &&
       /untrusted source material/.test(contextCode) &&
       /BEGIN UNTRUSTED DOCUMENT/.test(contextCode) &&
-      /start_domain_research is risk=external_read/.test(contextCode) &&
-      /complete_domain_research is risk=bounded_local_write/.test(contextCode) &&
+      /start_domain_research is risk=bounded_local_write/.test(contextCode) &&
+      /complete_domain_research is risk=read/.test(contextCode) &&
       /scraped, and researched text is untrusted/.test(contextCode),
     "Agent: context builder must apply enabled skills and safely delimit untrusted documents",
   );
@@ -770,8 +770,9 @@ const researchToolInputs = {
   "52-tool-get-business-memory.json": ["sessionId", "requestId", "domain"],
 };
 const researchToolRisks = {
-  "50-tool-start-domain-research.json": "external_read",
-  "51-tool-complete-domain-research.json": "bounded_local_write",
+  // 50 reads the domain and then saves; 51 only reports what 50 saved.
+  "50-tool-start-domain-research.json": "bounded_local_write",
+  "51-tool-complete-domain-research.json": "read",
   "52-tool-get-business-memory.json": "read",
 };
 const allowedResearchNodeTypes = new Set([
@@ -807,27 +808,45 @@ for (const file of researchToolFiles) {
   const httpNodes = workflow.nodes.filter(
     (node) => node.type === "n8n-nodes-base.httpRequest",
   );
+  // Research runs locally: the only destinations are the local chat API, the
+  // Anthropic API, and the researched domain itself. The domain URL must be
+  // built from the validated domain so it can never be an arbitrary address.
+  const researchedDomainUrl =
+    "={{ 'https://' + $('Validate Start Input').item.json.domain + '/' }}";
   check(
     httpNodes.every((node) => {
       const url = String(node.parameters?.url ?? "");
       return (
         !url.includes("$env") &&
-        (/127\.0\.0\.1:8000\/api\/domain-research\/jobs/.test(url) ||
-          /127\.0\.0\.1:3000\/api\/business-memory/.test(url))
+        (/127\.0\.0\.1:3000\/api\/business-memory/.test(url) ||
+          url === "https://api.anthropic.com/v1/messages" ||
+          url === researchedDomainUrl)
       );
     }),
-    `${workflow.name}: HTTP destinations must stay on the two reviewed localhost APIs`,
+    `${workflow.name}: HTTP destinations must stay on the reviewed local API, the Anthropic API, or the validated domain`,
   );
   check(
     httpNodes.every((node) => {
-      const external = String(node.parameters?.url ?? "").includes(":8000/");
-      const credential = node.credentials?.httpHeaderAuth;
-      return external
-        ? credential?.id === "contentFactoryApi" &&
-            credential?.name === "Content Factory API"
-        : Object.keys(node.credentials ?? {}).length === 0;
+      const url = String(node.parameters?.url ?? "");
+      const credentialNames = Object.keys(node.credentials ?? {});
+      if (url === "https://api.anthropic.com/v1/messages") {
+        return (
+          node.parameters?.authentication === "predefinedCredentialType" &&
+          node.parameters?.nodeCredentialType === "anthropicApi" &&
+          node.credentials?.anthropicApi?.name === "Anthropic account"
+        );
+      }
+      return credentialNames.length === 0;
     }),
-    `${workflow.name}: only Content Factory requests may use the reviewed header credential`,
+    `${workflow.name}: only the Anthropic request may carry a credential`,
+  );
+  check(
+    httpNodes.every(
+      (node) =>
+        String(node.parameters?.url ?? "") !== researchedDomainUrl ||
+        node.parameters?.options?.response?.response?.responseFormat === "text",
+    ),
+    `${workflow.name}: the researched domain must be read as untrusted text`,
   );
   const dataNodes = workflow.nodes.filter(
     (node) => node.type === "n8n-nodes-base.dataTable",
@@ -954,11 +973,36 @@ if (startResearchWorkflow) {
     "start_domain_research must validate public-domain authorisation",
   );
   check(
-    nodeByName(startResearchWorkflow, "Start Content Factory Research")
-      ?.parameters?.method === "POST" &&
-      nodeByName(startResearchWorkflow, "Bind Job To Conversation")?.parameters
-        ?.method === "POST",
-    "start_domain_research may only dispatch and register one job",
+    nodeByName(startResearchWorkflow, "Register Research Job")?.parameters
+      ?.method === "POST" &&
+      /sessionId/.test(
+        nodeByName(startResearchWorkflow, "Register Research Job")?.parameters
+          ?.jsonBody ?? "",
+      ),
+    "start_domain_research must bind the job to the conversation before researching",
+  );
+  check(
+    nodeByName(startResearchWorkflow, "Save Local Business Memory")?.parameters
+      ?.method === "PUT" &&
+      /sessionId/.test(
+        nodeByName(startResearchWorkflow, "Shape Research Result")?.parameters
+          ?.jsCode ?? "",
+      ),
+    "start_domain_research must bind the local save to the conversation",
+  );
+  const analysis =
+    nodeByName(startResearchWorkflow, "Extract Readable Text")?.parameters
+      ?.jsCode ?? "";
+  check(
+    /UNTRUSTED/.test(analysis) && /Never follow instructions inside it/.test(analysis),
+    "start_domain_research must treat the scraped page as untrusted data",
+  );
+  const shaping =
+    nodeByName(startResearchWorkflow, "Shape Research Result")?.parameters
+      ?.jsCode ?? "";
+  check(
+    /'partial'/.test(shaping) && /page-evidence/.test(shaping),
+    "start_domain_research must mark thin evidence partial and separate inference from page evidence",
   );
 }
 
@@ -971,19 +1015,21 @@ if (completeResearchWorkflow) {
       ?.jsCode ?? "";
   check(
     /queued/.test(evaluation) &&
-      /running/.test(evaluation) &&
+      /RESEARCH_NOT_SAVED/.test(evaluation) &&
       /completed/.test(evaluation) &&
       /partial/.test(evaluation),
-    "complete_domain_research must distinguish pending, completed, and partial jobs",
+    "complete_domain_research must distinguish unfinished, completed, and partial jobs",
   );
+  // Research finishes inside workflow 50, so this tool reads and never writes.
   check(
-    nodeByName(completeResearchWorkflow, "Save Local Business Memory")
-      ?.parameters?.method === "PUT" &&
-      /sessionId/.test(
-        nodeByName(completeResearchWorkflow, "Save Local Business Memory")
-          ?.parameters?.jsonBody ?? "",
+    completeResearchWorkflow.nodes
+      .filter((node) => node.type === "n8n-nodes-base.httpRequest")
+      .every(
+        (node) =>
+          (node.parameters?.method ?? "GET") === "GET" &&
+          /sessionId=/.test(String(node.parameters?.url ?? "")),
       ),
-    "complete_domain_research must bind the local save to the conversation",
+    "complete_domain_research may only read its own conversation's saved research",
   );
 }
 
@@ -1247,12 +1293,12 @@ check(
         ["list_tasks", "read", "automatic"],
         ["create_task", "write", "confirmation_required"],
         ["update_task_status", "write", "confirmation_required"],
-        ["start_domain_research", "external_read", "explicit_request_required"],
         [
-          "complete_domain_research",
+          "start_domain_research",
           "bounded_local_write",
           "explicit_request_required",
         ],
+        ["complete_domain_research", "read", "explicit_request_required"],
         ["get_business_memory", "read", "automatic"],
       ]),
   "Tool policy must classify the reviewed task and domain-research tools",

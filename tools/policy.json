@@ -29,7 +29,7 @@
     },
     {
       "id": "start_domain_research",
-      "risk": "external_read",
+      "risk": "bounded_local_write",
       "available": true,
       "modelCallable": true,
       "mode": "explicit_request_required",
@@ -37,7 +37,7 @@
     },
     {
       "id": "complete_domain_research",
-      "risk": "bounded_local_write",
+      "risk": "read",
       "available": true,
       "modelCallable": true,
       "mode": "explicit_request_required",

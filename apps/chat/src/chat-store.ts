@@ -104,6 +104,15 @@ export interface BusinessMemoryRecord extends BusinessMemoryInput {
   updatedAt: string;
 }
 
+export interface DomainResearchJobRecord {
+  jobId: string;
+  sessionId: string;
+  domain: string;
+  status: "queued" | "completed" | "partial";
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface BusinessMemorySummary {
   jobId: string;
   status: "completed" | "partial";
@@ -938,6 +947,40 @@ export class ChatStore {
         )
         .run(jobId, sessionId, domain, timestamp, timestamp);
     });
+  }
+
+  getDomainResearchJob(
+    sessionId: string,
+    jobId: string,
+  ): DomainResearchJobRecord | undefined {
+    const row = this.database
+      .prepare(
+        `SELECT job_id, session_id, domain, status, created_at, updated_at
+         FROM domain_research_jobs
+         WHERE job_id = ?`,
+      )
+      .get(jobId) as
+      | {
+          job_id: string;
+          session_id: string;
+          domain: string;
+          status: DomainResearchJobRecord["status"];
+          created_at: string;
+          updated_at: string;
+        }
+      | undefined;
+    // A job is only visible to the conversation that registered it.
+    if (!row || row.session_id !== sessionId) {
+      return undefined;
+    }
+    return {
+      jobId: row.job_id,
+      sessionId: row.session_id,
+      domain: row.domain,
+      status: row.status,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    };
   }
 
   saveBusinessMemoryForJob(

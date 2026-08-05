@@ -117,17 +117,16 @@ When the n8n Overview appears, open `01 - START HERE - Learner Checklist`. Its f
 
 ![The five-step learner checklist inside n8n](docs/images/02-n8n-learner-checklist.png)
 
-### 5. Connect Claude, Content Factory, and publish the two entry points
+### 5. Connect Claude and publish the two entry points
 
 1. In n8n, open **Credentials**.
 2. Create an **Anthropic** credential named `Anthropic account`.
 3. Paste the API key into its **API Key** field and save.
-4. If you will use domain research, create an **HTTP Header Auth** credential named `Content Factory API`. Set the header name to `X-API-Key` and the value to the Content Factory `CONTENT_FACTORY_API_KEY`.
-5. Open `00 - START HERE - Project Partner`.
-6. Open **Claude - Sonnet 4.6**, select `Anthropic account`, and save.
-7. Open the Content Factory HTTP nodes in workflows `50` and `51`, select `Content Factory API`, and save them.
-8. Select **Publish**.
-9. Open `90 - DEBUG - Agent Health` and select **Publish**.
+4. Open `00 - START HERE - Project Partner`.
+5. Open **Claude - Sonnet 4.6**, select `Anthropic account`, and save.
+6. If you will use domain research, open `50 - TOOL - start_domain_research` and check that **Analyse With Claude** shows `Anthropic account`. Import matches it by name, so usually it is already selected. If it is empty, select it and save.
+7. Select **Publish**.
+8. Open `90 - DEBUG - Agent Health` and select **Publish**.
 
 The key stays in n8n's encrypted credential store. The browser and chat gateway never receive it.
 

@@ -73,6 +73,7 @@ type ErrorCode =
   | "MESSAGE_TOO_LONG"
   | "RATE_LIMITED"
   | "REQUEST_IN_PROGRESS"
+  | "RESEARCH_JOB_NOT_FOUND"
   | "TOO_MANY_DOCUMENTS"
   | "UNSUPPORTED_FILE_TYPE";
 
@@ -995,6 +996,40 @@ export function createChatHandler(options: ChatGatewayOptions): RequestListener 
 
       if (url.pathname === "/api/business-memory/jobs") {
         try {
+          if (request.method === "GET") {
+            const sessionId = validateSessionId(
+              url.searchParams.get("sessionId"),
+            );
+            const jobId = businessMemoryText(
+              url.searchParams.get("jobId"),
+              "job ID",
+              160,
+            );
+            if (!jobId) {
+              throw new PublicError(
+                400,
+                "INVALID_REQUEST",
+                "The research job has no job ID.",
+              );
+            }
+            const job = chatStore.getDomainResearchJob(sessionId, jobId);
+            if (job === undefined) {
+              throw new PublicError(
+                404,
+                "RESEARCH_JOB_NOT_FOUND",
+                "That research job is not registered to this conversation.",
+              );
+            }
+            const memory = job.status === "queued"
+              ? undefined
+              : chatStore.getBusinessMemory(job.domain);
+            sendJson(response, 200, {
+              schemaVersion: 1,
+              job,
+              ...(memory === undefined ? {} : { memory }),
+            });
+            return;
+          }
           if (request.method !== "POST") {
             sendJson(
               response,
@@ -1005,7 +1040,7 @@ export function createChatHandler(options: ChatGatewayOptions): RequestListener 
                   message: "That method is not supported.",
                 },
               },
-              { Allow: "POST" },
+              { Allow: "GET, POST" },
             );
             return;
           }

@@ -101,15 +101,15 @@ Never put this key in `.env`, `agent.config.js`, a workflow sticky note, a scree
 
 The key is encrypted using the private n8n encryption key generated during local setup. The browser chat and chat gateway never receive it.
 
-If domain research is enabled, add one more credential without putting its value in Git or a workflow export:
+If domain research is enabled, the same Anthropic credential does the analysis. No second service and no second key are needed:
 
-1. In n8n **Credentials**, create **HTTP Header Auth**.
-2. Name it `Content Factory API`.
-3. Set **Name** to `X-API-Key`.
-4. Set **Value** to the same secret configured as `CONTENT_FACTORY_API_KEY` in the locally running Content Factory.
-5. In workflows `50` and `51`, select this credential on each Content Factory HTTP node and save.
+1. Open `50 - TOOL - start_domain_research`.
+2. Select the **Analyse With Claude** node.
+3. Choose the `Anthropic account` credential and save.
 
-The reviewed workflows call Content Factory only at `http://127.0.0.1:8000` and the local chat gateway only at `http://127.0.0.1:3000`. If you intentionally changed either local port, update those reviewed node URLs before publishing.
+Domain research reads three destinations and nothing else: the researched domain's own public home page, the Anthropic API, and the local chat gateway at `http://127.0.0.1:3000`. If you intentionally changed the chat port, update those reviewed node URLs before publishing.
+
+Research finishes inside `start_domain_research`, which reads one public page, analyses it, and saves the result to local memory in a single call. Competitors that the page does not name are recorded as model inferences, and thin evidence is saved as `partial` with its warnings rather than padded out.
 
 ## 4. Inspect and publish the agent
 
