@@ -20,6 +20,8 @@ Use this skill when the user asks to scan, research, or refresh their own public
 
 ## Present completed research
 
+The chat window renders plain text, so Markdown tables, `#` headings, `**bold**` and `---` rules appear as raw characters. Write headings as short plain lines and lists with `-`. Never use a table.
+
 Use a compact, decision-useful structure:
 
 - Company overview and profile
