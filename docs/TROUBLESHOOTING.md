@@ -115,7 +115,7 @@ The browser intentionally does not show raw workflow errors or credentials.
 4. Run the import fallback again; the fixed workflow IDs prevent duplicate copies.
 5. Ask a technical helper to run `node scripts/local.mjs logs n8n`.
 
-First setup normally imports all eleven workflows automatically. The main agent, health workflow, learner checklist, and temporary setup workflows remain inactive until viewed, run manually, or deliberately published. The import helper publishes the six reviewed runtime dependencies automatically.
+First setup normally imports all fourteen workflows automatically. The main agent, health workflow, learner checklist, and temporary setup workflows remain inactive until viewed, run manually, or deliberately published. The import helper publishes the nine reviewed runtime dependencies automatically.
 
 ## Claude credential is missing or invalid
 

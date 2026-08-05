@@ -3,3 +3,9 @@ project-assistant
 meeting-analysis
 task-capture
 weekly-status
+my-business
+lead-conversion
+prospect-research
+deal-desk
+customer-support
+domain-research

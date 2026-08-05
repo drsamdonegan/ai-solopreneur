@@ -12,7 +12,7 @@ At the end of setup, three local services will be healthy:
 - The n8n editor at [http://localhost:5678](http://localhost:5678).
 - The internal document reader, which has no browser address.
 
-The eleven reviewed workflows, three sample tasks, and enabled Markdown skills
+The fourteen reviewed workflows, three sample tasks, and enabled Markdown skills
 will also be installed automatically. All three services run as background
 Node.js processes on this computer. Nothing is published to the internet.
 
@@ -100,7 +100,7 @@ The setup script:
 6. Installs the chat build tools and compiles the TypeScript gateway.
 7. Validates the committed workflow files.
 8. Starts n8n and the document reader, then waits for both to become healthy.
-9. Imports the eleven reviewed workflows when they are not already installed.
+9. Imports the fourteen reviewed workflows when they are not already installed.
 10. Creates the local tables and three missing sample tasks.
 11. Loads only the skills listed in `skills/enabled.txt`.
 12. Starts the chat app and confirms all three local health endpoints.

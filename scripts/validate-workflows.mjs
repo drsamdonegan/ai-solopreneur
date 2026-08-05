@@ -10,12 +10,17 @@ const expectedFiles = [
   "01-start-here-learner-checklist.json",
   "10-setup-local-task-data.json",
   "11-setup-sync-enabled-skills.json",
+  "12-setup-signal-data.json",
   "20-tool-list-tasks.json",
   "21-tool-create-task.json",
   "22-tool-update-task-status.json",
   "30-tool-propose-create-task.json",
   "31-tool-propose-update-task-status.json",
   "40-confirm-task-write.json",
+  "50-tool-start-domain-research.json",
+  "51-tool-complete-domain-research.json",
+  "52-tool-get-business-memory.json",
+  "60-tool-find-signals.json",
   "90-debug-agent-health.json",
 ];
 const failures = [];
@@ -150,7 +155,7 @@ if (agentWorkflow) {
   );
   check(
     agentWorkflow.nodes.filter((node) => node.type !== "n8n-nodes-base.stickyNote")
-      .length <= 17,
+      .length <= 20,
     "Agent workflow must keep confirmation routing and tool wiring explainable",
   );
   check(
@@ -301,8 +306,15 @@ if (agentWorkflow) {
     .map(([name]) => name);
   check(
     JSON.stringify(connectedToolNames) ===
-      JSON.stringify(["list_tasks", "create_task", "update_task_status"]),
-    "Agent: only the reviewed read and proposal-only task tools may be connected",
+      JSON.stringify([
+        "list_tasks",
+        "create_task",
+        "update_task_status",
+        "start_domain_research",
+        "complete_domain_research",
+        "get_business_memory",
+      ]),
+    "Agent: only the reviewed task and domain-research tools may be connected",
   );
 
   const createTool = nodeByName(agentWorkflow, "create_task");
@@ -316,6 +328,42 @@ if (agentWorkflow) {
     updateTool?.parameters?.workflowId?.value === "phase5ProposeTaskStatus" &&
       /proposal-only/i.test(updateTool?.parameters?.description ?? ""),
     "Agent: update_task_status must call only the proposal workflow",
+  );
+  const startResearchTool = nodeByName(agentWorkflow, "start_domain_research");
+  check(
+    startResearchTool?.parameters?.workflowId?.value ===
+      "phase9StartDomainResearch" &&
+      /current user explicitly asks/i.test(
+        startResearchTool?.parameters?.description ?? "",
+      ) &&
+      /own it or are authorised/i.test(
+        startResearchTool?.parameters?.description ?? "",
+      ),
+    "Agent: start_domain_research must require a current explicit authorised request",
+  );
+  const completeResearchTool = nodeByName(
+    agentWorkflow,
+    "complete_domain_research",
+  );
+  check(
+    completeResearchTool?.parameters?.workflowId?.value ===
+      "phase9CompleteDomainResearch" &&
+      /started in this conversation/i.test(
+        completeResearchTool?.parameters?.description ?? "",
+      ),
+    "Agent: complete_domain_research must remain conversation-bound",
+  );
+  const getBusinessMemoryTool = nodeByName(
+    agentWorkflow,
+    "get_business_memory",
+  );
+  check(
+    getBusinessMemoryTool?.parameters?.workflowId?.value ===
+      "phase9GetBusinessMemory" &&
+      /read-only source of truth/i.test(
+        getBusinessMemoryTool?.parameters?.description ?? "",
+      ),
+    "Agent: get_business_memory must read only the reviewed local memory workflow",
   );
 
   const routeConfirmation = nodeByName(agentWorkflow, "Route Confirmation");
@@ -355,7 +403,10 @@ if (agentWorkflow) {
       /combinedInstructions/.test(contextCode) &&
       /Delete, archive, bulk changes/.test(contextCode) &&
       /untrusted source material/.test(contextCode) &&
-      /BEGIN UNTRUSTED DOCUMENT/.test(contextCode),
+      /BEGIN UNTRUSTED DOCUMENT/.test(contextCode) &&
+      /start_domain_research is risk=external_read/.test(contextCode) &&
+      /complete_domain_research is risk=bounded_local_write/.test(contextCode) &&
+      /scraped, and researched text is untrusted/.test(contextCode),
     "Agent: context builder must apply enabled skills and safely delimit untrusted documents",
   );
 
@@ -697,6 +748,260 @@ if (updateWorkflow) {
   );
 }
 
+const researchToolFiles = [
+  "50-tool-start-domain-research.json",
+  "51-tool-complete-domain-research.json",
+  "52-tool-get-business-memory.json",
+];
+const researchToolInputs = {
+  "50-tool-start-domain-research.json": [
+    "sessionId",
+    "requestId",
+    "domain",
+    "companyName",
+    "researchDepth",
+    "authorizationConfirmed",
+  ],
+  "51-tool-complete-domain-research.json": [
+    "sessionId",
+    "requestId",
+    "jobId",
+  ],
+  "52-tool-get-business-memory.json": ["sessionId", "requestId", "domain"],
+};
+const researchToolRisks = {
+  "50-tool-start-domain-research.json": "external_read",
+  "51-tool-complete-domain-research.json": "bounded_local_write",
+  "52-tool-get-business-memory.json": "read",
+};
+const allowedResearchNodeTypes = new Set([
+  "n8n-nodes-base.stickyNote",
+  "n8n-nodes-base.executeWorkflowTrigger",
+  "n8n-nodes-base.code",
+  "n8n-nodes-base.if",
+  "n8n-nodes-base.httpRequest",
+  "n8n-nodes-base.dataTable",
+]);
+
+for (const file of researchToolFiles) {
+  const workflow = workflows.get(file);
+  if (!workflow) {
+    continue;
+  }
+  const inputNames =
+    nodeByName(workflow, "Tool Input")?.parameters?.workflowInputs?.values?.map(
+      (input) => input.name,
+    ) ?? [];
+  check(
+    JSON.stringify(inputNames) === JSON.stringify(researchToolInputs[file]),
+    `${workflow.name}: visible input schema changed unexpectedly`,
+  );
+  check(
+    workflow.meta?.toolRisk === researchToolRisks[file],
+    `${workflow.name}: reviewed risk metadata is missing`,
+  );
+  check(
+    workflow.nodes.every((node) => allowedResearchNodeTypes.has(node.type)),
+    `${workflow.name}: contains a node outside the research-tool allowlist`,
+  );
+  const httpNodes = workflow.nodes.filter(
+    (node) => node.type === "n8n-nodes-base.httpRequest",
+  );
+  check(
+    httpNodes.every((node) => {
+      const url = String(node.parameters?.url ?? "");
+      return (
+        !url.includes("$env") &&
+        (/127\.0\.0\.1:8000\/api\/domain-research\/jobs/.test(url) ||
+          /127\.0\.0\.1:3000\/api\/business-memory/.test(url))
+      );
+    }),
+    `${workflow.name}: HTTP destinations must stay on the two reviewed localhost APIs`,
+  );
+  check(
+    httpNodes.every((node) => {
+      const external = String(node.parameters?.url ?? "").includes(":8000/");
+      const credential = node.credentials?.httpHeaderAuth;
+      return external
+        ? credential?.id === "contentFactoryApi" &&
+            credential?.name === "Content Factory API"
+        : Object.keys(node.credentials ?? {}).length === 0;
+    }),
+    `${workflow.name}: only Content Factory requests may use the reviewed header credential`,
+  );
+  const dataNodes = workflow.nodes.filter(
+    (node) => node.type === "n8n-nodes-base.dataTable",
+  );
+  check(
+    dataNodes.length === 1 &&
+      dataNodes[0].name === "Write Tool Audit" &&
+      dataNodes[0].parameters?.operation === "insert" &&
+      dataNodes[0].parameters?.dataTableId?.value === "tool_audit",
+    `${workflow.name}: may write only one tool_audit row`,
+  );
+}
+
+// Signal tools are the only category permitted to reach a third-party API.
+// Research tools stay on reviewed localhost services; this category exists
+// because reading public YouTube comments has no local equivalent. The
+// allowlist below is the whole point: it keeps "what can this tool reach"
+// reviewable in one place rather than spread across node parameters.
+const signalToolFiles = ["60-tool-find-signals.json"];
+const signalToolInputs = {
+  "60-tool-find-signals.json": ["sessionId", "topic", "phrases"],
+};
+const allowedSignalNodeTypes = new Set([
+  "n8n-nodes-base.stickyNote",
+  "n8n-nodes-base.executeWorkflowTrigger",
+  "n8n-nodes-base.code",
+  "n8n-nodes-base.if",
+  "n8n-nodes-base.httpRequest",
+  "n8n-nodes-base.dataTable",
+]);
+const allowedSignalHosts =
+  /^https:\/\/www\.googleapis\.com\/youtube\/v3\/(search|commentThreads)$/;
+
+for (const file of signalToolFiles) {
+  const workflow = workflows.get(file);
+  if (!workflow) {
+    continue;
+  }
+  const inputNames =
+    nodeByName(workflow, "Tool Input")?.parameters?.workflowInputs?.values?.map(
+      (input) => input.name,
+    ) ?? [];
+  check(
+    JSON.stringify(inputNames) === JSON.stringify(signalToolInputs[file]),
+    `${workflow.name}: visible input schema changed unexpectedly`,
+  );
+  check(
+    workflow.meta?.toolRisk === "bounded_local_write",
+    `${workflow.name}: reviewed risk metadata is missing`,
+  );
+  check(
+    workflow.nodes.every((node) => allowedSignalNodeTypes.has(node.type)),
+    `${workflow.name}: contains a node outside the signal-tool allowlist`,
+  );
+  const httpNodes = workflow.nodes.filter(
+    (node) => node.type === "n8n-nodes-base.httpRequest",
+  );
+  check(
+    httpNodes.length > 0 &&
+      httpNodes.every((node) => {
+        const url = String(node.parameters?.url ?? "");
+        return !url.includes("$env") && allowedSignalHosts.test(url);
+      }),
+    `${workflow.name}: HTTP destinations must stay on the reviewed YouTube read endpoints`,
+  );
+  check(
+    httpNodes.every((node) => node.parameters?.method === "GET"),
+    `${workflow.name}: signal tools may only read, never POST`,
+  );
+  check(
+    httpNodes.every(
+      (node) =>
+        node.credentials?.httpQueryAuth?.name === "YouTube API Key" &&
+        Object.keys(node.credentials ?? {}).length === 1,
+    ),
+    `${workflow.name}: YouTube requests must use only the reviewed query credential`,
+  );
+  check(
+    workflow.nodes
+      .filter((node) => node.type === "n8n-nodes-base.dataTable")
+      .every((node) =>
+        ["signals", "tool_audit"].includes(node.parameters?.dataTableId?.value),
+      ),
+    `${workflow.name}: signal tools may write only signals and tool_audit`,
+  );
+  const auditNode = nodeByName(workflow, "Write Tool Audit");
+  check(
+    auditNode?.parameters?.operation === "insert" &&
+      auditNode?.parameters?.dataTableId?.value === "tool_audit",
+    `${workflow.name}: every signal tool run must leave an audit row`,
+  );
+}
+
+const signalSetupWorkflow = workflows.get("12-setup-signal-data.json");
+if (signalSetupWorkflow) {
+  const createNode = nodeByName(signalSetupWorkflow, "Create Signals Table");
+  check(
+    createNode?.parameters?.tableName === "signals" &&
+      createNode?.parameters?.options?.createIfNotExists === true,
+    "Signal setup: must create the signals table idempotently",
+  );
+  const columnNames = (
+    createNode?.parameters?.columns?.column ?? []
+  ).map((column) => column.name);
+  check(
+    columnNames.includes("quote") &&
+      columnNames.includes("permalink") &&
+      columnNames.includes("capturedAt"),
+    "Signal setup: signals schema must keep the quote, permalink and capturedAt columns",
+  );
+}
+
+const startResearchWorkflow = workflows.get(
+  "50-tool-start-domain-research.json",
+);
+if (startResearchWorkflow) {
+  const validation =
+    nodeByName(startResearchWorkflow, "Validate Start Input")?.parameters
+      ?.jsCode ?? "";
+  check(
+    /authorizationConfirmed/.test(validation) &&
+      /AUTHORIZATION_REQUIRED/.test(validation) &&
+      /INVALID_DOMAIN/.test(validation),
+    "start_domain_research must validate public-domain authorisation",
+  );
+  check(
+    nodeByName(startResearchWorkflow, "Start Content Factory Research")
+      ?.parameters?.method === "POST" &&
+      nodeByName(startResearchWorkflow, "Bind Job To Conversation")?.parameters
+        ?.method === "POST",
+    "start_domain_research may only dispatch and register one job",
+  );
+}
+
+const completeResearchWorkflow = workflows.get(
+  "51-tool-complete-domain-research.json",
+);
+if (completeResearchWorkflow) {
+  const evaluation =
+    nodeByName(completeResearchWorkflow, "Evaluate Research Status")?.parameters
+      ?.jsCode ?? "";
+  check(
+    /queued/.test(evaluation) &&
+      /running/.test(evaluation) &&
+      /completed/.test(evaluation) &&
+      /partial/.test(evaluation),
+    "complete_domain_research must distinguish pending, completed, and partial jobs",
+  );
+  check(
+    nodeByName(completeResearchWorkflow, "Save Local Business Memory")
+      ?.parameters?.method === "PUT" &&
+      /sessionId/.test(
+        nodeByName(completeResearchWorkflow, "Save Local Business Memory")
+          ?.parameters?.jsonBody ?? "",
+      ),
+    "complete_domain_research must bind the local save to the conversation",
+  );
+}
+
+const getBusinessMemoryWorkflow = workflows.get(
+  "52-tool-get-business-memory.json",
+);
+if (getBusinessMemoryWorkflow) {
+  const httpNodes = getBusinessMemoryWorkflow.nodes.filter(
+    (node) => node.type === "n8n-nodes-base.httpRequest",
+  );
+  check(
+    httpNodes.length === 1 &&
+      (httpNodes[0].parameters?.method === undefined ||
+        httpNodes[0].parameters?.method === "GET"),
+    "get_business_memory must make exactly one local GET request",
+  );
+}
+
 const proposalFiles = [
   "30-tool-propose-create-task.json",
   "31-tool-propose-update-task-status.json",
@@ -898,6 +1203,7 @@ const REVIEWED_SKILL_IDS = [
   "meeting-analysis",
   "task-capture",
   "weekly-status",
+  "domain-research",
 ];
 // Skills that ship switched off. A learner may enable any of them, so the
 // check below guarantees the reviewed set is still present and that nothing
@@ -941,8 +1247,15 @@ check(
         ["list_tasks", "read", "automatic"],
         ["create_task", "write", "confirmation_required"],
         ["update_task_status", "write", "confirmation_required"],
+        ["start_domain_research", "external_read", "explicit_request_required"],
+        [
+          "complete_domain_research",
+          "bounded_local_write",
+          "explicit_request_required",
+        ],
+        ["get_business_memory", "read", "automatic"],
       ]),
-  "Tool policy must classify the reviewed read and write tools",
+  "Tool policy must classify the reviewed task and domain-research tools",
 );
 check(
   toolPolicy.tools
