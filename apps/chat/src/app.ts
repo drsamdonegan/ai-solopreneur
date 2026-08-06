@@ -24,6 +24,7 @@ import {
 } from "./documents.js";
 import {
   ChatStore,
+  type BusinessMemoryInput,
   type HistoryMessage,
   type StoredAttachment,
 } from "./chat-store.js";
@@ -33,6 +34,7 @@ const MAX_MESSAGE_LENGTH = 8_000;
 // A saved picture is base64 inside the JSON body, so this endpoint alone needs
 // more room than the 64 KB used by every other request.
 const MAX_PROFILE_REQUEST_BYTES = 512 * 1_024;
+const MAX_BUSINESS_MEMORY_REQUEST_BYTES = 256 * 1_024;
 const MAX_REQUEST_BYTES = 65_536;
 const MAX_UPSTREAM_BYTES = 65_536;
 const UUID_PATTERN =
@@ -59,6 +61,7 @@ type ErrorCode =
   | "AGENT_ERROR"
   | "AGENT_TIMEOUT"
   | "AGENT_UNAVAILABLE"
+  | "BUSINESS_MEMORY_ERROR"
   | "CHAT_HISTORY_ERROR"
   | "CONVERSATION_NOT_FOUND"
   | "DOCUMENT_ERROR"
@@ -70,6 +73,7 @@ type ErrorCode =
   | "MESSAGE_TOO_LONG"
   | "RATE_LIMITED"
   | "REQUEST_IN_PROGRESS"
+  | "RESEARCH_JOB_NOT_FOUND"
   | "TOO_MANY_DOCUMENTS"
   | "UNSUPPORTED_FILE_TYPE";
 
@@ -289,6 +293,132 @@ function validateChatRequest(
     message,
     documentIds: rawDocumentIds,
   };
+}
+
+function businessMemoryText(
+  value: unknown,
+  field: string,
+  maximumLength: number,
+): string {
+  if (typeof value !== "string" || value.length > maximumLength) {
+    throw new PublicError(
+      400,
+      "INVALID_REQUEST",
+      `The saved research has an invalid ${field}.`,
+    );
+  }
+  return value.trim();
+}
+
+function businessMemoryObject(
+  value: unknown,
+  field: string,
+): Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new PublicError(
+      400,
+      "INVALID_REQUEST",
+      `The saved research has an invalid ${field}.`,
+    );
+  }
+  return value as Record<string, unknown>;
+}
+
+function businessMemoryObjectArray(
+  value: unknown,
+  field: string,
+  maximumItems: number,
+): Array<Record<string, unknown>> {
+  if (
+    !Array.isArray(value) ||
+    value.length > maximumItems ||
+    !value.every(
+      (item) => typeof item === "object" && item !== null && !Array.isArray(item),
+    )
+  ) {
+    throw new PublicError(
+      400,
+      "INVALID_REQUEST",
+      `The saved research has an invalid ${field}.`,
+    );
+  }
+  return value as Array<Record<string, unknown>>;
+}
+
+function businessMemoryStringArray(
+  value: unknown,
+  field: string,
+  maximumItems: number,
+  maximumItemLength: number,
+): string[] {
+  if (
+    !Array.isArray(value) ||
+    value.length > maximumItems ||
+    !value.every((item) => typeof item === "string" && item.length <= maximumItemLength)
+  ) {
+    throw new PublicError(
+      400,
+      "INVALID_REQUEST",
+      `The saved research has an invalid ${field}.`,
+    );
+  }
+  return value.map((item) => item.trim()).filter(Boolean);
+}
+
+function validateBusinessDomain(value: unknown): string {
+  if (typeof value !== "string") {
+    throw new PublicError(400, "INVALID_REQUEST", "The saved research has an invalid domain.");
+  }
+  const domain = value.trim().toLowerCase().replace(/\.$/, "").replace(/^www\./, "");
+  const labels = domain.split(".");
+  if (
+    domain.length > 253 ||
+    labels.length < 2 ||
+    labels.some((label) => !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label)) ||
+    /^(?:\d{1,3}\.){3}\d{1,3}$/.test(domain) ||
+    ["local", "internal", "localhost", "home", "lan"].includes(labels.at(-1) ?? "")
+  ) {
+    throw new PublicError(400, "INVALID_REQUEST", "The saved research has an invalid domain.");
+  }
+  return domain;
+}
+
+function validateBusinessMemory(body: unknown): BusinessMemoryInput {
+  const candidate = businessMemoryObject(body, "payload");
+  if (candidate.schemaVersion !== 1) {
+    throw new PublicError(400, "INVALID_REQUEST", "The saved research schema is not supported.");
+  }
+  if (candidate.status !== "completed" && candidate.status !== "partial") {
+    throw new PublicError(400, "INVALID_REQUEST", "Only completed research can be saved.");
+  }
+  const competitors = businessMemoryObject(candidate.competitors, "competitors");
+  const input: BusinessMemoryInput = {
+    schemaVersion: 1,
+    jobId: businessMemoryText(candidate.jobId, "job ID", 160),
+    status: candidate.status,
+    domain: validateBusinessDomain(candidate.domain),
+    companyOverview: businessMemoryText(candidate.companyOverview, "company overview", 60_000),
+    profile: businessMemoryObject(candidate.profile, "company profile"),
+    competitors: {
+      direct: businessMemoryObjectArray(competitors.direct, "direct competitors", 20),
+      seo: businessMemoryObjectArray(competitors.seo, "SEO competitors", 20),
+      adjacent: businessMemoryObjectArray(competitors.adjacent, "adjacent organizations", 20),
+    },
+    seedKeywords: businessMemoryStringArray(candidate.seedKeywords, "seed keywords", 100, 300),
+    keywordCandidates: businessMemoryObjectArray(candidate.keywordCandidates, "keyword candidates", 160),
+    keywordGroups: businessMemoryObjectArray(candidate.keywordGroups, "keyword groups", 20),
+    sources: businessMemoryObjectArray(candidate.sources, "sources", 60),
+    warnings: businessMemoryStringArray(candidate.warnings, "warnings", 40, 2_000),
+    researchSummary: businessMemoryText(candidate.researchSummary, "research summary", 20_000),
+    evidenceQuality: businessMemoryObject(candidate.evidenceQuality, "evidence quality"),
+  };
+  if (typeof candidate.researchedAt === "string" && !Number.isNaN(Date.parse(candidate.researchedAt))) {
+    input.researchedAt = new Date(candidate.researchedAt).toISOString();
+  }
+  if (!input.jobId) {
+    throw new PublicError(400, "INVALID_REQUEST", "The saved research has no job ID.");
+  }
+  return input;
 }
 
 interface UploadedFile {
@@ -857,6 +987,144 @@ export function createChatHandler(options: ChatGatewayOptions): RequestListener 
                 500,
                 "AGENT_ERROR",
                 "Your agent details could not be saved.",
+              ),
+            );
+          }
+        }
+        return;
+      }
+
+      if (url.pathname === "/api/business-memory/jobs") {
+        try {
+          if (request.method === "GET") {
+            const sessionId = validateSessionId(
+              url.searchParams.get("sessionId"),
+            );
+            const jobId = businessMemoryText(
+              url.searchParams.get("jobId"),
+              "job ID",
+              160,
+            );
+            if (!jobId) {
+              throw new PublicError(
+                400,
+                "INVALID_REQUEST",
+                "The research job has no job ID.",
+              );
+            }
+            const job = chatStore.getDomainResearchJob(sessionId, jobId);
+            if (job === undefined) {
+              throw new PublicError(
+                404,
+                "RESEARCH_JOB_NOT_FOUND",
+                "That research job is not registered to this conversation.",
+              );
+            }
+            const memory = job.status === "queued"
+              ? undefined
+              : chatStore.getBusinessMemory(job.domain);
+            sendJson(response, 200, {
+              schemaVersion: 1,
+              job,
+              ...(memory === undefined ? {} : { memory }),
+            });
+            return;
+          }
+          if (request.method !== "POST") {
+            sendJson(
+              response,
+              405,
+              {
+                error: {
+                  code: "INVALID_REQUEST",
+                  message: "That method is not supported.",
+                },
+              },
+              { Allow: "GET, POST" },
+            );
+            return;
+          }
+          const candidate = businessMemoryObject(
+            await readRequestBody(request),
+            "job registration",
+          );
+          const sessionId = validateSessionId(candidate.sessionId);
+          const jobId = businessMemoryText(candidate.jobId, "job ID", 160);
+          const domain = validateBusinessDomain(candidate.domain);
+          if (!jobId) {
+            throw new PublicError(400, "INVALID_REQUEST", "The research job has no job ID.");
+          }
+          chatStore.registerDomainResearchJob(sessionId, jobId, domain);
+          sendJson(response, 201, {
+            schemaVersion: 1,
+            job: { jobId, sessionId, domain, status: "queued" },
+          });
+        } catch (error) {
+          if (error instanceof PublicError) {
+            sendError(response, error);
+          } else {
+            options.logError?.("Could not register the business research job", error);
+            sendError(
+              response,
+              new PublicError(
+                409,
+                "BUSINESS_MEMORY_ERROR",
+                "That research job could not be linked to this conversation.",
+              ),
+            );
+          }
+        }
+        return;
+      }
+
+      if (url.pathname === "/api/business-memory") {
+        try {
+          if (request.method === "GET") {
+            const requestedDomain = url.searchParams.get("domain");
+            const memories = requestedDomain === null
+              ? chatStore.listBusinessMemorySummaries(50)
+              : [chatStore.getBusinessMemory(validateBusinessDomain(requestedDomain))].filter(
+                  (memory) => memory !== undefined,
+                );
+            sendJson(response, 200, { schemaVersion: 1, memories });
+            return;
+          }
+          if (request.method === "PUT") {
+            const body = await readRequestBody(
+              request,
+              MAX_BUSINESS_MEMORY_REQUEST_BYTES,
+            );
+            const candidate = businessMemoryObject(body, "payload");
+            const sessionId = validateSessionId(candidate.sessionId);
+            const memory = chatStore.saveBusinessMemoryForJob(
+              sessionId,
+              validateBusinessMemory(candidate),
+            );
+            sendJson(response, 200, { schemaVersion: 1, memory });
+            return;
+          }
+          sendJson(
+            response,
+            405,
+            {
+              error: {
+                code: "INVALID_REQUEST",
+                message: "That method is not supported.",
+              },
+            },
+            { Allow: "GET, PUT" },
+          );
+        } catch (error) {
+          if (error instanceof PublicError) {
+            sendError(response, error);
+          } else {
+            options.logError?.("Could not access saved business research", error);
+            sendError(
+              response,
+              new PublicError(
+                500,
+                "BUSINESS_MEMORY_ERROR",
+                "Saved business research is not available right now.",
               ),
             );
           }

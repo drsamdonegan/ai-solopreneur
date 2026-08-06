@@ -124,8 +124,9 @@ When the n8n Overview appears, open `01 - START HERE - Learner Checklist`. Its f
 3. Paste the API key into its **API Key** field and save.
 4. Open `00 - START HERE - Project Partner`.
 5. Open **Claude - Sonnet 4.6**, select `Anthropic account`, and save.
-6. Select **Publish**.
-7. Open `90 - DEBUG - Agent Health` and select **Publish**.
+6. If you will use domain research, open `50 - TOOL - start_domain_research` and check that **Analyse With Claude** shows `Anthropic account`. Import matches it by name, so usually it is already selected. If it is empty, select it and save.
+7. Select **Publish**.
+8. Open `90 - DEBUG - Agent Health` and select **Publish**.
 
 The key stays in n8n's encrypted credential store. The browser and chat gateway never receive it.
 

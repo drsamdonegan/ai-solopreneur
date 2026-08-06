@@ -14,9 +14,12 @@ This directory contains portable workflow exports for the local AI agent.
 | `workflows/30-tool-propose-create-task.json` | Model-facing create proposal with no task-table mutation |
 | `workflows/31-tool-propose-update-task-status.json` | Model-facing status proposal with no task-table mutation |
 | `workflows/40-confirm-task-write.json` | Enforces exact session binding, expiry, supersession, and single-use before a write |
+| `workflows/50-tool-start-domain-research.json` | Starts authorised public-domain research and binds its job ID to the current conversation |
+| `workflows/51-tool-complete-domain-research.json` | Reports what one conversation-bound research job saved, without researching again |
+| `workflows/52-tool-get-business-memory.json` | Reads saved company, competitor, keyword, source, and warning data from local memory |
 | `workflows/90-debug-agent-health.json` | Exposes a safe local health response without secrets |
 
-The workflow exports contain a credential reference named `Anthropic account`, but no API key. After import, create or select a real Anthropic credential inside n8n.
+The workflow exports contain a credential reference named `Anthropic account`, but no API keys. After import, create or select the real credential inside n8n. Workflows `00` and `50` each need it selected once.
 
 Use the repository import script rather than editing JSON by hand:
 

@@ -1,0 +1,286 @@
+{
+  "name": "51 - TOOL - complete_domain_research",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Report a saved research job\nReads one conversation-bound research job from local business memory and reports exactly what was saved for it. Research itself finishes inside `start_domain_research`, so this tool never crawls, never calls a model, and never fills a gap.\n\nA job that was registered but never saved is reported as unfinished, not as a result.",
+        "height": 260,
+        "width": 560,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-680, -300],
+      "id": "95100000-0000-4000-8000-000000000001",
+      "name": "Completion tool explanation"
+    },
+    {
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "sessionId",
+              "type": "string"
+            },
+            {
+              "name": "requestId",
+              "type": "string"
+            },
+            {
+              "name": "jobId",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [-540, 20],
+      "id": "95100000-0000-4000-8000-000000000002",
+      "name": "Tool Input"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const sessionId = typeof $json.sessionId === 'string' ? $json.sessionId.trim() : '';\nconst requestId = typeof $json.requestId === 'string' ? $json.requestId.trim() : '';\nconst jobId = typeof $json.jobId === 'string' ? $json.jobId.trim() : '';\nconst uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;\nlet error = null;\nif (!uuidPattern.test(sessionId) || !uuidPattern.test(requestId)) error = { code: 'INVALID_SESSION', message: 'The research check needs a valid conversation and request ID.' };\nelse if (!/^[A-Za-z0-9:_-]{1,160}$/.test(jobId)) error = { code: 'INVALID_JOB_ID', message: 'Use the exact job ID returned when domain research started.' };\nconst proposedInput = { sessionId, requestId, jobId };\nreturn { json: { valid: error === null, ...proposedInput, proposedInput, ...(error ? { response: { ok: false, error } } : {}) } };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-300, 20],
+      "id": "95100000-0000-4000-8000-000000000003",
+      "name": "Validate Completion Input"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "95100000-0000-4000-8000-000000000004",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [-60, 20],
+      "id": "95100000-0000-4000-8000-000000000005",
+      "name": "Input Is Valid?"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ 'http://127.0.0.1:3000/api/business-memory/jobs?sessionId=' + encodeURIComponent($('Validate Completion Input').item.json.sessionId) + '&jobId=' + encodeURIComponent($('Validate Completion Input').item.json.jobId) }}",
+        "options": {
+          "timeout": 10000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [200, -60],
+      "id": "95100000-0000-4000-8000-000000000006",
+      "name": "Read Saved Research Job",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const input = $('Validate Completion Input').first().json;\nconst statusCode = Number($json.statusCode ?? 0);\n// n8n puts text responses on `data` and parsed JSON on `body`; accept either.\nconst body = $json.body ?? $json.data ?? {};\nconst job = body.job ?? {};\nconst memory = body.memory;\n\n// Research now finishes inside start_domain_research, so a job is either saved\n// or it never got that far. Nothing here may invent a result.\nlet response;\nif (statusCode === 404) {\n  response = { ok: false, jobId: input.jobId, error: { code: 'RESEARCH_JOB_NOT_FOUND', message: 'No research job with that ID belongs to this conversation. Check the ID, or start the research again.' } };\n} else if (statusCode < 200 || statusCode >= 300) {\n  response = { ok: false, jobId: input.jobId, error: { code: 'RESEARCH_STATUS_FAILED', message: String(body?.error?.message ?? 'The research job could not be read.') } };\n} else if (job.jobId !== input.jobId) {\n  response = { ok: false, jobId: input.jobId, error: { code: 'RESEARCH_STATUS_FAILED', message: 'The research job could not be matched to this conversation.' } };\n} else if (['completed', 'partial'].includes(String(job.status)) && memory && memory.domain === job.domain) {\n  response = { ok: true, jobId: job.jobId, domain: job.domain, status: String(job.status), saved: true, researchedAt: String(memory.researchedAt ?? ''), memory,\n    message: job.status === 'partial'\n      ? 'This research was saved as partial. Report its warnings and thin evidence rather than filling the gaps.'\n      : 'This research was saved to local business memory.' };\n} else if (String(job.status) === 'queued') {\n  // Registered but never saved: start_domain_research failed after registering.\n  response = { ok: false, jobId: job.jobId, domain: job.domain, status: 'queued', saved: false, error: { code: 'RESEARCH_NOT_SAVED', message: 'That research job was registered but no findings were ever saved, so the run did not finish. Start the research again.' } };\n} else {\n  response = { ok: false, jobId: input.jobId, status: String(job.status ?? 'unknown'), saved: false, error: { code: 'RESEARCH_NOT_SAVED', message: 'That research job has no saved findings. Nothing can be reported for it.' } };\n}\nreturn { json: { ...input, job, response } };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, -60],
+      "id": "95100000-0000-4000-8000-000000000007",
+      "name": "Evaluate Research Status"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const input = $('Validate Completion Input').first().json;\nconst response = $json.response ?? { ok: false, error: { code: 'RESEARCH_STATUS_FAILED', message: 'The research job could not be checked.' } };\nreturn { json: { occurredAt: new Date().toISOString(), sessionId: input.sessionId, requestId: input.requestId, toolName: 'complete_domain_research', proposedInput: JSON.stringify(input.proposedInput ?? {}), result: JSON.stringify(response), error: response.ok === false ? String(response.error?.message ?? 'Tool failed') : '', response } };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [940, 20],
+      "id": "95100000-0000-4000-8000-000000000012",
+      "name": "Prepare Audit"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "value": "tool_audit",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "occurredAt": "={{ $json.occurredAt }}",
+            "sessionId": "={{ $json.sessionId }}",
+            "requestId": "={{ $json.requestId }}",
+            "toolName": "={{ $json.toolName }}",
+            "proposedInput": "={{ $json.proposedInput }}",
+            "result": "={{ $json.result }}",
+            "error": "={{ $json.error }}"
+          },
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [1180, 20],
+      "id": "95100000-0000-4000-8000-000000000013",
+      "name": "Write Tool Audit",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const prepared = $('Prepare Audit').item.json;\nconst response = { ...prepared.response };\nif (!Number.isInteger($json.id)) response.auditWarning = 'The tool result could not be written to the local audit table.';\nreturn { json: response };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1420, 20],
+      "id": "95100000-0000-4000-8000-000000000014",
+      "name": "Return Tool Result"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Tool Input": {
+      "main": [
+        [
+          {
+            "node": "Validate Completion Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Completion Input": {
+      "main": [
+        [
+          {
+            "node": "Input Is Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Input Is Valid?": {
+      "main": [
+        [
+          {
+            "node": "Read Saved Research Job",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Saved Research Job": {
+      "main": [
+        [
+          {
+            "node": "Evaluate Research Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate Research Status": {
+      "main": [
+        [
+          {
+            "node": "Prepare Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Audit": {
+      "main": [
+        [
+          {
+            "node": "Write Tool Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Tool Audit": {
+      "main": [
+        [
+          {
+            "node": "Return Tool Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "executionTimeout": 30,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true
+  },
+  "versionId": "95100000-0000-4000-8000-000000000100",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "phase": 9,
+    "testedWithN8n": "2.30.5",
+    "toolRisk": "read",
+    "authorization": "explicit-current-user-request",
+    "localWrite": "none",
+    "reads": "conversation-bound-saved-research-only"
+  },
+  "id": "phase9CompleteDomainResearch",
+  "tags": []
+}

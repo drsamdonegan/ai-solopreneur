@@ -10,6 +10,7 @@ At the end of this guide:
 - The browser chat will send messages through n8n to Claude.
 - Each browser conversation will have separate, restart-safe local memory.
 - Local tables will contain three starter tasks and the enabled skill bundle.
+- An authorised public-domain scan can save company, competitor, and keyword research to local SQLite memory.
 - Creating or updating a task will require an exact, expiring confirmation.
 - A second, credential-free workflow will provide a safe local health check.
 
@@ -29,7 +30,7 @@ Anthropic API access is billed separately from a Claude web-chat subscription. T
 
 ## 1. Confirm the automatic workflow import
 
-The repository includes eleven reviewed workflow exports. First setup imports them automatically, so learners do not need to build nodes from a blank canvas.
+The repository includes fourteen reviewed workflow exports. First setup imports them automatically, so learners do not need to build nodes from a blank canvas.
 
 Refresh the n8n Overview. If `01 - START HERE - Learner Checklist` appears, continue to step 2.
 
@@ -45,9 +46,9 @@ If macOS blocks it, Control-click the file, choose **Open**, then confirm.
 
 Double-click `import-workflows-windows.cmd`.
 
-The fallback opens a terminal, checks the workflows and Markdown skills, starts n8n if needed, and imports all eleven workflows. It briefly enables localhost-only setup endpoints to create local tables and sync enabled skills, then immediately removes both endpoints. It publishes the reviewed runtime subworkflows but does not publish the main agent, health workflow, or an API key.
+The fallback opens a terminal, checks the workflows and Markdown skills, starts n8n if needed, and imports all fourteen workflows. It briefly enables localhost-only setup endpoints to create local tables and sync enabled skills, then immediately removes both endpoints. It publishes the reviewed runtime subworkflows but does not publish the main agent, health workflow, or an API key.
 
-Refresh the n8n Overview. All eleven workflows should appear:
+Refresh the n8n Overview. All fourteen workflows should appear:
 
 - `00 - START HERE - Project Partner`
 - `01 - START HERE - Learner Checklist`
@@ -59,9 +60,12 @@ Refresh the n8n Overview. All eleven workflows should appear:
 - `30 - TOOL - Propose create_task`
 - `31 - TOOL - Propose update_task_status`
 - `40 - CONFIRM - Task Write`
+- `50 - TOOL - start_domain_research`
+- `51 - TOOL - complete_domain_research`
+- `52 - TOOL - get_business_memory`
 - `90 - DEBUG - Agent Health`
 
-The six runtime dependencies—read tool, two proposal tools, confirmation dispatcher, and two write workers—are published automatically. The write workers are callable only by workflow `40`; no AI Tool node points to them. The main agent, health workflow, and two temporary setup workflows remain inactive drafts. The learner checklist is an inactive visual guide that can be opened or run manually.
+The nine runtime dependencies—task read tool, two proposal tools, confirmation dispatcher, two task write workers, and three domain-research tools—are published automatically. The task write workers are callable only by workflow `40`; no AI Tool node points to them. The main agent, health workflow, and two temporary setup workflows remain inactive drafts. The learner checklist is an inactive visual guide that can be opened or run manually.
 
 Open **Data tables** in n8n:
 
@@ -97,6 +101,16 @@ Never put this key in `.env`, `agent.config.js`, a workflow sticky note, a scree
 
 The key is encrypted using the private n8n encryption key generated during local setup. The browser chat and chat gateway never receive it.
 
+If domain research is enabled, the same Anthropic credential does the analysis. No second service and no second key are needed:
+
+1. Open `50 - TOOL - start_domain_research`.
+2. Select the **Analyse With Claude** node.
+3. Choose the `Anthropic account` credential and save.
+
+Domain research reads three destinations and nothing else: the researched domain's own public home page, the Anthropic API, and the local chat gateway at `http://127.0.0.1:3000`. If you intentionally changed the chat port, update those reviewed node URLs before publishing.
+
+Research finishes inside `start_domain_research`, which reads one public page, analyses it, and saves the result to local memory in a single call. Competitors that the page does not name are recorded as model inferences, and thin evidence is saved as `partial` with its warnings rather than padded out.
+
 ## 4. Inspect and publish the agent
 
 Open `00 - START HERE - Project Partner`. The sticky notes describe the read, proposal, and confirmation paths.
@@ -114,6 +128,9 @@ Open `00 - START HERE - Project Partner`. The sticky notes describe the read, pr
 | **list_tasks** | Retrieves task facts through the reviewed read-only subworkflow |
 | **create_task** | Validates and stores a five-minute create proposal without changing tasks |
 | **update_task_status** | Validates and stores a five-minute status proposal without changing tasks |
+| **start_domain_research** | Starts one explicitly authorised public-domain research job and binds it to this conversation |
+| **complete_domain_research** | Checks that bound job and saves only completed or partial results to local SQLite memory |
+| **get_business_memory** | Reads saved company, competitor, keyword, source, and warning facts |
 | **Confirm Stored Action** | Calls the deterministic confirmation workflow before either write worker |
 | **Return Agent Reply** | Returns only `sessionId`, `reply`, and `runId` |
 | **Return Invalid Request** | Returns a safe 400 or 413 response without calling Claude |

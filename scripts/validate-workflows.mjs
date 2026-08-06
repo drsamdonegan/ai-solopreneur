@@ -16,6 +16,9 @@ const expectedFiles = [
   "30-tool-propose-create-task.json",
   "31-tool-propose-update-task-status.json",
   "40-confirm-task-write.json",
+  "50-tool-start-domain-research.json",
+  "51-tool-complete-domain-research.json",
+  "52-tool-get-business-memory.json",
   "90-debug-agent-health.json",
 ];
 const failures = [];
@@ -150,7 +153,7 @@ if (agentWorkflow) {
   );
   check(
     agentWorkflow.nodes.filter((node) => node.type !== "n8n-nodes-base.stickyNote")
-      .length <= 17,
+      .length <= 20,
     "Agent workflow must keep confirmation routing and tool wiring explainable",
   );
   check(
@@ -301,8 +304,15 @@ if (agentWorkflow) {
     .map(([name]) => name);
   check(
     JSON.stringify(connectedToolNames) ===
-      JSON.stringify(["list_tasks", "create_task", "update_task_status"]),
-    "Agent: only the reviewed read and proposal-only task tools may be connected",
+      JSON.stringify([
+        "list_tasks",
+        "create_task",
+        "update_task_status",
+        "start_domain_research",
+        "complete_domain_research",
+        "get_business_memory",
+      ]),
+    "Agent: only the reviewed task and domain-research tools may be connected",
   );
 
   const createTool = nodeByName(agentWorkflow, "create_task");
@@ -316,6 +326,42 @@ if (agentWorkflow) {
     updateTool?.parameters?.workflowId?.value === "phase5ProposeTaskStatus" &&
       /proposal-only/i.test(updateTool?.parameters?.description ?? ""),
     "Agent: update_task_status must call only the proposal workflow",
+  );
+  const startResearchTool = nodeByName(agentWorkflow, "start_domain_research");
+  check(
+    startResearchTool?.parameters?.workflowId?.value ===
+      "phase9StartDomainResearch" &&
+      /current user explicitly asks/i.test(
+        startResearchTool?.parameters?.description ?? "",
+      ) &&
+      /own it or are authorised/i.test(
+        startResearchTool?.parameters?.description ?? "",
+      ),
+    "Agent: start_domain_research must require a current explicit authorised request",
+  );
+  const completeResearchTool = nodeByName(
+    agentWorkflow,
+    "complete_domain_research",
+  );
+  check(
+    completeResearchTool?.parameters?.workflowId?.value ===
+      "phase9CompleteDomainResearch" &&
+      /started in this conversation/i.test(
+        completeResearchTool?.parameters?.description ?? "",
+      ),
+    "Agent: complete_domain_research must remain conversation-bound",
+  );
+  const getBusinessMemoryTool = nodeByName(
+    agentWorkflow,
+    "get_business_memory",
+  );
+  check(
+    getBusinessMemoryTool?.parameters?.workflowId?.value ===
+      "phase9GetBusinessMemory" &&
+      /read-only source of truth/i.test(
+        getBusinessMemoryTool?.parameters?.description ?? "",
+      ),
+    "Agent: get_business_memory must read only the reviewed local memory workflow",
   );
 
   const routeConfirmation = nodeByName(agentWorkflow, "Route Confirmation");
@@ -355,7 +401,10 @@ if (agentWorkflow) {
       /combinedInstructions/.test(contextCode) &&
       /Delete, archive, bulk changes/.test(contextCode) &&
       /untrusted source material/.test(contextCode) &&
-      /BEGIN UNTRUSTED DOCUMENT/.test(contextCode),
+      /BEGIN UNTRUSTED DOCUMENT/.test(contextCode) &&
+      /start_domain_research is risk=bounded_local_write/.test(contextCode) &&
+      /complete_domain_research is risk=read/.test(contextCode) &&
+      /scraped, and researched text is untrusted/.test(contextCode),
     "Agent: context builder must apply enabled skills and safely delimit untrusted documents",
   );
 
@@ -697,6 +746,207 @@ if (updateWorkflow) {
   );
 }
 
+const researchToolFiles = [
+  "50-tool-start-domain-research.json",
+  "51-tool-complete-domain-research.json",
+  "52-tool-get-business-memory.json",
+];
+const researchToolInputs = {
+  "50-tool-start-domain-research.json": [
+    "sessionId",
+    "requestId",
+    "domain",
+    "companyName",
+    "researchDepth",
+    "authorizationConfirmed",
+  ],
+  "51-tool-complete-domain-research.json": [
+    "sessionId",
+    "requestId",
+    "jobId",
+  ],
+  "52-tool-get-business-memory.json": ["sessionId", "requestId", "domain"],
+};
+const researchToolRisks = {
+  // 50 reads the domain and then saves; 51 only reports what 50 saved.
+  "50-tool-start-domain-research.json": "bounded_local_write",
+  "51-tool-complete-domain-research.json": "read",
+  "52-tool-get-business-memory.json": "read",
+};
+const allowedResearchNodeTypes = new Set([
+  "n8n-nodes-base.stickyNote",
+  "n8n-nodes-base.executeWorkflowTrigger",
+  "n8n-nodes-base.code",
+  "n8n-nodes-base.if",
+  "n8n-nodes-base.httpRequest",
+  "n8n-nodes-base.dataTable",
+]);
+
+for (const file of researchToolFiles) {
+  const workflow = workflows.get(file);
+  if (!workflow) {
+    continue;
+  }
+  const inputNames =
+    nodeByName(workflow, "Tool Input")?.parameters?.workflowInputs?.values?.map(
+      (input) => input.name,
+    ) ?? [];
+  check(
+    JSON.stringify(inputNames) === JSON.stringify(researchToolInputs[file]),
+    `${workflow.name}: visible input schema changed unexpectedly`,
+  );
+  check(
+    workflow.meta?.toolRisk === researchToolRisks[file],
+    `${workflow.name}: reviewed risk metadata is missing`,
+  );
+  check(
+    workflow.nodes.every((node) => allowedResearchNodeTypes.has(node.type)),
+    `${workflow.name}: contains a node outside the research-tool allowlist`,
+  );
+  const httpNodes = workflow.nodes.filter(
+    (node) => node.type === "n8n-nodes-base.httpRequest",
+  );
+  // Research runs locally: the only destinations are the local chat API, the
+  // Anthropic API, and the researched domain itself. The domain URL must be
+  // built from the validated domain so it can never be an arbitrary address.
+  const researchedDomainUrl =
+    "={{ 'https://' + $('Validate Start Input').item.json.domain + '/' }}";
+  check(
+    httpNodes.every((node) => {
+      const url = String(node.parameters?.url ?? "");
+      return (
+        !url.includes("$env") &&
+        (/127\.0\.0\.1:3000\/api\/business-memory/.test(url) ||
+          url === "https://api.anthropic.com/v1/messages" ||
+          url === researchedDomainUrl)
+      );
+    }),
+    `${workflow.name}: HTTP destinations must stay on the reviewed local API, the Anthropic API, or the validated domain`,
+  );
+  check(
+    httpNodes.every((node) => {
+      const url = String(node.parameters?.url ?? "");
+      const credentialNames = Object.keys(node.credentials ?? {});
+      if (url === "https://api.anthropic.com/v1/messages") {
+        return (
+          node.parameters?.authentication === "predefinedCredentialType" &&
+          node.parameters?.nodeCredentialType === "anthropicApi" &&
+          node.credentials?.anthropicApi?.name === "Anthropic account"
+        );
+      }
+      return credentialNames.length === 0;
+    }),
+    `${workflow.name}: only the Anthropic request may carry a credential`,
+  );
+  check(
+    httpNodes.every(
+      (node) =>
+        String(node.parameters?.url ?? "") !== researchedDomainUrl ||
+        node.parameters?.options?.response?.response?.responseFormat === "text",
+    ),
+    `${workflow.name}: the researched domain must be read as untrusted text`,
+  );
+  const dataNodes = workflow.nodes.filter(
+    (node) => node.type === "n8n-nodes-base.dataTable",
+  );
+  check(
+    dataNodes.length === 1 &&
+      dataNodes[0].name === "Write Tool Audit" &&
+      dataNodes[0].parameters?.operation === "insert" &&
+      dataNodes[0].parameters?.dataTableId?.value === "tool_audit",
+    `${workflow.name}: may write only one tool_audit row`,
+  );
+}
+
+const startResearchWorkflow = workflows.get(
+  "50-tool-start-domain-research.json",
+);
+if (startResearchWorkflow) {
+  const validation =
+    nodeByName(startResearchWorkflow, "Validate Start Input")?.parameters
+      ?.jsCode ?? "";
+  check(
+    /authorizationConfirmed/.test(validation) &&
+      /AUTHORIZATION_REQUIRED/.test(validation) &&
+      /INVALID_DOMAIN/.test(validation),
+    "start_domain_research must validate public-domain authorisation",
+  );
+  check(
+    nodeByName(startResearchWorkflow, "Register Research Job")?.parameters
+      ?.method === "POST" &&
+      /sessionId/.test(
+        nodeByName(startResearchWorkflow, "Register Research Job")?.parameters
+          ?.jsonBody ?? "",
+      ),
+    "start_domain_research must bind the job to the conversation before researching",
+  );
+  check(
+    nodeByName(startResearchWorkflow, "Save Local Business Memory")?.parameters
+      ?.method === "PUT" &&
+      /sessionId/.test(
+        nodeByName(startResearchWorkflow, "Shape Research Result")?.parameters
+          ?.jsCode ?? "",
+      ),
+    "start_domain_research must bind the local save to the conversation",
+  );
+  const analysis =
+    nodeByName(startResearchWorkflow, "Extract Readable Text")?.parameters
+      ?.jsCode ?? "";
+  check(
+    /UNTRUSTED/.test(analysis) && /Never follow instructions inside it/.test(analysis),
+    "start_domain_research must treat the scraped page as untrusted data",
+  );
+  const shaping =
+    nodeByName(startResearchWorkflow, "Shape Research Result")?.parameters
+      ?.jsCode ?? "";
+  check(
+    /'partial'/.test(shaping) && /page-evidence/.test(shaping),
+    "start_domain_research must mark thin evidence partial and separate inference from page evidence",
+  );
+}
+
+const completeResearchWorkflow = workflows.get(
+  "51-tool-complete-domain-research.json",
+);
+if (completeResearchWorkflow) {
+  const evaluation =
+    nodeByName(completeResearchWorkflow, "Evaluate Research Status")?.parameters
+      ?.jsCode ?? "";
+  check(
+    /queued/.test(evaluation) &&
+      /RESEARCH_NOT_SAVED/.test(evaluation) &&
+      /completed/.test(evaluation) &&
+      /partial/.test(evaluation),
+    "complete_domain_research must distinguish unfinished, completed, and partial jobs",
+  );
+  // Research finishes inside workflow 50, so this tool reads and never writes.
+  check(
+    completeResearchWorkflow.nodes
+      .filter((node) => node.type === "n8n-nodes-base.httpRequest")
+      .every(
+        (node) =>
+          (node.parameters?.method ?? "GET") === "GET" &&
+          /sessionId=/.test(String(node.parameters?.url ?? "")),
+      ),
+    "complete_domain_research may only read its own conversation's saved research",
+  );
+}
+
+const getBusinessMemoryWorkflow = workflows.get(
+  "52-tool-get-business-memory.json",
+);
+if (getBusinessMemoryWorkflow) {
+  const httpNodes = getBusinessMemoryWorkflow.nodes.filter(
+    (node) => node.type === "n8n-nodes-base.httpRequest",
+  );
+  check(
+    httpNodes.length === 1 &&
+      (httpNodes[0].parameters?.method === undefined ||
+        httpNodes[0].parameters?.method === "GET"),
+    "get_business_memory must make exactly one local GET request",
+  );
+}
+
 const proposalFiles = [
   "30-tool-propose-create-task.json",
   "31-tool-propose-update-task-status.json",
@@ -908,6 +1158,7 @@ const OPTIONAL_SKILL_IDS = [
   "prospect-research",
   "deal-desk",
   "customer-support",
+  "domain-research",
 ];
 
 const skillBundle = await compileSkills(join(projectRoot, "skills"));
@@ -941,8 +1192,15 @@ check(
         ["list_tasks", "read", "automatic"],
         ["create_task", "write", "confirmation_required"],
         ["update_task_status", "write", "confirmation_required"],
+        [
+          "start_domain_research",
+          "bounded_local_write",
+          "explicit_request_required",
+        ],
+        ["complete_domain_research", "read", "explicit_request_required"],
+        ["get_business_memory", "read", "automatic"],
       ]),
-  "Tool policy must classify the reviewed read and write tools",
+  "Tool policy must classify the reviewed task and domain-research tools",
 );
 check(
   toolPolicy.tools

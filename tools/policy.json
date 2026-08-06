@@ -28,6 +28,30 @@
       "executionWorkflowId": "phase4UpdateTaskStatus"
     },
     {
+      "id": "start_domain_research",
+      "risk": "bounded_local_write",
+      "available": true,
+      "modelCallable": true,
+      "mode": "explicit_request_required",
+      "workflowId": "phase9StartDomainResearch"
+    },
+    {
+      "id": "complete_domain_research",
+      "risk": "read",
+      "available": true,
+      "modelCallable": true,
+      "mode": "explicit_request_required",
+      "workflowId": "phase9CompleteDomainResearch"
+    },
+    {
+      "id": "get_business_memory",
+      "risk": "read",
+      "available": true,
+      "modelCallable": true,
+      "mode": "automatic",
+      "workflowId": "phase9GetBusinessMemory"
+    },
+    {
       "id": "delete_task",
       "risk": "destructive",
       "available": false,

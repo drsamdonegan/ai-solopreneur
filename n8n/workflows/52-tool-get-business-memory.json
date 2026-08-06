@@ -1,0 +1,177 @@
+{
+  "name": "52 - TOOL - get_business_memory",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Read local business memory\nReads only the SQLite-backed business research exposed by the local chat gateway. With no domain it returns the most recently updated saved domains; with a domain it returns that domain only.",
+        "height": 240,
+        "width": 540,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-640, -280],
+      "id": "95200000-0000-4000-8000-000000000001",
+      "name": "Memory tool explanation"
+    },
+    {
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            { "name": "sessionId", "type": "string" },
+            { "name": "requestId", "type": "string" },
+            { "name": "domain", "type": "string" }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [-500, 20],
+      "id": "95200000-0000-4000-8000-000000000002",
+      "name": "Tool Input"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const sessionId = typeof $json.sessionId === 'string' ? $json.sessionId.trim() : '';\nconst requestId = typeof $json.requestId === 'string' ? $json.requestId.trim() : '';\nconst rawDomain = typeof $json.domain === 'string' ? $json.domain.trim() : '';\nconst uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;\nlet domain = '';\nlet error = null;\nif (!uuidPattern.test(sessionId) || !uuidPattern.test(requestId)) {\n  error = { code: 'INVALID_SESSION', message: 'The memory request needs a valid conversation and request ID.' };\n}\nif (!error && rawDomain) {\n  // n8n Code nodes run in a vm sandbox that has no URL global, so the host is\n  // parsed with string operations only. The URL constructor throws a\n  // ReferenceError here, which a catch block reports as an invalid domain.\n  let host = rawDomain.toLowerCase();\n  const schemeMatch = host.match(/^([a-z][a-z0-9+.-]*):\\/\\//);\n  if (schemeMatch) {\n    host = ['http', 'https'].includes(schemeMatch[1]) ? host.slice(schemeMatch[0].length) : '';\n  }\n  host = host.split('/')[0].split('?')[0].split('#')[0];\n  const portMatch = host.match(/^(.*):([0-9]*)$/);\n  if (portMatch) {\n    host = portMatch[1];\n  }\n  host = host.replace(/\\.$/, '').replace(/^www\\./, '');\n  const labels = host.split('.');\n  if (host === '' || host.length > 253 || host.includes('@') || host.includes('[') || host.includes(']') || host.includes(' ') || labels.length < 2 || labels.some((label) => !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label))) {\n    error = { code: 'INVALID_DOMAIN', message: 'Use a complete saved business domain such as example.com.' };\n  } else {\n    domain = host;\n  }\n}\nconst proposedInput = { sessionId, requestId, domain };\nreturn { json: { valid: error === null, ...proposedInput, proposedInput, ...(error ? { response: { ok: false, error } } : {}) } };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-260, 20],
+      "id": "95200000-0000-4000-8000-000000000003",
+      "name": "Validate Memory Input"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 3 },
+          "conditions": [
+            {
+              "id": "95200000-0000-4000-8000-000000000004",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": "",
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [-20, 20],
+      "id": "95200000-0000-4000-8000-000000000005",
+      "name": "Input Is Valid?"
+    },
+    {
+      "parameters": {
+        "url": "={{ 'http://127.0.0.1:3000/api/business-memory' + ($('Validate Memory Input').item.json.domain ? '?domain=' + encodeURIComponent($('Validate Memory Input').item.json.domain) : '') }}",
+        "options": { "timeout": 10000 }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [240, -60],
+      "id": "95200000-0000-4000-8000-000000000006",
+      "name": "Read Local Business Memory",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const input = $('Validate Memory Input').first().json;\nconst memories = Array.isArray($json.memories) ? $json.memories : null;\nconst response = memories\n  ? { ok: true, domain: input.domain || null, count: memories.length, memories, message: memories.length ? 'Saved business research loaded from local memory.' : 'No saved business research was found for that domain.' }\n  : { ok: false, error: { code: 'BUSINESS_MEMORY_UNAVAILABLE', message: String($json.error?.message ?? 'Saved business research is not available right now.') } };\nreturn { json: { ...input, response } };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [500, -60],
+      "id": "95200000-0000-4000-8000-000000000007",
+      "name": "Shape Memory Result"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const input = $('Validate Memory Input').first().json;\nconst response = $json.response ?? { ok: false, error: { code: 'BUSINESS_MEMORY_UNAVAILABLE', message: 'Saved business research is not available right now.' } };\nreturn { json: { occurredAt: new Date().toISOString(), sessionId: input.sessionId, requestId: input.requestId, toolName: 'get_business_memory', proposedInput: JSON.stringify(input.proposedInput ?? {}), result: JSON.stringify(response), error: response.ok === false ? String(response.error?.message ?? 'Tool failed') : '', response } };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [760, 20],
+      "id": "95200000-0000-4000-8000-000000000008",
+      "name": "Prepare Audit"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": { "__rl": true, "value": "tool_audit", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "occurredAt": "={{ $json.occurredAt }}",
+            "sessionId": "={{ $json.sessionId }}",
+            "requestId": "={{ $json.requestId }}",
+            "toolName": "={{ $json.toolName }}",
+            "proposedInput": "={{ $json.proposedInput }}",
+            "result": "={{ $json.result }}",
+            "error": "={{ $json.error }}"
+          },
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [1000, 20],
+      "id": "95200000-0000-4000-8000-000000000009",
+      "name": "Write Tool Audit",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const prepared = $('Prepare Audit').item.json;\nconst response = { ...prepared.response };\nif (!Number.isInteger($json.id)) response.auditWarning = 'The tool result could not be written to the local audit table.';\nreturn { json: response };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1240, 20],
+      "id": "95200000-0000-4000-8000-000000000010",
+      "name": "Return Tool Result"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Tool Input": { "main": [[{ "node": "Validate Memory Input", "type": "main", "index": 0 }]] },
+    "Validate Memory Input": { "main": [[{ "node": "Input Is Valid?", "type": "main", "index": 0 }]] },
+    "Input Is Valid?": { "main": [[{ "node": "Read Local Business Memory", "type": "main", "index": 0 }], [{ "node": "Prepare Audit", "type": "main", "index": 0 }]] },
+    "Read Local Business Memory": { "main": [[{ "node": "Shape Memory Result", "type": "main", "index": 0 }]] },
+    "Shape Memory Result": { "main": [[{ "node": "Prepare Audit", "type": "main", "index": 0 }]] },
+    "Prepare Audit": { "main": [[{ "node": "Write Tool Audit", "type": "main", "index": 0 }]] },
+    "Write Tool Audit": { "main": [[{ "node": "Return Tool Result", "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "executionTimeout": 30,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true
+  },
+  "versionId": "95200000-0000-4000-8000-000000000100",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "phase": 9,
+    "testedWithN8n": "2.30.5",
+    "toolRisk": "read",
+    "authorization": "automatic-current-context-read",
+    "dataSource": "local-sqlite-business-memory"
+  },
+  "id": "phase9GetBusinessMemory",
+  "tags": []
+}

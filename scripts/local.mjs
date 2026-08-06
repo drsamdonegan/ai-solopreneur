@@ -111,6 +111,9 @@ const workflowIds = {
     "phase5ProposeCreateTask",
     "phase5ProposeTaskStatus",
     "phase5ConfirmTaskWrite",
+    "phase9StartDomainResearch",
+    "phase9CompleteDomainResearch",
+    "phase9GetBusinessMemory",
   ],
 };
 
@@ -125,6 +128,9 @@ const exportedWorkflowFiles = [
   ["phase5ProposeCreateTask", "30-tool-propose-create-task.json"],
   ["phase5ProposeTaskStatus", "31-tool-propose-update-task-status.json"],
   ["phase5ConfirmTaskWrite", "40-confirm-task-write.json"],
+  ["phase9StartDomainResearch", "50-tool-start-domain-research.json"],
+  ["phase9CompleteDomainResearch", "51-tool-complete-domain-research.json"],
+  ["phase9GetBusinessMemory", "52-tool-get-business-memory.json"],
   ["phase3AgentHealth", "90-debug-agent-health.json"],
 ];
 
