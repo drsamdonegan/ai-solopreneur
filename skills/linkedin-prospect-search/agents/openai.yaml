@@ -1,0 +1,4 @@
+interface:
+  display_name: "LinkedIn Prospect Search"
+  short_description: "Build filtered public professional prospect lists"
+  default_prompt: "Use $linkedin-prospect-search to find public professional prospects matching my industry, location, role, and company-size filters."
