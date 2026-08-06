@@ -490,7 +490,7 @@ if (skillSyncWorkflow) {
   check(
     /schemaVersion/.test(bundleValidation) &&
       /enabledSkills/.test(bundleValidation) &&
-      /combinedInstructions\.length > 24000/.test(bundleValidation) &&
+      /combinedInstructions\.length > 200000/.test(bundleValidation) &&
       /\[a-f0-9\]\{64\}/.test(bundleValidation),
     "Skill sync: bundle metadata, size, and source hash must be validated",
   );
@@ -908,6 +908,7 @@ const OPTIONAL_SKILL_IDS = [
   "prospect-research",
   "deal-desk",
   "customer-support",
+  "linkedin-profile-lookup",
 ];
 
 const skillBundle = await compileSkills(join(projectRoot, "skills"));
@@ -923,7 +924,7 @@ check(
   "Enabled skill list must contain only reviewed or shipped optional skills",
 );
 check(
-  skillBundle.combinedInstructions.length <= 24_000 &&
+  skillBundle.combinedInstructions.length <= 200_000 &&
     /^[a-f0-9]{64}$/.test(skillBundle.sourceHash),
   "Compiled skill bundle must remain bounded and content-addressed",
 );

@@ -1,16 +1,60 @@
 ---
 name: linkedin-profile-lookup
-description: Find and summarize the most likely public LinkedIn profile for one named person using a connected, approved professional-data lookup tool. Use when the user supplies a name or business email plus optional city, state, country, or industry and asks to identify, verify, enrich, research, or summarize that person's professional profile.
+description: Find and summarize the most likely public LinkedIn profile for one named person using a connected, approved professional-data lookup tool. Use whenever the user asks to find, look up, identify, verify, enrich, research, or summarize someone's LinkedIn or professional profile, including bare requests such as "find me this person's LinkedIn" or "get me their LinkedIn data" that arrive with no details yet. Details are not a precondition: when they are missing, ask for them first.
 ---
 
 # LinkedIn Profile Lookup
 
 Identify one person's likely public professional profile without pretending that a weak match is certain. Use the connected `lookup_linkedin_profile` tool; this skill does not itself grant internet or LinkedIn access.
 
+## Ask for the details first
+
+Most requests arrive as a plain sentence with nothing to search on, such as "find
+me this person's LinkedIn" or "can you get me their LinkedIn data". Treat that as
+a request to use this skill. Do not require the user to name the skill, supply
+fields, or know what a field is.
+
+Settle the connection question in your **first** reply, before the user hands
+over anything about another person.
+
+- If `lookup_linkedin_profile` is not in your available tools, say so plainly in
+  that first reply and offer the fallback below. Do not ask for a name, an email,
+  or any other detail: never collect personal information for a search that
+  cannot run.
+- If you are not certain the tool is available, say so in the *same* message as
+  your questions — "I'll need a few details, and I should flag that live lookup
+  needs a connected provider" — so the user can decide before answering.
+- Never discover the tool is missing only after the user has supplied someone's
+  name and email. Finding out late is the failure this rule exists to prevent.
+
+When the tool is connected, ask for the missing details in **one short, friendly
+message in everyday language**. Ask for all of them at once rather than one at a
+time, and never show field names, JSON, or a form:
+
+- **First and last name** — required. No search can run without it.
+- **Work email** — optional, but the single most useful extra. Say "work email":
+  the company domain is strong employer evidence, while a personal Gmail,
+  Outlook, or iCloud address adds nothing to the match. Never press for it.
+- **Where they are based** — optional: city, state or province, country.
+- **Their industry or current employer** — optional.
+
+Always ask for at least one detail beyond the name. A name on its own cannot
+produce a confident result: it earns at most 60 of the 100 match points, below
+the threshold for even a medium-confidence answer, so the lookup can only come
+back ambiguous. Explain that in plain terms — one extra detail is the difference
+between a real answer and a list of strangers who share a name.
+
+Then wait for the reply. Do not invent, guess, or fill in a missing value, and do
+not run the lookup on a name alone unless the user has been told it will likely
+be inconclusive and has asked to try regardless.
+
+If the user supplied everything needed in their first message, skip the questions
+and go straight to the lookup.
+
 ## Check the capability
 
-- Require a full name or a business email. Prefer both.
 - Accept `email_address`, `full_name`, `country_region`, `state_province`, `city_location`, and `industry`.
+- A full name is required. An email address alone cannot drive a search, because the people-search helper has no email parameter; email-only matching needs a separately approved reverse-email lookup.
 - Treat location and industry as supporting evidence, not proof of identity.
 - If `lookup_linkedin_profile` is unavailable, say that an approved provider connection is required. Ask the user to paste the public profile text or URL as a no-lookup fallback.
 - Never claim to have searched, scraped, or opened LinkedIn when the connected tool did not return data.

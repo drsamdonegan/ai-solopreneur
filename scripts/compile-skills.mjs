@@ -6,6 +6,11 @@ import { fileURLToPath } from "node:url";
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const defaultSkillsDirectory = resolve(scriptDirectory, "..", "skills");
 const allowedMetadataKeys = new Set(["id", "name", "version", "description"]);
+// A runaway guard, not a design budget. Enabling every skill in the repo stays
+// far below this, so adding a skill never has to mean removing one. The same
+// number is enforced in n8n/workflows/11-setup-sync-enabled-skills.json; change
+// both together or sync fails after compile succeeds.
+const maxCombinedInstructions = 200_000;
 
 function parseScalar(value, location) {
   const trimmed = value.trim();
@@ -140,8 +145,10 @@ export async function compileSkills(skillsDirectory = defaultSkillsDirectory) {
     ),
   ].join("\n\n");
 
-  if (combinedInstructions.length > 24_000) {
-    throw new Error("Combined enabled skill instructions exceed 24,000 characters");
+  if (combinedInstructions.length > maxCombinedInstructions) {
+    throw new Error(
+      `Combined enabled skill instructions exceed ${maxCombinedInstructions} characters`,
+    );
   }
 
   const canonical = JSON.stringify({
