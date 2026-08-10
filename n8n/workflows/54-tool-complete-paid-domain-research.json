@@ -1,0 +1,311 @@
+{
+  "name": "54 - TOOL - complete_paid_domain_research",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Read one saved paid research attempt\nUses an exact conversation-bound job ID. It performs no provider call and no research, and preserves failed or partial status honestly.",
+        "height": 220,
+        "width": 540,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -620,
+        -260
+      ],
+      "id": "a1200000-0000-4000-8000-000000000001",
+      "name": "Completion tool explanation"
+    },
+    {
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "sessionId",
+              "type": "string"
+            },
+            {
+              "name": "requestId",
+              "type": "string"
+            },
+            {
+              "name": "jobId",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -500,
+        20
+      ],
+      "id": "a1200000-0000-4000-8000-000000000002",
+      "name": "Tool Input"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const sessionId=typeof $json.sessionId==='string'?$json.sessionId.trim():'',requestId=typeof $json.requestId==='string'?$json.requestId.trim():'',jobId=typeof $json.jobId==='string'?$json.jobId.trim():'',uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;\nlet error=null;if(!uuid.test(sessionId)||!uuid.test(requestId))error={code:'INVALID_SESSION',message:'The paid research lookup needs a valid conversation and request ID.'};else if(!/^paid-[a-z0-9-]{6,150}$/i.test(jobId))error={code:'INVALID_JOB_ID',message:'Use the exact paid research job ID returned when this conversation started the run.'};\nconst proposedInput={sessionId,requestId,jobId};return{json:{valid:error===null,...proposedInput,proposedInput,...(error?{response:{ok:false,error}}:{})}};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -260,
+        20
+      ],
+      "id": "a1200000-0000-4000-8000-000000000003",
+      "name": "Validate Completion Input"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "a1200000-0000-4000-8000-000000000004c",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -20,
+        20
+      ],
+      "id": "a1200000-0000-4000-8000-000000000004",
+      "name": "Input Is Valid?"
+    },
+    {
+      "parameters": {
+        "url": "={{ 'http://127.0.0.1:3000/api/paid-domain-research?sessionId=' + encodeURIComponent($('Validate Completion Input').item.json.sessionId) + '&jobId=' + encodeURIComponent($('Validate Completion Input').item.json.jobId) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        220,
+        -60
+      ],
+      "id": "a1200000-0000-4000-8000-000000000006",
+      "name": "Read Saved Paid Attempt",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const input=$('Validate Completion Input').first().json,s=$json.snapshot,response=s&&s.jobId===input.jobId?{ok:true,jobId:s.jobId,domain:s.domain,status:s.status,researchDepth:s.researchDepth,locationCode:s.locationCode,languageCode:s.languageCode,actualCostUsd:s.actualCostUsd,costLimitUsd:s.costLimitUsd,capturedAt:s.capturedAt,componentStatus:s.componentStatus,warnings:s.warnings,snapshot:s,message:s.status==='failed'?'The saved attempt failed; no findings were invented and successful memory was not replaced.':'The saved paid domain research attempt was loaded. success, no_results, failed, unavailable, and skipped remain distinct.'}:{ok:false,error:{code:'PAID_RESEARCH_NOT_FOUND',message:String($json.error?.message??'No saved paid research attempt with that job ID belongs to this conversation.')}};return{json:{...input,response}};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        20
+      ],
+      "id": "a1200000-0000-4000-8000-000000000007",
+      "name": "Shape Completion Result"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const i=$('Validate Completion Input').first().json,r=$json.response??{ok:false,error:{code:'PAID_RESEARCH_UNAVAILABLE',message:'Saved paid research is unavailable.'}};return{json:{occurredAt:new Date().toISOString(),sessionId:i.sessionId,requestId:i.requestId,toolName:'complete_paid_domain_research',proposedInput:JSON.stringify(i.proposedInput??{}),result:JSON.stringify(r),error:r.ok===false?String(r.error?.message??'Tool failed'):'',response:r}};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        700,
+        20
+      ],
+      "id": "a1200000-0000-4000-8000-000000000008",
+      "name": "Prepare Audit"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "value": "tool_audit",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "occurredAt": "={{ $json.occurredAt }}",
+            "sessionId": "={{ $json.sessionId }}",
+            "requestId": "={{ $json.requestId }}",
+            "toolName": "={{ $json.toolName }}",
+            "proposedInput": "={{ $json.proposedInput }}",
+            "result": "={{ $json.result }}",
+            "error": "={{ $json.error }}"
+          },
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        940,
+        20
+      ],
+      "id": "a1200000-0000-4000-8000-000000000009",
+      "name": "Write Tool Audit",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const p=$('Prepare Audit').item.json,r={...p.response};if(!Number.isInteger($json.id))r.auditWarning='The read could not be written to the local audit table.';return{json:r};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1180,
+        20
+      ],
+      "id": "a1200000-0000-4000-8000-000000000010",
+      "name": "Return Tool Result"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Tool Input": {
+      "main": [
+        [
+          {
+            "node": "Validate Completion Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Completion Input": {
+      "main": [
+        [
+          {
+            "node": "Input Is Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Input Is Valid?": {
+      "main": [
+        [
+          {
+            "node": "Read Saved Paid Attempt",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Saved Paid Attempt": {
+      "main": [
+        [
+          {
+            "node": "Shape Completion Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shape Completion Result": {
+      "main": [
+        [
+          {
+            "node": "Prepare Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Audit": {
+      "main": [
+        [
+          {
+            "node": "Write Tool Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Tool Audit": {
+      "main": [
+        [
+          {
+            "node": "Return Tool Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "executionTimeout": 30,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true
+  },
+  "versionId": "a1200000-0000-4000-8000-000000000100",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "phase": 11,
+    "testedWithN8n": "2.30.5",
+    "toolRisk": "read",
+    "authorization": "exact-job-id-bound-to-current-conversation",
+    "dataSource": "local-sqlite-seo-snapshots",
+    "paidCalls": "none"
+  },
+  "id": "phase11CompletePaidDomainResearch",
+  "tags": [
+    {
+      "id": "tagAgentCanDo",
+      "name": "What your agent can do"
+    }
+  ]
+}

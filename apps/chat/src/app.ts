@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { lookup } from "node:dns";
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import {
@@ -8,6 +9,8 @@ import {
   type Server,
   type ServerResponse,
 } from "node:http";
+import { request as httpsRequest } from "node:https";
+import { isIP, type LookupFunction } from "node:net";
 import { basename, extname, resolve, sep } from "node:path";
 import Busboy from "busboy";
 import {
@@ -26,6 +29,8 @@ import {
   ChatStore,
   type BusinessMemoryInput,
   type HistoryMessage,
+  type PaidComponentStatus,
+  type SeoSnapshotInput,
   type StoredAttachment,
 } from "./chat-store.js";
 import { ProfileStore, ProfileValidationError } from "./profile.js";
@@ -35,6 +40,8 @@ const MAX_MESSAGE_LENGTH = 8_000;
 // more room than the 64 KB used by every other request.
 const MAX_PROFILE_REQUEST_BYTES = 512 * 1_024;
 const MAX_BUSINESS_MEMORY_REQUEST_BYTES = 256 * 1_024;
+const MAX_PAID_RESEARCH_REQUEST_BYTES = 1_024 * 1_024;
+const MAX_PUBLIC_PAGE_BYTES = 512 * 1_024;
 const MAX_REQUEST_BYTES = 65_536;
 const MAX_UPSTREAM_BYTES = 65_536;
 const UUID_PATTERN =
@@ -383,6 +390,175 @@ function validateBusinessDomain(value: unknown): string {
   return domain;
 }
 
+function isPublicIpAddress(address: string): boolean {
+  const family = isIP(address);
+  if (family === 4) {
+    const octets = address.split(".").map(Number);
+    const a = octets[0] ?? -1;
+    const b = octets[1] ?? -1;
+    const c = octets[2] ?? -1;
+    return !(
+      a === 0 ||
+      a === 10 ||
+      a === 127 ||
+      (a === 100 && b >= 64 && b <= 127) ||
+      (a === 169 && b === 254) ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 0 && c === 0) ||
+      (a === 192 && b === 0 && c === 2) ||
+      (a === 192 && b === 168) ||
+      (a === 198 && (b === 18 || b === 19)) ||
+      (a === 198 && b === 51 && c === 100) ||
+      (a === 203 && b === 0 && c === 113) ||
+      a >= 224
+    );
+  }
+  if (family === 6) {
+    const normalised = address.toLowerCase();
+    // Permit only global unicast IPv6 and exclude the documentation prefix.
+    return /^[23]/.test(normalised) && !normalised.startsWith("2001:db8:");
+  }
+  return false;
+}
+
+interface PublicDomainPage {
+  url: string;
+  statusCode: number;
+  text: string;
+  truncated: boolean;
+}
+
+async function fetchPublicDomainPage(domain: string): Promise<PublicDomainPage> {
+  const safeLookup: LookupFunction = (hostname, options, callback) => {
+    lookup(hostname, { all: true, verbatim: true }, (error, addresses) => {
+      if (error) {
+        callback(error, "", 0);
+        return;
+      }
+      const requestedFamily = Number(options.family ?? 0);
+      // Reject mixed public/private answers instead of selecting the safe-looking one.
+      if (addresses.length === 0 || addresses.some((entry) => !isPublicIpAddress(entry.address))) {
+        const lookupError = new Error("Domain resolved to a non-public address") as NodeJS.ErrnoException;
+        lookupError.code = "ENETUNREACH";
+        callback(lookupError, "", 0);
+        return;
+      }
+      const compatible = addresses.filter(
+        (entry) => requestedFamily === 0 || entry.family === requestedFamily,
+      );
+      if (compatible.length === 0) {
+        callback(new Error("Domain has no usable public address"), "", 0);
+        return;
+      }
+      if (options.all) {
+        callback(null, compatible);
+      } else {
+        const selected = compatible[0];
+        if (selected === undefined) {
+          callback(new Error("Domain has no usable public address"), "", 0);
+          return;
+        }
+        callback(null, selected.address, selected.family);
+      }
+    });
+  };
+
+  const readOnce = async (url: URL): Promise<{
+    statusCode: number;
+    location?: string;
+    text: string;
+    truncated: boolean;
+  }> => await new Promise((resolvePage, rejectPage) => {
+    const request = httpsRequest(
+      url,
+      {
+        method: "GET",
+        headers: {
+          Accept: "text/html,application/xhtml+xml,text/plain;q=0.8",
+          "User-Agent": "AI-Solopreneur-Domain-Research/1.0",
+        },
+        lookup: safeLookup,
+        timeout: 15_000,
+      },
+      (upstream) => {
+        const statusCode = upstream.statusCode ?? 0;
+        const location = upstream.headers.location;
+        if ([301, 302, 303, 307, 308].includes(statusCode) && location) {
+          upstream.resume();
+          resolvePage({ statusCode, location, text: "", truncated: false });
+          return;
+        }
+        const contentType = String(upstream.headers["content-type"] ?? "");
+        if (!/^(?:text\/|application\/xhtml\+xml)/i.test(contentType)) {
+          upstream.resume();
+          resolvePage({ statusCode, text: "", truncated: false });
+          return;
+        }
+        const chunks: Buffer[] = [];
+        let bytes = 0;
+        let truncated = false;
+        upstream.on("data", (rawChunk: Buffer | string) => {
+          if (truncated) return;
+          const chunk = Buffer.isBuffer(rawChunk) ? rawChunk : Buffer.from(rawChunk);
+          const remaining = MAX_PUBLIC_PAGE_BYTES - bytes;
+          if (chunk.length > remaining) {
+            if (remaining > 0) chunks.push(chunk.subarray(0, remaining));
+            bytes = MAX_PUBLIC_PAGE_BYTES;
+            truncated = true;
+            resolvePage({
+              statusCode,
+              text: Buffer.concat(chunks).toString("utf8"),
+              truncated: true,
+            });
+            upstream.destroy();
+            return;
+          }
+          chunks.push(chunk);
+          bytes += chunk.length;
+        });
+        upstream.on("end", () => {
+          resolvePage({
+            statusCode,
+            text: Buffer.concat(chunks).toString("utf8"),
+            truncated,
+          });
+        });
+        upstream.on("error", rejectPage);
+      },
+    );
+    request.on("timeout", () => request.destroy(new Error("Public page request timed out")));
+    request.on("error", rejectPage);
+    request.end();
+  });
+
+  let current = new URL(`https://${domain}/`);
+  for (let redirects = 0; redirects <= 3; redirects += 1) {
+    const page = await readOnce(current);
+    if (page.location === undefined) {
+      return {
+        url: current.toString(),
+        statusCode: page.statusCode,
+        text: page.text,
+        truncated: page.truncated,
+      };
+    }
+    if (redirects === 3) throw new Error("Public page redirected too many times");
+    const next = new URL(page.location, current);
+    const nextDomain = next.hostname.toLowerCase().replace(/^www\./, "");
+    if (
+      next.protocol !== "https:" ||
+      next.username !== "" ||
+      next.password !== "" ||
+      (next.port !== "" && next.port !== "443") ||
+      validateBusinessDomain(nextDomain) !== domain
+    ) {
+      throw new Error("Public page redirected outside the authorised domain");
+    }
+    current = next;
+  }
+  throw new Error("Public page could not be read");
+}
+
 function validateBusinessMemory(body: unknown): BusinessMemoryInput {
   const candidate = businessMemoryObject(body, "payload");
   if (candidate.schemaVersion !== 1) {
@@ -417,6 +593,89 @@ function validateBusinessMemory(body: unknown): BusinessMemoryInput {
   }
   if (!input.jobId) {
     throw new PublicError(400, "INVALID_REQUEST", "The saved research has no job ID.");
+  }
+  return input;
+}
+
+function paidResearchNumber(
+  value: unknown,
+  field: string,
+  minimum: number,
+  maximum: number,
+): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < minimum || value > maximum) {
+    throw new PublicError(400, "INVALID_REQUEST", `The paid research has an invalid ${field}.`);
+  }
+  return value;
+}
+
+function validateSeoSnapshot(body: unknown): SeoSnapshotInput {
+  const candidate = businessMemoryObject(body, "paid research snapshot");
+  if (candidate.schemaVersion !== 1) {
+    throw new PublicError(400, "INVALID_REQUEST", "The paid research schema is not supported.");
+  }
+  if (!(["completed", "partial", "failed"] as unknown[]).includes(candidate.status)) {
+    throw new PublicError(400, "INVALID_REQUEST", "The paid research has an invalid status.");
+  }
+  if (!(["refresh", "standard", "deep"] as unknown[]).includes(candidate.researchDepth)) {
+    throw new PublicError(400, "INVALID_REQUEST", "The paid research has an invalid depth.");
+  }
+  const componentCandidate = businessMemoryObject(candidate.componentStatus, "component status");
+  const componentEntries = Object.entries(componentCandidate);
+  const allowedComponentStatuses: readonly PaidComponentStatus[] = [
+    "success",
+    "no_results",
+    "failed",
+    "unavailable",
+    "skipped",
+  ];
+  if (
+    componentEntries.length > 20 ||
+    componentEntries.some(
+      ([key, value]) =>
+        !/^[a-z][a-z0-9_]{0,63}$/.test(key) ||
+        !allowedComponentStatuses.includes(value as PaidComponentStatus),
+    )
+  ) {
+    throw new PublicError(400, "INVALID_REQUEST", "The paid research has an invalid component status.");
+  }
+  const researchDepth = candidate.researchDepth as SeoSnapshotInput["researchDepth"];
+  const maximumCost = { refresh: 0.1, standard: 0.2, deep: 0.5 }[researchDepth];
+  const costLimitUsd = paidResearchNumber(candidate.costLimitUsd, "cost limit", 0, maximumCost);
+  if (candidate.device !== "desktop" && candidate.device !== "mobile") {
+    throw new PublicError(400, "INVALID_REQUEST", "The paid research has an invalid device.");
+  }
+  const input: SeoSnapshotInput = {
+    schemaVersion: 1,
+    jobId: businessMemoryText(candidate.jobId, "job ID", 160),
+    status: candidate.status as SeoSnapshotInput["status"],
+    researchDepth,
+    domain: validateBusinessDomain(candidate.domain),
+    locationCode: Math.trunc(paidResearchNumber(candidate.locationCode, "location", 1, 9_999_999)),
+    languageCode: businessMemoryText(candidate.languageCode, "language", 12).toLowerCase(),
+    device: candidate.device,
+    costLimitUsd,
+    // Record real provider cost even if it unexpectedly exceeds the intended cap.
+    actualCostUsd: paidResearchNumber(candidate.actualCostUsd, "actual cost", 0, 100),
+    componentStatus: Object.fromEntries(componentEntries) as Record<string, PaidComponentStatus>,
+    offeringProfile: businessMemoryObject(candidate.offeringProfile, "offering profile"),
+    rankedKeywords: businessMemoryObjectArray(candidate.rankedKeywords, "ranked keywords", 200),
+    keywordCandidates: businessMemoryObjectArray(candidate.keywordCandidates, "keyword candidates", 500),
+    selectedKeywords: businessMemoryObjectArray(candidate.selectedKeywords, "selected keywords", 100),
+    seoCompetitors: businessMemoryObjectArray(candidate.seoCompetitors, "SEO competitors", 100),
+    serpEvidence: businessMemoryObjectArray(candidate.serpEvidence, "SERP evidence", 100),
+    sources: businessMemoryObjectArray(candidate.sources, "paid research sources", 200),
+    warnings: businessMemoryStringArray(candidate.warnings, "paid research warnings", 100, 2_000),
+    evidenceSummary: businessMemoryObject(candidate.evidenceSummary, "evidence summary"),
+  };
+  if (!input.jobId || !/^[a-z]{2,3}(?:-[a-z]{2,4})?$/.test(input.languageCode)) {
+    throw new PublicError(400, "INVALID_REQUEST", "The paid research identity is invalid.");
+  }
+  if (typeof candidate.capturedAt === "string" && !Number.isNaN(Date.parse(candidate.capturedAt))) {
+    input.capturedAt = new Date(candidate.capturedAt).toISOString();
+  }
+  if (typeof candidate.expiresAt === "string" && !Number.isNaN(Date.parse(candidate.expiresAt))) {
+    input.expiresAt = new Date(candidate.expiresAt).toISOString();
   }
   return input;
 }
@@ -1020,9 +1279,9 @@ export function createChatHandler(options: ChatGatewayOptions): RequestListener 
                 "That research job is not registered to this conversation.",
               );
             }
-            const memory = job.status === "queued"
-              ? undefined
-              : chatStore.getBusinessMemory(job.domain);
+            const memory = job.status === "completed" || job.status === "partial"
+              ? chatStore.getBusinessMemory(job.domain)
+              : undefined;
             sendJson(response, 200, {
               schemaVersion: 1,
               job,
@@ -1070,6 +1329,128 @@ export function createChatHandler(options: ChatGatewayOptions): RequestListener 
                 409,
                 "BUSINESS_MEMORY_ERROR",
                 "That research job could not be linked to this conversation.",
+              ),
+            );
+          }
+        }
+        return;
+      }
+
+      if (url.pathname === "/api/public-domain-page") {
+        try {
+          if (request.method !== "POST") {
+            sendJson(
+              response,
+              405,
+              { error: { code: "INVALID_REQUEST", message: "That method is not supported." } },
+              { Allow: "POST" },
+            );
+            return;
+          }
+          const candidate = businessMemoryObject(
+            await readRequestBody(request),
+            "public domain request",
+          );
+          const domain = validateBusinessDomain(candidate.domain);
+          const page = await fetchPublicDomainPage(domain);
+          sendJson(response, 200, { schemaVersion: 1, domain, ...page });
+        } catch (error) {
+          if (error instanceof PublicError) {
+            sendError(response, error);
+          } else {
+            options.logError?.("Could not safely read the authorised public domain", error);
+            sendError(
+              response,
+              new PublicError(
+                502,
+                "BUSINESS_MEMORY_ERROR",
+                "The authorised public page could not be read safely.",
+              ),
+            );
+          }
+        }
+        return;
+      }
+
+      if (url.pathname === "/api/paid-domain-research") {
+        try {
+          if (request.method === "GET") {
+            const requestedJobId = url.searchParams.get("jobId");
+            const requestedSessionId = url.searchParams.get("sessionId");
+            const requestedDomain = url.searchParams.get("domain");
+            if (requestedJobId !== null || requestedSessionId !== null) {
+              const sessionId = validateSessionId(requestedSessionId);
+              const jobId = businessMemoryText(requestedJobId, "job ID", 160);
+              const snapshot = jobId
+                ? chatStore.getSeoSnapshotForJob(sessionId, jobId)
+                : undefined;
+              if (snapshot === undefined) {
+                throw new PublicError(
+                  404,
+                  "RESEARCH_JOB_NOT_FOUND",
+                  "That paid research job is not saved for this conversation.",
+                );
+              }
+              sendJson(response, 200, { schemaVersion: 1, snapshot });
+              return;
+            }
+            if (requestedDomain !== null) {
+              const domain = validateBusinessDomain(requestedDomain);
+              const snapshot = chatStore.getLatestSeoSnapshot(domain);
+              const history = chatStore.listSeoSnapshotSummaries(domain, 20);
+              sendJson(response, 200, {
+                schemaVersion: 1,
+                ...(snapshot === undefined ? {} : { snapshot }),
+                history,
+              });
+              return;
+            }
+            sendJson(response, 200, {
+              schemaVersion: 1,
+              history: chatStore.listSeoSnapshotSummaries(undefined, 50),
+            });
+            return;
+          }
+          if (request.method === "PUT") {
+            const candidate = businessMemoryObject(
+              await readRequestBody(request, MAX_PAID_RESEARCH_REQUEST_BYTES),
+              "paid research payload",
+            );
+            const sessionId = validateSessionId(candidate.sessionId);
+            const snapshot = validateSeoSnapshot(candidate.snapshot);
+            const memory = candidate.memory === undefined
+              ? undefined
+              : validateBusinessMemory(candidate.memory);
+            const saved = chatStore.savePaidDomainResearchForJob(
+              sessionId,
+              snapshot,
+              memory,
+            );
+            sendJson(response, 200, { schemaVersion: 1, ...saved });
+            return;
+          }
+          sendJson(
+            response,
+            405,
+            {
+              error: {
+                code: "INVALID_REQUEST",
+                message: "That method is not supported.",
+              },
+            },
+            { Allow: "GET, PUT" },
+          );
+        } catch (error) {
+          if (error instanceof PublicError) {
+            sendError(response, error);
+          } else {
+            options.logError?.("Could not access paid domain research", error);
+            sendError(
+              response,
+              new PublicError(
+                500,
+                "BUSINESS_MEMORY_ERROR",
+                "Paid domain research is not available right now.",
               ),
             );
           }

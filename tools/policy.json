@@ -52,6 +52,30 @@
       "workflowId": "phase9GetBusinessMemory"
     },
     {
+      "id": "start_paid_domain_research",
+      "risk": "paid_external_read",
+      "available": true,
+      "modelCallable": true,
+      "mode": "explicit_authority_market_and_spend_confirmation_required",
+      "workflowId": "phase11StartPaidDomainResearch"
+    },
+    {
+      "id": "complete_paid_domain_research",
+      "risk": "read",
+      "available": true,
+      "modelCallable": true,
+      "mode": "explicit_request_required",
+      "workflowId": "phase11CompletePaidDomainResearch"
+    },
+    {
+      "id": "get_paid_domain_research",
+      "risk": "read",
+      "available": true,
+      "modelCallable": true,
+      "mode": "automatic",
+      "workflowId": "phase11GetPaidDomainResearch"
+    },
+    {
       "id": "delete_task",
       "risk": "destructive",
       "available": false,

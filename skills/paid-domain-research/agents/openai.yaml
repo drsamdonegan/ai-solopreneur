@@ -1,0 +1,4 @@
+interface:
+  display_name: "Paid Domain Research"
+  short_description: "Paid DataForSEO domain and SEO research"
+  default_prompt: "Use $paid-domain-research to research my authorised business domain with paid DataForSEO evidence."

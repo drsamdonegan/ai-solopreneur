@@ -60,12 +60,39 @@
       "changesYourData": false
     },
     {
+      "id": "research-seo-with-paid-data",
+      "name": "Research SEO with paid DataForSEO evidence",
+      "description": "Run authorised market-specific domain research using current rankings, organic competitors, keyword ideas, related and long-tail terms, and live search results, then save the costs, sources, warnings, and evidence for later advice.",
+      "workflows": [
+        "53-tool-start-paid-domain-research.json",
+        "54-tool-complete-paid-domain-research.json"
+      ],
+      "needs": "Your Anthropic credential and an encrypted DataForSEO API Basic Auth credential",
+      "changesYourData": true
+    },
+    {
+      "id": "recall-paid-seo-research",
+      "name": "Recall saved paid SEO research",
+      "description": "Read historical market-specific rankings, competitors, keyword evidence, live search results, costs, sources, and warnings without making another paid call.",
+      "workflows": ["55-tool-get-paid-domain-research.json"],
+      "needs": null,
+      "changesYourData": false
+    },
+    {
       "id": "find-signals",
       "name": "Find people who have a problem you solve",
       "description": "Search YouTube comments for people describing a problem you help with, and save what they said in their own words.",
       "workflows": ["60-tool-find-signals.json"],
       "needs": "A YouTube API Key credential",
       "changesYourData": true
+    },
+    {
+      "id": "lookup-linkedin-profile",
+      "name": "Find a likely professional profile",
+      "description": "Search for one named person's likely public LinkedIn profile, compare the candidates, and explain the match confidence without exposing contact data.",
+      "workflows": ["61-tool-lookup-linkedin-profile.json"],
+      "needs": "A Crustdata Bearer Auth credential and explicit approval for each search of up to 0.30 credits",
+      "changesYourData": false
     }
   ]
 }

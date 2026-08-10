@@ -11,6 +11,8 @@ The starter agent includes:
 | `project-assistant` | How the agent turns uncertainty into practical next steps |
 | `task-capture` | How the agent prepares a confirmation-gated task proposal |
 | `weekly-status` | How the agent summarises factual task progress |
+| `domain-research` | How the free website-only business research path behaves |
+| `paid-domain-research` | How authorised DataForSEO evidence is collected, saved, and reused for SEO advice |
 
 ## Change one skill
 
@@ -46,6 +48,8 @@ weekly-status
 - Lines beginning with `#` are comments.
 
 Run the skill-sync helper after every change. Only IDs in this file are compiled into the agent prompt. A skill directory that is not listed remains available as an example but is not loaded.
+
+`paid-domain-research` does not contain a credential and cannot grant provider access by itself. Its reviewed tools and private n8n credential are configured separately in [Paid Domain Research with DataForSEO](PAID_DOMAIN_RESEARCH.md).
 
 At least one skill must remain enabled.
 

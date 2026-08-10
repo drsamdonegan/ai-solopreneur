@@ -26,7 +26,7 @@ execute as project-local Node.js processes and bind to loopback addresses.
 The local release includes:
 
 - a browser chat gateway;
-- n8n and eleven reviewed workflows;
+- n8n and twenty reviewed workflows;
 - a bounded PDF, DOCX, TXT, and pasted-text reader;
 - a Project Manager agent with local conversation memory;
 - local task, audit, pending-confirmation, and skill tables;

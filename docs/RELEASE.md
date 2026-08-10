@@ -39,7 +39,7 @@ evaluator remains `NO_GO`; the owner waiver is recorded in
 The kit contains:
 
 - a source archive from the exact release commit;
-- the fourteen canonical workflow exports;
+- the twenty canonical workflow exports;
 - pinned Node.js, npm, and n8n version metadata;
 - native setup instructions;
 - SHA-256 checksums for every included file.

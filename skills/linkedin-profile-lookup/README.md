@@ -15,6 +15,8 @@ For a live lookup, the agent must also have a read-only tool named `lookup_linke
 
 Never paste an API key into chat, `SKILL.md`, this README, or a committed file. Store credentials in the approved tool or n8n credential store.
 
+This course project now includes the optional n8n implementation as **61 - TOOL - lookup_linkedin_profile**. Select a saved Bearer Auth credential named `CRUSTDATA_API_KEY`, publish workflow 61, and connect its `lookup_linkedin_profile` tool node to the main agent workflow. Each search requires the user's fresh approval for a maximum cost of 0.30 credits.
+
 Without the tool, the skill should say that live lookup is unavailable and ask you to paste public profile text or a URL. That is expected behaviour, not a failed installation.
 
 ## Install only this skill
@@ -107,6 +109,8 @@ Industry: [INDUSTRY]
 Show the likely profile, match confidence, and evidence. If the result is
 ambiguous, show no more than three candidates and ask me to confirm. Do not
 return phone numbers or personal contact information.
+
+Before the lookup runs, the agent must explain that the search can cost up to 0.30 credits and ask for explicit approval. Reply with approval only when you want to spend those credits.
 ```
 
 Use a business email where possible. A Gmail or other personal address usually provides no employer-domain evidence, and email-only matching needs a separately approved reverse-email lookup connection.

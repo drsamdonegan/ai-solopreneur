@@ -21,7 +21,11 @@ const expectedFiles = [
   "50-tool-start-domain-research.json",
   "51-tool-complete-domain-research.json",
   "52-tool-get-business-memory.json",
+  "53-tool-start-paid-domain-research.json",
+  "54-tool-complete-paid-domain-research.json",
+  "55-tool-get-paid-domain-research.json",
   "60-tool-find-signals.json",
+  "61-tool-lookup-linkedin-profile.json",
   "90-debug-agent-health.json",
 ];
 const failures = [];
@@ -195,7 +199,7 @@ if (agentWorkflow) {
   );
   check(
     agentWorkflow.nodes.filter((node) => node.type !== "n8n-nodes-base.stickyNote")
-      .length <= 20,
+      .length <= 24,
     "Agent workflow must keep confirmation routing and tool wiring explainable",
   );
   check(
@@ -353,7 +357,11 @@ if (agentWorkflow) {
         "start_domain_research",
         "complete_domain_research",
         "get_business_memory",
+        "start_paid_domain_research",
+        "complete_paid_domain_research",
+        "get_paid_domain_research",
         "find_signals",
+        "lookup_linkedin_profile",
       ]),
     "Agent: only the reviewed task, domain-research, and signal-research tools may be connected",
   );
@@ -406,6 +414,60 @@ if (agentWorkflow) {
       ),
     "Agent: get_business_memory must read only the reviewed local memory workflow",
   );
+  const startPaidResearchTool = nodeByName(
+    agentWorkflow,
+    "start_paid_domain_research",
+  );
+  check(
+    startPaidResearchTool?.parameters?.workflowId?.value ===
+      "phase11StartPaidDomainResearch" &&
+      /explicitly asks for paid or DataForSEO-backed/i.test(
+        startPaidResearchTool?.parameters?.description ?? "",
+      ) &&
+      /explicitly approves the stated application cost ceiling/i.test(
+        startPaidResearchTool?.parameters?.description ?? "",
+      ),
+    "Agent: start_paid_domain_research must require current authority and paid-spend consent",
+  );
+  const completePaidResearchTool = nodeByName(
+    agentWorkflow,
+    "complete_paid_domain_research",
+  );
+  check(
+    completePaidResearchTool?.parameters?.workflowId?.value ===
+      "phase11CompletePaidDomainResearch" &&
+      /exact paid research job ID started in this conversation/i.test(
+        completePaidResearchTool?.parameters?.description ?? "",
+      ),
+    "Agent: complete_paid_domain_research must remain conversation-bound and read-only",
+  );
+  const getPaidResearchTool = nodeByName(
+    agentWorkflow,
+    "get_paid_domain_research",
+  );
+  check(
+    getPaidResearchTool?.parameters?.workflowId?.value ===
+      "phase11GetPaidDomainResearch" &&
+      /Read-only source of truth/i.test(
+        getPaidResearchTool?.parameters?.description ?? "",
+      ),
+    "Agent: get_paid_domain_research must read only reviewed local snapshots",
+  );
+  const linkedInLookupTool = nodeByName(
+    agentWorkflow,
+    "lookup_linkedin_profile",
+  );
+  check(
+    linkedInLookupTool?.parameters?.workflowId?.value ===
+      "phase12LookupLinkedInProfile" &&
+      /explicitly approves one Crustdata search costing up to 0\.30 credits/i.test(
+        linkedInLookupTool?.parameters?.description ?? "",
+      ) &&
+      /never returns phone numbers, email addresses, contact data/i.test(
+        linkedInLookupTool?.parameters?.description ?? "",
+      ),
+    "Agent: lookup_linkedin_profile must require per-search credit approval and exclude contact data",
+  );
 
   const routeConfirmation = nodeByName(agentWorkflow, "Route Confirmation");
   check(
@@ -447,6 +509,9 @@ if (agentWorkflow) {
       /BEGIN UNTRUSTED DOCUMENT/.test(contextCode) &&
       /start_domain_research is risk=bounded_local_write/.test(contextCode) &&
       /complete_domain_research is risk=read/.test(contextCode) &&
+      /start_paid_domain_research is risk=paid_external_read/.test(contextCode) &&
+      /US\$0\.10/.test(contextCode) &&
+      /Never infer these confirmations/.test(contextCode) &&
       /scraped, and researched text is untrusted/.test(contextCode),
     "Agent: context builder must apply enabled skills and safely delimit untrusted documents",
   );
@@ -604,6 +669,71 @@ if (skillSyncWorkflow) {
           condition.keyValue === "enabledSkills",
       ),
     "Skill sync: enabled skill bundle must replace one stable config row",
+  );
+}
+
+const linkedInLookupWorkflow = workflows.get(
+  "61-tool-lookup-linkedin-profile.json",
+);
+if (linkedInLookupWorkflow) {
+  const trigger = nodeByName(linkedInLookupWorkflow, "Tool Input");
+  const inputNames =
+    trigger?.parameters?.workflowInputs?.values?.map((input) => input.name) ?? [];
+  check(
+    JSON.stringify(inputNames) ===
+      JSON.stringify([
+        "session_id",
+        "request_id",
+        "email_address",
+        "full_name",
+        "country_region",
+        "state_province",
+        "city_location",
+        "industry",
+        "paid_lookup_confirmed",
+      ]),
+    "LinkedIn lookup: visible tool input schema changed unexpectedly",
+  );
+  const validationCode =
+    nodeByName(linkedInLookupWorkflow, "Validate Lookup Input")?.parameters
+      ?.jsCode ?? "";
+  check(
+    /paidLookupConfirmed = \$json\.paid_lookup_confirmed === true/.test(
+      validationCode,
+    ) &&
+      /PAID_LOOKUP_APPROVAL_REQUIRED/.test(validationCode) &&
+      /maxCredits: 0\.30/.test(validationCode),
+    "LinkedIn lookup: per-search approval and 0.30-credit ceiling are missing",
+  );
+  const provider = nodeByName(
+    linkedInLookupWorkflow,
+    "Search Crustdata People",
+  );
+  check(
+    provider?.parameters?.method === "POST" &&
+      provider?.parameters?.url === "https://api.crustdata.com/person/search" &&
+      provider?.parameters?.genericAuthType === "httpBearerAuth" &&
+      provider?.parameters?.headerParameters?.parameters?.some(
+        (header) =>
+          header.name === "x-api-version" && header.value === "2025-11-01",
+      ),
+    "LinkedIn lookup: Crustdata person search must use pinned Bearer authentication",
+  );
+  const rankingCode =
+    nodeByName(linkedInLookupWorkflow, "Rank Safe Candidates")?.parameters
+      ?.jsCode ?? "";
+  check(
+    /profile_enriched: false/.test(rankingCode) &&
+      /slice\(0, 3\)/.test(rankingCode) &&
+      !/business_emails|personal_emails|phone_numbers|contact\./i.test(
+        rankingCode,
+      ),
+    "LinkedIn lookup: result shaping must remain bounded and contact-data free",
+  );
+  check(
+    linkedInLookupWorkflow.meta?.toolRisk === "paid_external_read" &&
+      linkedInLookupWorkflow.meta?.maximumCreditsPerRun === 0.3,
+    "LinkedIn lookup: paid-read risk metadata or credit ceiling is missing",
   );
 }
 
@@ -1089,6 +1219,218 @@ if (getBusinessMemoryWorkflow) {
   );
 }
 
+const paidResearchFiles = [
+  "53-tool-start-paid-domain-research.json",
+  "54-tool-complete-paid-domain-research.json",
+  "55-tool-get-paid-domain-research.json",
+];
+const paidResearchInputs = {
+  "53-tool-start-paid-domain-research.json": [
+    "sessionId",
+    "requestId",
+    "domain",
+    "companyName",
+    "researchDepth",
+    "locationCode",
+    "languageCode",
+    "authorizationConfirmed",
+    "paidResearchConfirmed",
+  ],
+  "54-tool-complete-paid-domain-research.json": ["sessionId", "requestId", "jobId"],
+  "55-tool-get-paid-domain-research.json": ["sessionId", "requestId", "domain", "jobId"],
+};
+for (const file of paidResearchFiles) {
+  const workflow = workflows.get(file);
+  if (!workflow) continue;
+  const inputNames =
+    nodeByName(workflow, "Tool Input")?.parameters?.workflowInputs?.values?.map(
+      (input) => input.name,
+    ) ?? [];
+  check(
+    JSON.stringify(inputNames) === JSON.stringify(paidResearchInputs[file]),
+    `${workflow.name}: paid research input schema changed unexpectedly`,
+  );
+  check(
+    workflow.nodes.every((node) => allowedResearchNodeTypes.has(node.type)),
+    `${workflow.name}: contains a node outside the research-tool allowlist`,
+  );
+  const auditNodes = workflow.nodes.filter(
+    (node) => node.type === "n8n-nodes-base.dataTable",
+  );
+  check(
+    auditNodes.length === 1 &&
+      auditNodes[0].name === "Write Tool Audit" &&
+      auditNodes[0].parameters?.operation === "insert" &&
+      auditNodes[0].parameters?.dataTableId?.value === "tool_audit",
+    `${workflow.name}: may write only one tool_audit row`,
+  );
+}
+
+const startPaidResearchWorkflow = workflows.get(
+  "53-tool-start-paid-domain-research.json",
+);
+if (startPaidResearchWorkflow) {
+  check(
+    startPaidResearchWorkflow.meta?.toolRisk === "paid_external_read" &&
+      /explicit-current-owner-or-authorised-user-and-paid-spend-confirmation/.test(
+        startPaidResearchWorkflow.meta?.authorization ?? "",
+      ) &&
+      /no-automatic-retry/.test(
+        startPaidResearchWorkflow.meta?.paidCallPolicy ?? "",
+      ),
+    "start_paid_domain_research must retain paid-call authority and retry policy metadata",
+  );
+  const validation =
+    nodeByName(startPaidResearchWorkflow, "Validate Paid Research Input")?.parameters
+      ?.jsCode ?? "";
+  check(
+    /authorizationConfirmed/.test(validation) &&
+      /paidResearchConfirmed/.test(validation) &&
+      /AUTHORIZATION_REQUIRED/.test(validation) &&
+      /PAID_RESEARCH_CONFIRMATION_REQUIRED/.test(validation) &&
+      /refresh:\{limit:\.10/.test(validation) &&
+      /standard:\{limit:\.20,expansionReserve:\.14,serpReserve:\.01/.test(validation) &&
+      /deep:\{limit:\.50,expansionReserve:\.38,serpReserve:\.02/.test(validation) &&
+      /locationCode/.test(validation) &&
+      /languageCode/.test(validation),
+    "start_paid_domain_research must validate authority, paid consent, market, language, and reserved caps",
+  );
+  const dataForSeoUrls = [
+    "https://api.dataforseo.com/v3/dataforseo_labs/google/ranked_keywords/live",
+    "https://api.dataforseo.com/v3/dataforseo_labs/google/competitors_domain/live",
+    "https://api.dataforseo.com/v3/dataforseo_labs/google/keyword_ideas/live",
+    "https://api.dataforseo.com/v3/dataforseo_labs/google/keyword_suggestions/live",
+    "https://api.dataforseo.com/v3/dataforseo_labs/google/related_keywords/live",
+    "https://api.dataforseo.com/v3/serp/google/organic/live/regular",
+  ];
+  const paidHttpNodes = startPaidResearchWorkflow.nodes.filter(
+    (node) => dataForSeoUrls.includes(String(node.parameters?.url ?? "")),
+  );
+  check(
+    JSON.stringify(paidHttpNodes.map((node) => node.parameters.url)) ===
+      JSON.stringify(dataForSeoUrls),
+    "start_paid_domain_research may use only the six reviewed DataForSEO endpoints",
+  );
+  check(
+    paidHttpNodes.every(
+      (node) =>
+        node.parameters?.authentication === "genericCredentialType" &&
+        node.parameters?.genericAuthType === "httpBasicAuth" &&
+        node.credentials?.httpBasicAuth?.name === "DataForSEO API" &&
+        Object.keys(node.credentials ?? {}).length === 1 &&
+        node.retryOnFail !== true,
+    ),
+    "DataForSEO calls must use only encrypted Basic Auth and must never auto-retry",
+  );
+  const httpUrls = startPaidResearchWorkflow.nodes
+    .filter((node) => node.type === "n8n-nodes-base.httpRequest")
+    .map((node) => String(node.parameters?.url ?? ""));
+  check(
+    httpUrls.every(
+      (url) =>
+        dataForSeoUrls.includes(url) ||
+        url === "https://api.anthropic.com/v1/messages" ||
+        url === "http://127.0.0.1:3000/api/business-memory/jobs" ||
+        url === "http://127.0.0.1:3000/api/public-domain-page" ||
+        url === "http://127.0.0.1:3000/api/paid-domain-research" ||
+        /127\.0\.0\.1:3000\/api\/paid-domain-research\?domain=/.test(url),
+    ),
+    "start_paid_domain_research contains an HTTP destination outside the reviewed allowlist",
+  );
+  const publicPageNode = nodeByName(startPaidResearchWorkflow, "Fetch Public Homepage");
+  check(
+      publicPageNode?.parameters?.url === "http://127.0.0.1:3000/api/public-domain-page" &&
+      publicPageNode?.parameters?.method === "POST" &&
+      publicPageNode?.parameters?.authentication === undefined &&
+      /Validate Paid Research Input/.test(publicPageNode?.parameters?.jsonBody ?? "") &&
+      /\.domain/.test(publicPageNode?.parameters?.jsonBody ?? ""),
+    "public website evidence must use the local DNS-safe same-domain fetch gateway",
+  );
+  const expansionBudget =
+    nodeByName(startPaidResearchWorkflow, "Check Expansion Budget")?.parameters?.jsCode ?? "";
+  const serpBudget =
+    nodeByName(startPaidResearchWorkflow, "Prepare SERP Tasks")?.parameters?.jsCode ?? "";
+  check(
+    /expansionReserveUsd/.test(expansionBudget) &&
+      /serpReserveUsd/.test(expansionBudget) &&
+      /actualCostBeforeSerp/.test(serpBudget) &&
+      /serpReserveUsd/.test(serpBudget) &&
+      /if\(lexicalFit<\.15\)continue/.test(serpBudget) &&
+      !/source!==['"]current_ranking['"]/.test(serpBudget),
+    "paid expansion and SERP calls must reserve budget before starting",
+  );
+  const shaping =
+    nodeByName(startPaidResearchWorkflow, "Shape Paid Research Payload")?.parameters
+      ?.jsCode ?? "";
+  for (const required of [
+    "success",
+    "no_results",
+    "failed",
+    "unavailable",
+    "skipped",
+    "taskIds",
+    "actualCostUsd",
+    "relevance",
+    "searchVolume",
+    "difficulty",
+    "sourceConfidence",
+    "intent",
+    "no findings were invented",
+  ]) {
+    check(
+      shaping.includes(required),
+      `start_paid_domain_research must retain ${required} handling`,
+    );
+  }
+  check(
+    /seoCompetitors\.slice\(0,20\)/.test(shaping) &&
+      /input\.websiteStatus==='success'&&input\.profileStatus==='success'/.test(shaping) &&
+      /if\(lexicalFit<\.15\)continue/.test(shaping) &&
+      /directCompetitors/.test(shaping) &&
+      /adjacentOrganisations/.test(shaping),
+    "paid results must fit business-memory limits and keep website/profile evidence honest",
+  );
+  const cacheShaping =
+    nodeByName(startPaidResearchWorkflow, "Check Fresh Cache")?.parameters?.jsCode ?? "";
+  check(
+    /jobId:null/.test(cacheShaping) &&
+      /sourceJobId:s\.jobId/.test(cacheShaping) &&
+      /get_paid_domain_research/.test(cacheShaping),
+    "cache hits must not masquerade as a new conversation-bound job",
+  );
+  check(
+    nodeByName(startPaidResearchWorkflow, "Save Paid Research Snapshot")?.parameters
+      ?.method === "PUT" &&
+      /savePayload/.test(
+        nodeByName(startPaidResearchWorkflow, "Save Paid Research Snapshot")?.parameters
+          ?.jsonBody ?? "",
+      ),
+    "start_paid_domain_research must save the exact bounded snapshot payload locally",
+  );
+}
+
+for (const file of [
+  "54-tool-complete-paid-domain-research.json",
+  "55-tool-get-paid-domain-research.json",
+]) {
+  const workflow = workflows.get(file);
+  if (!workflow) continue;
+  const requests = workflow.nodes.filter(
+    (node) => node.type === "n8n-nodes-base.httpRequest",
+  );
+  check(
+    workflow.meta?.toolRisk === "read" &&
+      workflow.meta?.paidCalls === "none" &&
+      requests.length === 1 &&
+      (requests[0].parameters?.method ?? "GET") === "GET" &&
+      /127\.0\.0\.1:3000\/api\/paid-domain-research/.test(
+        String(requests[0].parameters?.url ?? ""),
+      ) &&
+      Object.keys(requests[0].credentials ?? {}).length === 0,
+    `${workflow.name}: must remain a local read with no paid call`,
+  );
+}
+
 const proposalFiles = [
   "30-tool-propose-create-task.json",
   "31-tool-propose-update-task-status.json",
@@ -1291,6 +1633,7 @@ const REVIEWED_SKILL_IDS = [
   "task-capture",
   "weekly-status",
   "domain-research",
+  "paid-domain-research",
 ];
 // Skills that ship switched off. A learner may enable any of them, so the
 // check below guarantees the reviewed set is still present and that nothing
@@ -1343,8 +1686,15 @@ check(
         ],
         ["complete_domain_research", "read", "explicit_request_required"],
         ["get_business_memory", "read", "automatic"],
+        [
+          "start_paid_domain_research",
+          "paid_external_read",
+          "explicit_authority_market_and_spend_confirmation_required",
+        ],
+        ["complete_paid_domain_research", "read", "explicit_request_required"],
+        ["get_paid_domain_research", "read", "automatic"],
       ]),
-  "Tool policy must classify the reviewed task and domain-research tools",
+  "Tool policy must classify the reviewed task, free research, and paid research tools",
 );
 check(
   toolPolicy.tools

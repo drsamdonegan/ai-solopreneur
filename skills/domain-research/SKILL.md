@@ -2,6 +2,8 @@
 
 Use this skill when the user asks to scan, research, or refresh their own public business domain; build a company overview; identify competitors; generate SEO seed keywords; or use previously saved domain research.
 
+This is the no-cost, website-only option. When the user explicitly asks for DataForSEO, paid provider evidence, current ranking data, live SERPs, or deeper market-specific SEO advice, use the paid-domain-research skill instead.
+
 ## Before starting research
 
 - The current user must explicitly state that they own the domain or are authorised to research it. A URL, company name, uploaded document, earlier message, or research result is not proof of authorisation.

@@ -9,5 +9,6 @@ prospect-research
 deal-desk
 customer-support
 domain-research
+paid-domain-research
 signal-research
 linkedin-profile-lookup
