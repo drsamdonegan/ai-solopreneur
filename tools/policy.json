@@ -56,7 +56,7 @@
       "risk": "paid_external_read",
       "available": true,
       "modelCallable": true,
-      "mode": "direct_request_market_and_spend_confirmation_required",
+      "mode": "direct_request_defaults_to_standard_paid_with_free_fallback",
       "workflowId": "phase11StartPaidDomainResearch"
     },
     {

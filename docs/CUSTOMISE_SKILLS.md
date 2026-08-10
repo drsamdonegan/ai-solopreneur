@@ -12,7 +12,7 @@ The starter agent includes:
 | `task-capture` | How the agent prepares a confirmation-gated task proposal |
 | `weekly-status` | How the agent summarises factual task progress |
 | `domain-research` | How the free website-only business research path behaves |
-| `paid-domain-research` | How authorised DataForSEO evidence is collected, saved, and reused for SEO advice |
+| `paid-domain-research` | How the default paid-first search and simple SEO advice behave |
 
 ## Change one skill
 

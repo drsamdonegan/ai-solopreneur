@@ -1,13 +1,13 @@
 ---
 name: domain-research
-description: Research a directly requested public business domain for a company overview, competitors, and seed keywords, then save grounded results to local memory. Use for no-cost website-only domain research or recalling saved domain research; use paid-domain-research when the user requests DataForSEO, rankings, live SERPs, or market-specific paid SEO evidence.
+description: Provide the free website-only fallback for domain research and recall saved business memory. Use when paid DataForSEO research is unavailable, returns no useful SEO evidence, or the user explicitly asks for a free or website-only scan; normal domain-research requests should use paid-domain-research first.
 ---
 
 # Domain Research Memory
 
-Use this skill when the user asks to scan, research, or refresh a public business domain; build a company overview; identify competitors; generate SEO seed keywords; or use previously saved domain research.
+Use this skill as the no-cost fallback for a public business-domain scan, or to recall previously saved business research.
 
-This is the no-cost, website-only option. When the user explicitly asks for DataForSEO, paid provider evidence, current ranking data, live SERPs, or deeper market-specific SEO advice, use the paid-domain-research skill instead.
+Normal domain-research requests use `paid-domain-research` first. Use this website-only path when the paid tool is unavailable, a paid run fails without useful SEO evidence, or the user explicitly asks for free research. Do not retry a failed paid call before falling back.
 
 ## Before starting research
 
@@ -29,14 +29,15 @@ This is the no-cost, website-only option. When the user explicitly asks for Data
 
 The chat window renders plain text, so Markdown tables, `#` headings, `**bold**` and `---` rules appear as raw characters. Write headings as short plain lines and lists with `-`. Never use a table.
 
-Use a compact, decision-useful structure:
+Write for a non-technical business owner. Be conversational, concise, and jargon-free. Do not mention workflow names, internal fields, codes, job IDs, or technical status labels unless the user asks. Explain unavoidable SEO terms in everyday language.
 
-- Company overview and profile
-- Direct competitors: similar offer and buyer
-- SEO competitors: compete for search attention but may sell something different
-- Adjacent organisations: alternatives, partners, directories, or substitutes
-- Seed keywords, grouped by theme or intent when groups are available
-- Sources, evidence limitations, and warnings
+Use this compact structure:
+
+- What the business does
+- Best keyword ideas
+- Competitors worth watching
+- What to do next
+- One short note about evidence limits, only when it matters
 
 Say plainly what the evidence is: one public page from the domain itself. Each competitor carries a `basis` field. When it is `inference`, that organisation came from the model's own knowledge and was not named on the page, so present it as a lead to verify rather than a finding. Report `partial` results as partial, with their warnings. Fewer well-supported competitors or keywords are better than invented ones.
 

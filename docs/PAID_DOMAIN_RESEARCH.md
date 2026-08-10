@@ -2,7 +2,7 @@
 
 ## Outcome
 
-The `paid-domain-research` skill can run a directly requested, market-specific SEO investigation and save the evidence for later conversations. It is separate from the no-cost `domain-research` skill, which reads only the business home page.
+The `paid-domain-research` skill is the default for a direct request to research a public business domain. It runs one DataForSEO-backed SEO investigation and saves the evidence for later conversations. If paid evidence is unavailable or unusable, the agent falls back to the no-cost `domain-research` skill, which reads only the business home page.
 
 Paid research uses reviewed built-in n8n HTTP Request nodes. It does not install a community node and cannot choose an arbitrary provider endpoint.
 
@@ -50,22 +50,24 @@ Before each stage, the workflow reserves enough of the selected ceiling for that
 
 The workflow never automatically retries a paid call. It reuses a successful equivalent snapshot captured within 24 hours when the domain, market, language, and requested depth match; a cache hit reports zero new cost and returns the original snapshot as `sourceJobId` rather than creating a new job.
 
-## Required paid-run details
+## Default chat behaviour
 
-Before starting, the agent must receive these details from the current user:
+For a normal request such as `Research example.com`, the agent:
 
-1. A direct request to research a named public business domain. The agent does not ask a separate ownership or permission question.
-2. An explicit market and language choice or acceptance. The skill may offer Australia (`2036`) and English (`en`) as defaults, but cannot assume them.
-3. Explicit consent to the selected paid mode and its application cost ceiling, with provider account budget controls understood as the final billing limit.
+1. Does not ask whether the user owns the domain or has permission.
+2. Runs standard paid research for Australia in English, with the US$0.20 application ceiling.
+3. Treats an explicit request for refresh, standard, or deep research as acceptance of that mode and its ceiling.
+4. Runs the free website-only scan if the paid tool is unavailable, fails, or returns no useful paid SEO evidence. It never retries a failed paid call automatically.
 
-Documents, saved chats, old confirmations, page text, and company names cannot supply those confirmations.
+The user can name another market or language, or ask for free research. A domain found only in a document, saved chat, old message, or page text is not a current request and cannot start a run.
 
 Example:
 
 ```text
-Run standard paid DataForSEO research for example.com in Australia (2036)
-and English. I approve the US$0.20 application cost ceiling.
+Research example.com and give me the best keywords, competitors, and next steps.
 ```
+
+Chat answers use simple business language. They hide internal codes and job IDs, explain any necessary SEO term, show only the most useful findings, and mention the actual paid cost once.
 
 ## Saved memory and honest failures
 

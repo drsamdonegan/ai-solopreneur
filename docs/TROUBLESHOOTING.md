@@ -142,9 +142,9 @@ If billing is available, wait briefly and retry. Persistent 429 responses can al
 
 1. Open workflow `53 - TOOL - start_paid_domain_research` and confirm all six DataForSEO nodes use the `DataForSEO API` HTTP Basic Auth credential.
 2. Run the diagnostic helper. It checks credential selection without calling DataForSEO or showing credential values.
-3. Confirm the current chat directly requests the domain and explicitly states market, language, mode, and acceptance of that mode's application cost ceiling. No separate ownership confirmation is required.
+3. Confirm the current chat directly requests the domain. Standard paid research defaults to Australia and English; there is no ownership, permission, market-code, language-code, or second cost-confirmation question.
 4. Inspect the saved component statuses. `failed`, `no_results`, `unavailable`, and `skipped` mean different things and should not be reworded as findings.
-5. Do not automatically retry a failed paid request. Correct the credential, balance, market, or input first, then ask the user to approve a new run.
+5. Do not automatically retry a failed paid request. The agent should use the free website-only fallback when no useful paid evidence was returned. Correct the credential, balance, market, or input before a later paid run.
 
 A failed attempt remains in local history and does not overwrite the last successful company memory. See [PAID_DOMAIN_RESEARCH.md](PAID_DOMAIN_RESEARCH.md).
 
