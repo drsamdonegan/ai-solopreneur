@@ -328,7 +328,11 @@ if (agentWorkflow) {
     linkedinTool?.parameters?.workflowId?.value ===
       "phase12LookupLinkedInProfile" &&
       /0\.30 credits/.test(linkedinTool?.parameters?.description ?? "") &&
-      /explicitly approves/.test(linkedinTool?.parameters?.description ?? ""),
+      /explicitly approves/.test(linkedinTool?.parameters?.description ?? "") &&
+      /Pass full_name exactly/.test(linkedinTool?.parameters?.description ?? "") &&
+      /Do not normalize or shorten it/.test(
+        linkedinTool?.parameters?.workflowInputs?.value?.full_name ?? "",
+      ),
     "Agent: paid LinkedIn lookup must retain its explicit credit approval boundary",
   );
 
@@ -773,6 +777,7 @@ if (linkedinLookupWorkflow) {
       /host !== 'linkedin\.com'/.test(rankingCode) &&
       /structuredLocation/.test(rankingCode) &&
       /professionalText/.test(rankingCode) &&
+      /professionalNetworkName/.test(rankingCode) &&
       /requested professional title/.test(rankingCode) &&
       /industry or professional context/.test(rankingCode) &&
       !/return \/\^https:/.test(rankingCode),

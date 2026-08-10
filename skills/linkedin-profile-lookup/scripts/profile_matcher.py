@@ -207,6 +207,9 @@ def _field(profile: Mapping[str, Any], key: str) -> str:
 
 def _public_profile(profile: Mapping[str, Any]) -> dict[str, Any]:
     safe = {key: _field(profile, key) or None for key in PUBLIC_FIELDS}
+    professional_name = _field(profile, "professional_network_name")
+    if professional_name:
+        safe["name"] = professional_name
     return {key: value for key, value in safe.items() if value is not None}
 
 
@@ -220,7 +223,9 @@ def score_profile(profile: Mapping[str, Any], parsed: Mapping[str, str]) -> dict
     contradictions: list[str] = []
 
     expected_name = _normalise_name(parsed.get("full_name"))
-    raw_actual_name = _field(profile, "name")
+    raw_actual_name = (
+        _field(profile, "professional_network_name") or _field(profile, "name")
+    )
     actual_name = _normalise_name(raw_actual_name)
     if expected_name and actual_name:
         if expected_name == actual_name:
@@ -507,7 +512,8 @@ def _self_test() -> None:
     consulting_ranked = rank_profiles(
         [
             {
-                "name": "Dr. Mark Sinclair FGIA CEM",
+                "name": "Mark Sinclair FGIA CEM",
+                "professional_network_name": "Dr. Mark Sinclair FGIA CEM",
                 "linkedin_url": "https://www.linkedin.com/in/consulting-match",
                 "headline": "Strategy, AI and technology transformation",
                 "location": "Armadale, Victoria, Australia",
