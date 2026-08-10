@@ -45,6 +45,8 @@ Expose these optional strings, requiring at least `full_name` or `email_address`
 
 Prefer a full name plus at least one corroborating field. The bundled matcher intentionally refuses to perform a name-search from an email alone because the provided people-search helper has no email parameter. Email-only matching needs a separately approved reverse-email lookup endpoint.
 
+The native n8n workflow reduces a loose industry phrase to at most four meaningful terms, then adds a nested `or` filter across Crustdata's searchable current-company industry, current-title, and headline fields. For example, `Consulting and business` becomes the useful term `consulting`, which can match the indexed value `Business Consulting and Services` instead of spending the result limit on unrelated people with the same name.
+
 ## Tool output
 
 Return this stable shape:
@@ -58,6 +60,7 @@ Return this stable shape:
   "profile": null,
   "candidates": [],
   "profile_enriched": false,
+  "credits_used": 0,
   "message": ""
 }
 ```

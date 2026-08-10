@@ -745,8 +745,10 @@ if (linkedinLookupWorkflow) {
   check(
     /PAID_LOOKUP_APPROVAL_REQUIRED/.test(lookupValidation) &&
       /paid_lookup_confirmed/.test(lookupValidation) &&
-      /maxCredits: 0\.30/.test(lookupValidation),
-    "LinkedIn lookup must reject calls without fresh paid-search approval",
+      /maxCredits: 0\.30/.test(lookupValidation) &&
+      /industryFields/.test(lookupValidation) &&
+      /current\.company_industries/.test(lookupValidation),
+    "LinkedIn lookup must require fresh approval and apply supplied industry filters",
   );
   const providerCall = nodeByName(
     linkedinLookupWorkflow,
@@ -767,8 +769,10 @@ if (linkedinLookupWorkflow) {
   check(
     /linkedinSlug/.test(rankingCode) &&
       /host !== 'linkedin\.com'/.test(rankingCode) &&
+      /structuredLocation/.test(rankingCode) &&
+      /professionalText/.test(rankingCode) &&
       !/return \/\^https:/.test(rankingCode),
-    "LinkedIn lookup must use JSON-safe LinkedIn URL validation",
+    "LinkedIn lookup must use JSON-safe URL validation and evidence-rich ranking",
   );
   check(
     linkedinLookupWorkflow.nodes

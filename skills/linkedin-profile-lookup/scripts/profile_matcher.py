@@ -43,6 +43,16 @@ FREE_EMAIL_DOMAINS = {
 
 NAME_PREFIXES = {"dr", "doctor", "mr", "mrs", "ms", "miss", "prof", "professor"}
 NAME_SUFFIXES = {"do", "dds", "dmd", "esq", "jd", "md", "phd"}
+INDUSTRY_STOP = {
+    "and",
+    "business",
+    "company",
+    "industry",
+    "professional",
+    "sector",
+    "service",
+    "services",
+}
 
 
 def _text(value: Any) -> str:
@@ -62,6 +72,18 @@ def _normalise_name(value: Any) -> str:
     while tokens and tokens[-1] in NAME_SUFFIXES:
         tokens.pop()
     return " ".join(tokens)
+
+
+def _industry_terms(value: Any) -> list[str]:
+    terms = [
+        _normalise(part)
+        for part in re.split(r"[,;/|]+|\band\b", _text(value), flags=re.IGNORECASE)
+    ]
+    return [
+        term
+        for term in terms
+        if len(term) >= 3 and term not in INDUSTRY_STOP
+    ][:4]
 
 
 def _mask_email(email: str) -> str:
@@ -129,7 +151,7 @@ def build_search_params(parsed: Mapping[str, str]) -> dict[str, Any]:
 
     industry = _text(parsed.get("industry"))
     if industry:
-        search_params["INDUSTRY"] = [industry]
+        search_params["INDUSTRY"] = _industry_terms(industry) or [industry]
     return search_params
 
 
@@ -191,19 +213,15 @@ def score_profile(profile: Mapping[str, Any], parsed: Mapping[str, str]) -> dict
                 score -= mismatch_penalty
                 contradictions.append(f"{label} differs")
 
-    industry_terms = [
-        _normalise(value)
-        for value in re.split(r"[,;/|]+", _text(parsed.get("industry")))
-        if _normalise(value)
-    ]
+    industry_terms = _industry_terms(parsed.get("industry"))
     industry_text = _candidate_text(
         profile, "industry", "headline", "current_company", "current_title"
     )
     if industry_terms and industry_text:
         matched_industries = [term for term in industry_terms if term in industry_text]
         if matched_industries:
-            score += 10
-            evidence.append("industry")
+            score += 12
+            evidence.append("industry or professional context")
         else:
             score -= 6
             contradictions.append("industry differs")
@@ -416,6 +434,39 @@ def _self_test() -> None:
     assert honorific_match["confidence"] == "high"
     assert honorific_match["profile"]["linkedin_url"].endswith("/correct")
 
+    consulting_params = parse_input(
+        {
+            "full_name": "Dr Mark Sinclair",
+            "country_region": "Australia",
+            "city_location": "Melbourne",
+            "industry": "Consulting and business",
+        }
+    )
+    assert build_search_params(consulting_params)["INDUSTRY"] == ["consulting"]
+    consulting_ranked = rank_profiles(
+        [
+            {
+                "name": "Mark Sinclair",
+                "linkedin_url": "https://www.linkedin.com/in/consulting-match",
+                "headline": "Advisor in business consulting and services",
+                "location": "Melbourne, Victoria, Australia",
+                "industry": "Business Consulting and Services",
+            },
+            {
+                "name": "Mark Sinclair",
+                "linkedin_url": "https://www.linkedin.com/in/unrelated-match",
+                "headline": "Financial Controller",
+                "location": "Melbourne, Victoria, Australia",
+                "industry": "Construction",
+            },
+        ],
+        consulting_params,
+    )
+    assert consulting_ranked[0]["profile"]["linkedin_url"].endswith(
+        "/consulting-match"
+    )
+    assert consulting_ranked[0]["score"] - consulting_ranked[1]["score"] >= 10
+
 
 def main() -> None:
     parser = argparse.ArgumentParser()
@@ -424,7 +475,7 @@ def main() -> None:
     if not args.self_test:
         parser.error("This module needs a configured helper; use --self-test for local validation.")
     _self_test()
-    print(json.dumps({"ok": True, "tests": 5}))
+    print(json.dumps({"ok": True, "tests": 6}))
 
 
 if __name__ == "__main__":
