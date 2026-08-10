@@ -1179,7 +1179,7 @@
     },
     {
       "parameters": {
-        "description": "Background, bounded-local-write tool for drafting one SEO article after domain research. Use when the current user asks to write a blog or SEO article for a named or immediately unambiguous saved business domain. It reuses saved research and verified public source pages; it makes no new DataForSEO purchase and never publishes. Do not ask whether the user owns the domain. A main keyword is required unless the user explicitly asks to choose the strongest saved opportunity. The tool returns quickly with a queued job; never call it twice for the same request.",
+        "description": "Prepare or start one grounded SEO article in the background. Use when the current user chooses article 1, 2 or 3, asks you to choose the best saved idea, supplies another topic, or directly asks for a blog article. It uses the saved research plan, makes no new DataForSEO purchase, asks only for missing essentials, and never publishes. If research is missing, run the default paid domain research first and use the free fallback if needed. Never ask about ownership. Pass the selected number exactly; a topic supplied by the user wins. If the tool returns needs_details, ask for all listed details in one short, plain-language question. Never call it twice for one request.",
         "source": "database",
         "workflowId": { "__rl": true, "value": "phase13StartSeoArticle", "mode": "list", "cachedResultName": "56 - TOOL - start_seo_article" },
         "workflowInputs": {
@@ -1188,10 +1188,15 @@
             "sessionId": "={{ $('Validate and Normalise').item.json.sessionId }}",
             "requestId": "={{ $('Validate and Normalise').item.json.requestId }}",
             "domain": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('domain', 'Bare saved business domain for the requested article.', 'string') }}",
-            "primaryKeyword": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('primaryKeyword', 'Main keyword or topic stated by the user; empty only when chooseStrongestKeyword is true.', 'string') }}",
+            "primaryKeyword": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('primaryKeyword', 'Main topic stated by the user. Use an empty string when they chose a numbered idea or asked you to choose.', 'string') }}",
+            "selectionNumber": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('selectionNumber', 'The exact article number 1, 2 or 3 chosen by the user. Use 0 when no numbered choice was made.', 'number') }}",
             "chooseStrongestKeyword": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('chooseStrongestKeyword', 'True only when the current user asks you to choose the strongest saved keyword opportunity.', 'boolean') }}",
             "supportingKeywords": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('supportingKeywords', 'Optional comma-separated supporting keywords from the user; otherwise an empty string.', 'string') }}",
-            "targetAudience": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('targetAudience', 'Optional audience supplied by the user; otherwise an empty string.', 'string') }}",
+            "targetAudience": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('targetAudience', 'Who the article is for, only when the user supplies or corrects it now; otherwise an empty string.', 'string') }}",
+            "offer": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('offer', 'What the business sells, only when the user supplies or corrects it now; otherwise an empty string.', 'string') }}",
+            "price": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('price', 'Pricing guidance supplied now, including do not mention price; otherwise an empty string.', 'string') }}",
+            "boundaries": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('boundaries', 'What the article must not promise or recommend, including no special limits when the user says so; otherwise an empty string.', 'string') }}",
+            "voice": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('voice', 'Writing style supplied or corrected now; otherwise an empty string.', 'string') }}",
             "goal": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('goal', 'Optional article goal supplied by the user; otherwise an empty string.', 'string') }}",
             "sourceUrls": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('sourceUrls', 'Optional whitespace-separated public HTTPS source URLs supplied by the user; otherwise an empty string.', 'string') }}"
           },
@@ -1201,9 +1206,14 @@
             { "id": "requestId", "displayName": "requestId", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
             { "id": "domain", "displayName": "domain", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
             { "id": "primaryKeyword", "displayName": "primaryKeyword", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
+            { "id": "selectionNumber", "displayName": "selectionNumber", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "number" },
             { "id": "chooseStrongestKeyword", "displayName": "chooseStrongestKeyword", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "boolean" },
             { "id": "supportingKeywords", "displayName": "supportingKeywords", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
             { "id": "targetAudience", "displayName": "targetAudience", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
+            { "id": "offer", "displayName": "offer", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
+            { "id": "price", "displayName": "price", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
+            { "id": "boundaries", "displayName": "boundaries", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
+            { "id": "voice", "displayName": "voice", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
             { "id": "goal", "displayName": "goal", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
             { "id": "sourceUrls", "displayName": "sourceUrls", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" }
           ],

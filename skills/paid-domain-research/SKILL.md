@@ -67,6 +67,18 @@ Lead with the answer, not the process. Use:
 
 Do not dump every keyword or competitor. Prefer the few that matter most. Mention the actual DataForSEO cost once, in a short closing note. Do not show the maximum cap unless it was exceeded or the user asks.
 
+## Offer the next article
+
+When the result contains `articleBrief`, the chat shows up to three article ideas as large buttons. Briefly say that the ideas are ready below; do not repeat the full cards or dump the raw keyword list.
+
+The displayed Who and Offer come from saved user facts first, then the official website. Selecting an idea accepts those displayed details for this article only. It does not permanently save an inference as a user fact.
+
+- `1`, `2`, or `3`: call `start_seo_article` with that exact `selectionNumber`.
+- `choose for me`: call it with `chooseStrongestKeyword: true`.
+- Another topic: pass that topic as `primaryKeyword`.
+
+If the user asked only for research, do not start writing automatically. Let them choose.
+
 ## Reuse saved paid research
 
 Call `get_paid_domain_research` when later SEO advice depends on saved rankings, competitors, keyword ideas, SERPs, costs, sources, or warnings. Supply a domain for its latest successful snapshot, or an exact conversation-bound job ID for a particular attempt.

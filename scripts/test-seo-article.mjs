@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -7,6 +7,7 @@ import { once } from "node:events";
 import { DatabaseSync } from "node:sqlite";
 import { createChatServer } from "../apps/chat/dist/app.js";
 import { ChatStore } from "../apps/chat/dist/chat-store.js";
+import { ProfileStore } from "../apps/chat/dist/profile.js";
 import { evaluateArticleQuality } from "../apps/chat/dist/article-quality.js";
 import { fetchPublicWebPage } from "../apps/chat/dist/public-web.js";
 
@@ -15,6 +16,29 @@ const temporary = await mkdtemp(join(tmpdir(), "seo-article-test-"));
 const store = new ChatStore(join(temporary, "chat.sqlite"));
 const sessionId = "11111111-1111-4111-8111-111111111111";
 const requestId = "22222222-2222-4222-8222-222222222222";
+
+const profileDirectory = join(temporary, "profile");
+const skillDirectory = join(temporary, "my-business");
+await mkdir(profileDirectory, { recursive: true });
+await writeFile(
+  join(profileDirectory, "profile.json"),
+  JSON.stringify({
+    schemaVersion: 1,
+    agentName: "Helper",
+    avatarDataUrl: "",
+    tone: "Warm and direct",
+    sells: "Bookkeeping support",
+    voiceSamples: ["A short saved sample."],
+    updatedAt: "2026-08-01T00:00:00.000Z",
+  }),
+);
+const profileStore = new ProfileStore(profileDirectory, skillDirectory);
+const migratedProfile = await profileStore.read();
+assert.equal(migratedProfile.schemaVersion, 2);
+assert.equal(migratedProfile.offer, "Bookkeeping support");
+assert.equal(migratedProfile.voice, "Warm and direct");
+assert.equal(migratedProfile.agentName, "Helper");
+assert.deepEqual(migratedProfile.voiceSamples, ["A short saved sample."]);
 
 const migrationPath = join(temporary, "migration.sqlite");
 const beforeMigration = new ChatStore(migrationPath);
@@ -26,10 +50,10 @@ beforeMigration.beginTurn({
 });
 beforeMigration.close();
 const legacyDatabase = new DatabaseSync(migrationPath);
-legacyDatabase.exec("DROP TABLE seo_article_versions; DROP TABLE seo_article_jobs; PRAGMA user_version = 3;");
+legacyDatabase.exec("DROP TABLE seo_article_versions; DROP TABLE seo_article_jobs; DROP TABLE seo_article_briefs; PRAGMA user_version = 3;");
 legacyDatabase.close();
 const afterMigration = new ChatStore(migrationPath);
-assert.equal(afterMigration.health().schemaVersion, 4);
+assert.equal(afterMigration.health().schemaVersion, 5);
 assert.equal(afterMigration.getConversation(sessionId)?.title, "Preserve this conversation");
 afterMigration.close();
 const articleWords = Array.from(
@@ -81,6 +105,7 @@ const server = createChatServer({
   publicDirectory: join(projectRoot, "apps", "chat", "public"),
   upstreamUrl: "http://127.0.0.1:5678/webhook/chat",
   chatStore: store,
+  profileStore,
 });
 server.listen(0, "127.0.0.1");
 await once(server, "listening");
@@ -98,11 +123,109 @@ const jsonRequest = async (path, options = {}) => {
 };
 
 try {
+  store.saveBusinessMemory({
+    schemaVersion: 1,
+    jobId: "fixture-research",
+    status: "completed",
+    domain: "example.com",
+    companyOverview: "A bookkeeping service for Australian freelancers.",
+    profile: {
+      brandName: "Example Books",
+      audience: "Australian freelancers",
+      offering: "Simple bookkeeping support",
+    },
+    competitors: { direct: [], seo: [], adjacent: [] },
+    seedKeywords: ["bookkeeping for freelancers", "freelance records", "bookkeeping costs"],
+    keywordCandidates: [
+      {
+        keyword: "bookkeeping for freelancers",
+        relevance: 0.95,
+        searchVolume: 320,
+        difficulty: 28,
+        intent: "informational",
+      },
+      {
+        keyword: "freelance records",
+        relevance: 0.7,
+        searchVolume: 90,
+        difficulty: 18,
+        intent: "informational",
+      },
+      {
+        keyword: "bookkeeping costs",
+        relevance: 0.65,
+        searchVolume: 70,
+        difficulty: 24,
+        intent: "commercial",
+      },
+    ],
+    keywordGroups: [],
+    sources: [{ url: "https://example.com/", type: "home page" }],
+    warnings: [],
+    researchSummary: "Grounded fixture research.",
+    evidenceQuality: { confidence: "high" },
+  });
+
+  const pricingNeedsDetail = await jsonRequest("/api/seo-article/jobs", {
+    method: "POST",
+    body: JSON.stringify({
+      sessionId,
+      requestId: "66666666-6666-4666-8666-666666666666",
+      domain: "example.com",
+      selectionNumber: 3,
+    }),
+  });
+  assert.equal(pricingNeedsDetail.response.status, 200);
+  assert.equal(pricingNeedsDetail.body.status, "needs_details");
+  assert.deepEqual(pricingNeedsDetail.body.missingFields, ["price"]);
+  assert.equal(pricingNeedsDetail.body.brief.selection.primaryKeyword, "bookkeeping costs");
+
+  const profileWithPrice = await jsonRequest("/api/profile", {
+    method: "PUT",
+    body: JSON.stringify({
+      profile: {
+        agentName: "Helper",
+        businessName: "Example Books",
+        whoYouServe: "Australian freelancers",
+        offer: "Bookkeeping support",
+        price: "Do not mention price",
+        boundaries: "",
+        voice: "Warm and direct",
+        voiceSamples: ["A short saved sample."],
+      },
+    }),
+  });
+  assert.equal(profileWithPrice.response.status, 200);
+  const refreshedBrief = await jsonRequest("/api/seo-article/briefs", {
+    method: "PATCH",
+    body: JSON.stringify({
+      sessionId,
+      briefId: pricingNeedsDetail.body.brief.briefId,
+    }),
+  });
+  assert.equal(refreshedBrief.response.status, 200);
+  assert.equal(refreshedBrief.body.brief.status, "choosing");
+  assert.deepEqual(refreshedBrief.body.brief.missingFields, []);
+  assert.equal(refreshedBrief.body.brief.context.price.value, "Do not mention price");
+
+  const pricingReady = await jsonRequest("/api/seo-article/jobs", {
+    method: "POST",
+    body: JSON.stringify({
+      sessionId,
+      requestId: "66666666-6666-4666-8666-666666666666",
+      domain: "example.com",
+    }),
+  });
+  assert.equal(pricingReady.response.status, 201);
+  assert.equal(pricingReady.body.job.input.price, "Do not mention price");
+  assert.equal(pricingReady.body.job.primaryKeyword, "bookkeeping costs");
+
   const registrationBody = {
     sessionId,
     requestId,
     domain: "example.com",
-    primaryKeyword: "bookkeeping for freelancers",
+    primaryKeyword: "",
+    selectionNumber: 1,
     supportingKeywords: ["freelance records"],
     targetAudience: "Australian freelancers",
     goal: "Help readers build a simple habit",
@@ -114,7 +237,16 @@ try {
   });
   assert.equal(first.response.status, 201);
   assert.equal(first.body.created, true);
+  assert.equal(first.body.job.primaryKeyword, "bookkeeping for freelancers");
+  assert.match(first.body.job.briefId, /^brief-/);
   const jobId = first.body.job.jobId;
+
+  const briefDuringWrite = await jsonRequest(
+    `/api/seo-article/briefs?sessionId=${sessionId}&domain=example.com`,
+  );
+  assert.equal(briefDuringWrite.response.status, 200);
+  assert.equal(briefDuringWrite.body.brief.status, "writing");
+  assert.equal(briefDuringWrite.body.brief.opportunities.length, 3);
 
   const duplicate = await jsonRequest("/api/seo-article/jobs", {
     method: "POST",
@@ -170,6 +302,12 @@ try {
   assert.equal(saved.response.status, 200, JSON.stringify(saved.body));
   assert.match(saved.body.article.downloadUrl, /^\/api\/seo-article\/download\//);
 
+  const completedBrief = await jsonRequest(
+    `/api/seo-article/briefs?sessionId=${sessionId}&domain=example.com`,
+  );
+  assert.equal(completedBrief.body.brief.status, "complete");
+  assert.equal(completedBrief.body.article.downloadUrl, saved.body.article.downloadUrl);
+
   const download = await fetch(`${base}${saved.body.article.downloadUrl}`);
   assert.equal(download.status, 200);
   assert.match(download.headers.get("content-disposition") ?? "", /\.md"$/);
@@ -204,6 +342,7 @@ try {
     sessionId,
     requestId: interruptedRequest,
     domain: "example.com",
+    briefId: first.body.job.briefId,
     primaryKeyword: "record keeping",
     supportingKeywords: [],
     input: {},

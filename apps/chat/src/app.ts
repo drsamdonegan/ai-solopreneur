@@ -33,7 +33,20 @@ import {
   type SeoSnapshotInput,
   type StoredAttachment,
 } from "./chat-store.js";
-import { ProfileStore, ProfileValidationError } from "./profile.js";
+import {
+  createArticleBriefData,
+  refreshArticleBriefContext,
+  resolveArticleContext,
+  selectArticleOpportunity,
+  type ArticleContextOverrides,
+  type ArticleBriefRecord,
+} from "./article-brief.js";
+import {
+  emptyProfile,
+  ProfileStore,
+  ProfileValidationError,
+  type AgentProfile,
+} from "./profile.js";
 import { fetchPublicDomainPage, fetchPublicWebPages } from "./public-web.js";
 import { validateSeoArticleResult } from "./seo-article.js";
 
@@ -547,14 +560,34 @@ function seoArticleUrlArray(value: unknown, field: string): string[] {
   return urls;
 }
 
-function validateSeoArticleJobInput(body: unknown): SeoArticleJobInput {
+interface SeoArticleStartRequest {
+  sessionId: string;
+  requestId: string;
+  domain: string;
+  primaryKeyword: string;
+  selectionNumber?: number;
+  chooseStrongestKeyword: boolean;
+  supportingKeywords: string[];
+  context: ArticleContextOverrides;
+  goal: string;
+  sourceUrls: string[];
+}
+
+function validateSeoArticleStartRequest(body: unknown): SeoArticleStartRequest {
   const candidate = businessMemoryObject(body, "article request");
   const sessionId = validateSessionId(candidate.sessionId);
   const requestId = validateSessionId(candidate.requestId);
   const domain = validateBusinessDomain(candidate.domain);
-  const primaryKeyword = businessMemoryText(candidate.primaryKeyword, "primary keyword", 200);
-  if (primaryKeyword.length < 2) {
-    throw new PublicError(400, "INVALID_REQUEST", "Choose a main keyword or ask to use the strongest saved opportunity.");
+  const primaryKeyword = businessMemoryText(candidate.primaryKeyword ?? "", "primary keyword", 200);
+  const rawSelection = candidate.selectionNumber ?? candidate.articleChoice;
+  const selectionNumber = rawSelection === undefined || rawSelection === ""
+    ? undefined
+    : Number(rawSelection);
+  if (
+    selectionNumber !== undefined &&
+    (!Number.isInteger(selectionNumber) || selectionNumber < 1 || selectionNumber > 3)
+  ) {
+    throw new PublicError(400, "INVALID_REQUEST", "Choose article 1, 2 or 3.");
   }
   const supportingKeywords = businessMemoryStringArray(
     candidate.supportingKeywords ?? [],
@@ -562,13 +595,158 @@ function validateSeoArticleJobInput(body: unknown): SeoArticleJobInput {
     20,
     200,
   );
-  const input = {
-    targetAudience: businessMemoryText(candidate.targetAudience ?? "", "target audience", 1_000),
+  const context: ArticleContextOverrides = {
+    who: businessMemoryText(
+      candidate.who ?? candidate.targetAudience ?? "",
+      "who the business helps",
+      1_000,
+    ),
+    offer: businessMemoryText(candidate.offer ?? "", "business offer", 1_000),
+    price: businessMemoryText(candidate.price ?? "", "pricing guidance", 1_000),
+    boundaries: businessMemoryText(candidate.boundaries ?? "", "business limits", 1_000),
+    voice: businessMemoryText(candidate.voice ?? "", "writing voice", 1_000),
+  };
+  return {
+    sessionId,
+    requestId,
+    domain,
+    primaryKeyword,
+    ...(selectionNumber === undefined ? {} : { selectionNumber }),
+    chooseStrongestKeyword: candidate.chooseStrongestKeyword === true,
+    supportingKeywords,
+    context,
     goal: businessMemoryText(candidate.goal ?? "", "article goal", 1_000),
     sourceUrls: seoArticleUrlArray(candidate.sourceUrls, "source URLs"),
-    requestedAt: new Date().toISOString(),
   };
-  return { sessionId, requestId, domain, primaryKeyword, supportingKeywords, input };
+}
+
+function researchKeyForBrief(brief: ReturnType<typeof createArticleBriefData>): string {
+  if (brief === undefined) return "";
+  if (brief.research.snapshotId) return `snapshot:${brief.research.snapshotId}`;
+  return `memory:${brief.research.memoryJobId ?? brief.research.capturedAt}`;
+}
+
+function prepareArticleBrief(
+  chatStore: ChatStore,
+  sessionId: string,
+  domain: string,
+  profile: AgentProfile,
+  options: { paidOnly?: boolean; freeOnly?: boolean } = {},
+): ArticleBriefRecord | undefined {
+  const snapshot = options.freeOnly ? undefined : chatStore.getLatestSeoSnapshot(domain);
+  const memory = options.paidOnly ? undefined : chatStore.getBusinessMemory(domain);
+  const data = createArticleBriefData({
+    ...(snapshot === undefined ? {} : { snapshot }),
+    ...(memory === undefined ? {} : { memory }),
+    profile,
+  });
+  if (data === undefined) return undefined;
+  return chatStore.prepareArticleBrief(
+    sessionId,
+    domain,
+    researchKeyForBrief(data),
+    data,
+  );
+}
+
+function prepareSeoArticleJob(
+  chatStore: ChatStore,
+  request: SeoArticleStartRequest,
+  profile: AgentProfile,
+):
+  | { status: "needs_selection"; brief: ArticleBriefRecord; message: string }
+  | {
+      status: "needs_details";
+      brief: ArticleBriefRecord;
+      missingFields: string[];
+      message: string;
+    }
+  | { status: "ready"; brief: ArticleBriefRecord; jobInput: SeoArticleJobInput } {
+  let brief = chatStore.getLatestArticleBrief(request.sessionId, request.domain);
+  if (brief === undefined) {
+    brief = prepareArticleBrief(
+      chatStore,
+      request.sessionId,
+      request.domain,
+      profile,
+    );
+  }
+  if (brief === undefined) {
+    throw new PublicError(
+      422,
+      "SEO_ARTICLE_ERROR",
+      "I need to research this website before I can write a reliable article.",
+    );
+  }
+  const opportunity = selectArticleOpportunity(brief, {
+    primaryKeyword: request.primaryKeyword,
+    ...(request.selectionNumber === undefined
+      ? {}
+      : { selectionNumber: request.selectionNumber }),
+    chooseBest: request.chooseStrongestKeyword,
+  });
+  if (opportunity === undefined) {
+    return {
+      status: "needs_selection",
+      brief,
+      message: brief.opportunities.length > 0
+        ? "Choose article 1, 2 or 3, ask me to choose, or tell me another topic."
+        : "Tell me the article topic you want to write.",
+    };
+  }
+  const resolved = resolveArticleContext(brief, opportunity, request.context);
+  if (resolved.missingFields.length > 0) {
+    brief = chatStore.updateArticleBrief(request.sessionId, brief.briefId, {
+      status: "needs_details",
+      selection: opportunity,
+      context: resolved.context,
+      missingFields: resolved.missingFields,
+    });
+    return {
+      status: "needs_details",
+      brief,
+      missingFields: resolved.missingFields,
+      message: "I only need the missing business details shown here before I write.",
+    };
+  }
+  brief = chatStore.updateArticleBrief(request.sessionId, brief.briefId, {
+    status: "choosing",
+    selection: opportunity,
+    context: resolved.context,
+    missingFields: [],
+  });
+  const supportingKeywords = [
+    ...request.supportingKeywords,
+    ...opportunity.supportingKeywords,
+  ]
+    .filter(
+      (keyword, index, values) =>
+        keyword.toLowerCase() !== opportunity.primaryKeyword.toLowerCase() &&
+        values.findIndex((value) => value.toLowerCase() === keyword.toLowerCase()) === index,
+    )
+    .slice(0, 12);
+  return {
+    status: "ready",
+    brief,
+    jobInput: {
+      sessionId: request.sessionId,
+      requestId: request.requestId,
+      domain: request.domain,
+      briefId: brief.briefId,
+      primaryKeyword: opportunity.primaryKeyword,
+      supportingKeywords,
+      input: {
+        targetAudience: resolved.context.who.value,
+        offer: resolved.context.offer.value,
+        price: resolved.context.price.value,
+        boundaries: resolved.context.boundaries.value,
+        voice: resolved.context.voice.value,
+        goal: request.goal,
+        sourceUrls: request.sourceUrls,
+        requestedAt: new Date().toISOString(),
+      },
+    },
+  };
 }
 
 function validateSeoArticleJobUpdate(body: unknown): {
@@ -1159,7 +1337,7 @@ export function createChatHandler(options: ChatGatewayOptions): RequestListener 
         try {
           if (request.method === "GET") {
             sendJson(response, 200, {
-              schemaVersion: 1,
+              schemaVersion: 2,
               profile: await profileStore.read(),
             });
             return;
@@ -1183,7 +1361,7 @@ export function createChatHandler(options: ChatGatewayOptions): RequestListener 
             const saved = await profileStore.write(
               (body as Record<string, unknown>).profile ?? body,
             );
-            sendJson(response, 200, { schemaVersion: 1, profile: saved });
+            sendJson(response, 200, { schemaVersion: 2, profile: saved });
             return;
           }
           sendJson(
@@ -1374,16 +1552,154 @@ export function createChatHandler(options: ChatGatewayOptions): RequestListener 
         return;
       }
 
+      if (url.pathname === "/api/seo-article/briefs") {
+        try {
+          if (request.method === "PATCH") {
+            const candidate = businessMemoryObject(
+              await readRequestBody(request, MAX_SEO_ARTICLE_REQUEST_BYTES),
+              "article plan update",
+            );
+            const sessionId = validateSessionId(candidate.sessionId);
+            const briefId = businessMemoryText(candidate.briefId, "article plan ID", 160);
+            const current = chatStore.getArticleBrief(sessionId, briefId);
+            if (current === undefined) {
+              throw new PublicError(
+                404,
+                "SEO_ARTICLE_NOT_FOUND",
+                "That article plan is not saved for this conversation.",
+              );
+            }
+            if (current.status === "choosing" || current.status === "needs_details") {
+              const refreshed = refreshArticleBriefContext(
+                current,
+                profileStore === undefined ? emptyProfile() : await profileStore.read(),
+              );
+              const brief = chatStore.updateArticleBrief(sessionId, briefId, {
+                status: refreshed.missingFields.length > 0 && current.selection !== undefined
+                  ? "needs_details"
+                  : "choosing",
+                context: refreshed.context,
+                missingFields: refreshed.missingFields,
+              });
+              sendJson(response, 200, { schemaVersion: 1, brief });
+              return;
+            }
+            sendJson(response, 200, { schemaVersion: 1, brief: current });
+            return;
+          }
+          if (request.method !== "GET") {
+            sendJson(
+              response,
+              405,
+              { error: { code: "INVALID_REQUEST", message: "That method is not supported." } },
+              { Allow: "GET, PATCH" },
+            );
+            return;
+          }
+          const sessionId = validateSessionId(url.searchParams.get("sessionId"));
+          const requestedDomain = url.searchParams.get("domain");
+          const brief = chatStore.getLatestArticleBrief(
+            sessionId,
+            requestedDomain === null ? undefined : validateBusinessDomain(requestedDomain),
+          );
+          if (brief === undefined) {
+            throw new PublicError(
+              404,
+              "SEO_ARTICLE_NOT_FOUND",
+              "There is no article plan in this conversation yet.",
+            );
+          }
+          const job = brief.linkedJobId
+            ? chatStore.getSeoArticleJob(sessionId, brief.linkedJobId)
+            : undefined;
+          const version = job?.latestVersionId
+            ? chatStore.getSeoArticleVersionForJob(sessionId, job.jobId, job.latestVersionId)
+            : undefined;
+          sendJson(response, 200, {
+            schemaVersion: 1,
+            brief: {
+              briefId: brief.briefId,
+              domain: brief.domain,
+              status: brief.status,
+              opportunities: brief.opportunities,
+              context: brief.context,
+              selection: brief.selection,
+              missingFields: brief.missingFields,
+              research: {
+                source: brief.research.source,
+                capturedAt: brief.research.capturedAt,
+                status: brief.research.status,
+                warnings: brief.research.warnings,
+              },
+              createdAt: brief.createdAt,
+              updatedAt: brief.updatedAt,
+            },
+            ...(job === undefined ? {} : { job }),
+            ...(version === undefined
+              ? {}
+              : {
+                  article: {
+                    status: version.status,
+                    metadata: version.metadata,
+                    warnings: version.warnings,
+                    createdAt: version.createdAt,
+                    downloadUrl: `/api/seo-article/download/${version.downloadToken}.md`,
+                  },
+                }),
+          });
+        } catch (error) {
+          if (error instanceof PublicError) sendError(response, error);
+          else {
+            options.logError?.("Could not read the article plan", error);
+            sendError(
+              response,
+              new PublicError(500, "SEO_ARTICLE_ERROR", "The article plan could not be loaded."),
+            );
+          }
+        }
+        return;
+      }
+
       if (url.pathname === "/api/seo-article/jobs") {
         try {
           if (request.method === "POST") {
-            const registered = chatStore.registerSeoArticleJob(
-              validateSeoArticleJobInput(
-                await readRequestBody(request, MAX_SEO_ARTICLE_REQUEST_BYTES),
-              ),
+            const startRequest = validateSeoArticleStartRequest(
+              await readRequestBody(request, MAX_SEO_ARTICLE_REQUEST_BYTES),
             );
+            const prepared = prepareSeoArticleJob(
+              chatStore,
+              startRequest,
+              profileStore === undefined ? emptyProfile() : await profileStore.read(),
+            );
+            if (prepared.status !== "ready") {
+              sendJson(response, 200, {
+                schemaVersion: 1,
+                status: prepared.status,
+                message: prepared.message,
+                brief: {
+                  briefId: prepared.brief.briefId,
+                  domain: prepared.brief.domain,
+                  status: prepared.brief.status,
+                  opportunities: prepared.brief.opportunities,
+                  context: prepared.brief.context,
+                  selection: prepared.brief.selection,
+                  missingFields: prepared.brief.missingFields,
+                },
+                ...(prepared.status === "needs_details"
+                  ? { missingFields: prepared.missingFields }
+                  : {}),
+              });
+              return;
+            }
+            const registered = chatStore.registerSeoArticleJob(prepared.jobInput);
             sendJson(response, registered.created ? 201 : 200, {
               schemaVersion: 1,
+              status: registered.job.status,
+              brief: {
+                briefId: prepared.brief.briefId,
+                selection: prepared.brief.selection,
+                context: prepared.brief.context,
+              },
               ...registered,
             });
             return;
@@ -1494,12 +1810,16 @@ export function createChatHandler(options: ChatGatewayOptions): RequestListener 
           if (job === undefined) {
             throw new PublicError(404, "SEO_ARTICLE_NOT_FOUND", "That article job is not saved for this conversation.");
           }
-          const memory = chatStore.getBusinessMemory(job.domain);
-          const snapshot = chatStore.getLatestSeoSnapshot(job.domain);
+          const brief = job.briefId
+            ? chatStore.getArticleBrief(sessionId, job.briefId)
+            : undefined;
+          const memory = brief === undefined ? chatStore.getBusinessMemory(job.domain) : undefined;
+          const snapshot = brief === undefined ? chatStore.getLatestSeoSnapshot(job.domain) : undefined;
           const profile = profileStore === undefined ? undefined : await profileStore.read();
           sendJson(response, 200, {
             schemaVersion: 1,
             job,
+            ...(brief === undefined ? {} : { brief }),
             ...(memory === undefined ? {} : { memory }),
             ...(snapshot === undefined ? {} : { snapshot }),
             ...(profile === undefined ? {} : { profile }),
@@ -1602,7 +1922,7 @@ export function createChatHandler(options: ChatGatewayOptions): RequestListener 
             const requestedJobId = url.searchParams.get("jobId");
             const requestedSessionId = url.searchParams.get("sessionId");
             const requestedDomain = url.searchParams.get("domain");
-            if (requestedJobId !== null || requestedSessionId !== null) {
+            if (requestedJobId !== null) {
               const sessionId = validateSessionId(requestedSessionId);
               const jobId = businessMemoryText(requestedJobId, "job ID", 160);
               const snapshot = jobId
@@ -1622,12 +1942,28 @@ export function createChatHandler(options: ChatGatewayOptions): RequestListener 
               const domain = validateBusinessDomain(requestedDomain);
               const snapshot = chatStore.getLatestSeoSnapshot(domain);
               const history = chatStore.listSeoSnapshotSummaries(domain, 20);
+              const articleBrief = requestedSessionId === null || snapshot === undefined
+                ? undefined
+                : prepareArticleBrief(
+                    chatStore,
+                    validateSessionId(requestedSessionId),
+                    domain,
+                    profileStore === undefined ? emptyProfile() : await profileStore.read(),
+                  );
               sendJson(response, 200, {
                 schemaVersion: 1,
                 ...(snapshot === undefined ? {} : { snapshot }),
+                ...(articleBrief === undefined ? {} : { articleBrief }),
                 history,
               });
               return;
+            }
+            if (requestedSessionId !== null) {
+              throw new PublicError(
+                400,
+                "INVALID_REQUEST",
+                "Choose a website before preparing article ideas.",
+              );
             }
             sendJson(response, 200, {
               schemaVersion: 1,
@@ -1650,7 +1986,19 @@ export function createChatHandler(options: ChatGatewayOptions): RequestListener 
               snapshot,
               memory,
             );
-            sendJson(response, 200, { schemaVersion: 1, ...saved });
+            const articleBrief = snapshot.status === "failed"
+              ? undefined
+              : prepareArticleBrief(
+                  chatStore,
+                  sessionId,
+                  snapshot.domain,
+                  profileStore === undefined ? emptyProfile() : await profileStore.read(),
+                );
+            sendJson(response, 200, {
+              schemaVersion: 1,
+              ...saved,
+              ...(articleBrief === undefined ? {} : { articleBrief }),
+            });
             return;
           }
           sendJson(
@@ -1705,7 +2053,23 @@ export function createChatHandler(options: ChatGatewayOptions): RequestListener 
               sessionId,
               validateBusinessMemory(candidate),
             );
-            sendJson(response, 200, { schemaVersion: 1, memory });
+            const data = createArticleBriefData({
+              memory,
+              profile: profileStore === undefined ? emptyProfile() : await profileStore.read(),
+            });
+            const articleBrief = data === undefined
+              ? undefined
+              : chatStore.prepareArticleBrief(
+                  sessionId,
+                  memory.domain,
+                  researchKeyForBrief(data),
+                  data,
+                );
+            sendJson(response, 200, {
+              schemaVersion: 1,
+              memory,
+              ...(articleBrief === undefined ? {} : { articleBrief }),
+            });
             return;
           }
           sendJson(

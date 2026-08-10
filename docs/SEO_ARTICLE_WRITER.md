@@ -1,53 +1,58 @@
 # SEO Article Writer
 
-`seo-article-writer` creates a complete Markdown review draft after domain research. It is standalone: it does not connect to or import MLAI Content Factory.
+`seo-article-writer` creates a complete Markdown review draft. It works on its own or immediately after either domain-research skill. It does not connect to MLAI Content Factory.
 
-## What it uses
+## The simple user journey
 
-- the latest saved business memory and paid SEO snapshot for the domain;
-- the user's main keyword, or the strongest relevant saved keyword when explicitly requested;
-- optional audience, goal, supporting keywords, and public HTTPS source links;
-- saved tone and writing samples for style only;
-- public pages already present in the saved research.
+1. The user asks to research a website. Paid DataForSEO research runs first; the website-only research is the automatic fallback.
+2. The chat shows up to three useful article ideas as large buttons.
+3. The user chooses an idea, asks the agent to choose, or types another topic.
+4. If an essential business detail is missing, the agent asks one short question containing every missing detail.
+5. Writing runs in the background. A progress card updates automatically and becomes a local Markdown download when the draft is ready.
 
-It does not run another DataForSEO search. It does not publish, edit a website, or send the article anywhere.
+The user does not need to know about skills, keywords, snapshots, job IDs, workflow names, or DataForSEO settings.
 
-## How it works
+## What is required
 
-1. `start_seo_article` validates the brief and saved research, then creates a conversation-bound job.
-2. It queues `57 - INTERNAL - write_seo_article` without holding the chat request open.
-3. The background compiler safely fetches up to 12 public HTTPS pages. It rejects private networks and rechecks every redirect.
-4. At least four readable pages are required. Search snippets alone are not evidence.
-5. Claude creates a structured draft and an exact claim ledger. Unsupported claims get one repair pass.
-6. The chat app runs final static checks and stores a new immutable article version only when those checks pass.
-7. `get_seo_article` reports progress and returns a local Markdown download link when ready.
+Every article needs:
 
-Failed or interrupted work is recorded honestly and never replaces the latest successful draft.
+- a website;
+- one selected idea or user-supplied topic;
+- **Who** the business helps;
+- the **Offer** it sells that audience.
 
-## Use it
+The chat fills Who and Offer from saved user facts first, then suggests what the official website says. Choosing an article accepts the displayed suggestions for that article only; it does not silently change My Business.
 
-Research the domain first. Then ask something like:
+Two fields are required only when they matter:
 
-> Write an SEO article for example.com about bookkeeping for freelancers. Use the saved research and write for Australian sole traders.
+- **Price** for pricing, cost, fee, package, rate, quote, or buying articles. “Do not mention price” is valid.
+- **Boundaries** for comparisons, promises, sensitive advice, or regulated topics. “No special limits” is valid.
 
-Or:
+Voice is optional. The default is simple, clear, friendly, conversational, and jargon-free. Saved writing samples can guide style but never support factual claims.
 
-> Choose the strongest saved keyword for example.com and draft the article.
+## Running it without prior research
 
-The start reply should arrive quickly. Ask “Is the article ready?” to check it. The chat shows a short preview and a safe local `.md` download rather than pasting the entire article.
+A direct request such as “Write an SEO article for example.com about bookkeeping for freelancers” still works. The agent runs normal paid domain research first, uses the free website-only fallback if needed, and then prepares the article. It never asks the user about ownership, payment, API keys, job IDs, or technical setup.
 
-## Evidence and review
+The article workflow itself makes no DataForSEO purchase. It uses the exact saved research and business context pinned to the article brief.
 
-The saved artifact includes SEO metadata, a heading plan, Markdown, optional answer blocks and FAQ, references, structured data, a claim ledger, warnings, and a quality report. Its status is always `ready_for_review`; a human decides whether and where to publish it.
+## Safety and quality
 
-Profile tone and writing samples guide voice only. They can never support a factual claim. Researched pages are untrusted data, so instructions found inside them are ignored.
+- The draft is saved for review and is never published automatically.
+- The compiler safely fetches public HTTPS sources and rechecks every redirect.
+- At least four readable pages are required. Search snippets alone are not evidence.
+- Factual claims need supporting sources. Unsupported claims receive one repair pass.
+- Final deterministic checks run before a new immutable article version is saved.
+- A failed or interrupted run is reported honestly and never replaces an earlier successful draft.
 
-## Setup and troubleshooting
+The finished Markdown contains the article, SEO metadata, sources, a claim ledger, warnings, and its quality report. Its status is always `ready_for_review`.
 
-The workflow uses the existing n8n credential named `Anthropic account`. No new credential is required. After pulling or switching to this branch:
+## Setup
+
+The workflow uses the existing n8n credential named `Anthropic account`. After switching to this branch:
 
 1. Run the normal local setup/update helper so workflows 56–58 are imported.
 2. Run `sync-skills.command` on macOS or `sync-skills-windows.cmd` on Windows.
 3. Restart the local stack and open [http://localhost:3000](http://localhost:3000).
 
-If a job fails, ask the agent to check it. Common honest failures are missing saved domain research, no usable saved keyword, fewer than four readable sources, a model timeout, unsupported claims after the repair pass, or a final quality-gate failure.
+Common honest failures are no usable research, missing required business details, fewer than four readable sources, a model timeout, unsupported claims after repair, or a final quality-check failure.

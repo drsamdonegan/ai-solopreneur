@@ -1420,7 +1420,8 @@ if (startPaidResearchWorkflow) {
   check(
     /jobId:null/.test(cacheShaping) &&
       /sourceJobId:s\.jobId/.test(cacheShaping) &&
-      /get_paid_domain_research/.test(cacheShaping),
+      /articleBrief/.test(cacheShaping) &&
+      /no DataForSEO charge was made/.test(cacheShaping),
     "cache hits must not masquerade as a new conversation-bound job",
   );
   check(
@@ -1477,13 +1478,21 @@ if (startSeoArticleWorkflow) {
       startSeoArticleWorkflow.settings?.executionTimeout <= 30,
     "start_seo_article must queue the background writer without waiting",
   );
-  const resolveBrief =
-    nodeByName(startSeoArticleWorkflow, "Resolve Grounded Brief")?.parameters?.jsCode ?? "";
+  const registrationBody =
+    nodeByName(startSeoArticleWorkflow, "Register Article Job")?.parameters?.jsonBody ?? "";
+  const registrationCheck =
+    nodeByName(startSeoArticleWorkflow, "Check Job Registration")?.parameters?.jsCode ?? "";
   check(
-    /RESEARCH_REQUIRED/.test(resolveBrief) &&
-      /KEYWORD_REQUIRED/.test(resolveBrief) &&
-      /selectedKeywords/.test(resolveBrief),
-    "start_seo_article must require saved research and a grounded keyword",
+    /selectionNumber/.test(registrationBody) &&
+      /chooseStrongestKeyword/.test(registrationBody) &&
+      /targetAudience/.test(registrationBody) &&
+      /offer/.test(registrationBody) &&
+      /price/.test(registrationBody) &&
+      /boundaries/.test(registrationBody) &&
+      /voice/.test(registrationBody) &&
+      /needs_selection/.test(registrationCheck) &&
+      /needs_details/.test(registrationCheck),
+    "start_seo_article must use the saved brief and ask only for missing essentials",
   );
 }
 

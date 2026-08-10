@@ -56,7 +56,7 @@ const runtimeRoot = resolve(
 const npmInstallTimeoutMs = 30 * 60 * 1_000;
 const npmCommandTimeoutMs = 10 * 60 * 1_000;
 const n8nCliTimeoutMs = 5 * 60 * 1_000;
-const chatDatabaseSchemaVersion = 3;
+const chatDatabaseSchemaVersion = 5;
 
 const paths = {
   envFile: join(projectRoot, ".env"),

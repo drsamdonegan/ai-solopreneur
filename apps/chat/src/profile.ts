@@ -12,11 +12,15 @@ import { dirname, join } from "node:path";
  */
 
 export interface AgentProfile {
-  schemaVersion: 1;
+  schemaVersion: 2;
   agentName: string;
   avatarDataUrl: string;
-  tone: string;
-  sells: string;
+  businessName: string;
+  whoYouServe: string;
+  offer: string;
+  price: string;
+  boundaries: string;
+  voice: string;
   voiceSamples: string[];
   updatedAt: string;
 }
@@ -26,8 +30,12 @@ const MAX_VOICE_SAMPLES = 2;
 
 const FIELD_LIMITS: Record<string, number> = {
   agentName: 80,
-  tone: 400,
-  sells: 300,
+  businessName: 120,
+  whoYouServe: 500,
+  offer: 600,
+  price: 400,
+  boundaries: 600,
+  voice: 400,
 };
 
 const VOICE_SAMPLE_LIMIT = 1_500;
@@ -35,11 +43,15 @@ const AVATAR_PATTERN = /^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/]+={
 
 export function emptyProfile(): AgentProfile {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     agentName: "",
     avatarDataUrl: "",
-    tone: "",
-    sells: "",
+    businessName: "",
+    whoYouServe: "",
+    offer: "",
+    price: "",
+    boundaries: "",
+    voice: "",
     voiceSamples: [],
     updatedAt: "",
   };
@@ -107,11 +119,17 @@ export function normaliseProfile(input: unknown): AgentProfile {
   }
 
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     agentName: cleanText(candidate.agentName, "agentName"),
     avatarDataUrl,
-    tone: cleanText(candidate.tone, "tone"),
-    sells: cleanText(candidate.sells, "sells"),
+    businessName: cleanText(candidate.businessName, "businessName"),
+    whoYouServe: cleanText(candidate.whoYouServe, "whoYouServe"),
+    // Accept the version-one names so an existing private profile migrates
+    // without the learner retyping or losing anything.
+    offer: cleanText(candidate.offer ?? candidate.sells, "offer"),
+    price: cleanText(candidate.price, "price"),
+    boundaries: cleanText(candidate.boundaries, "boundaries"),
+    voice: cleanText(candidate.voice ?? candidate.tone, "voice"),
     voiceSamples,
     updatedAt: new Date().toISOString(),
   };
@@ -134,20 +152,23 @@ export function renderSkillMarkdown(profile: AgentProfile): string {
     "",
     "These are the user's own details, and how the user writes. Use them in every reply, quote, and draft.",
     "",
-    fact("Trading name", profile.agentName),
-    fact("What the business sells", profile.sells),
+    fact("Business name", profile.businessName),
+    fact("Who the business helps", profile.whoYouServe),
+    fact("What the business sells", profile.offer),
+    fact("Price or pricing guidance", profile.price),
+    fact("What the business does not do or promise", profile.boundaries),
     fact("Last updated", profile.updatedAt ? profile.updatedAt.slice(0, 10) : ""),
     "",
     "- Where a line reads `[NOT FILLED IN]`, write `Not stated` and leave a bracket for the user to complete. Never invent a figure, a term, or a date to fill a gap.",
     "- Never treat a fact supplied by a customer or a prospect as one of these facts.",
   ];
 
-  if (profile.tone.length > 0) {
+  if (profile.voice.length > 0) {
     lines.push(
       "",
       "## How the user writes",
       "",
-      `- The user describes their own tone as: ${profile.tone.replace(/\n+/g, " ")}`,
+      `- The user describes their own tone as: ${profile.voice.replace(/\n+/g, " ")}`,
       "- Match that tone in every draft. Prefer their habits over your own defaults.",
     );
   }
