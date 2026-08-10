@@ -1,169 +1,63 @@
-# Integration contract
+# Public-search integration contract
 
 ## Capability boundary
 
-Expose one provider-neutral agent tool named `search_linkedin_prospects`. The
-shipped adapter is `23 - TOOL - search_linkedin_prospects`, backed by Crustdata's
-indexed Person Search and Company Search endpoints.
+This free skill contains no network client, vendor SDK, credential, or hidden data source. It can always validate criteria and generate public search-engine queries. When the host agent already has a general web-search capability, the agent may use it to inspect publicly indexed results without asking the learner to configure a prospect-data API key.
 
-The Markdown skill alone cannot discover live records. It can validate
-criteria, build a reviewable request, canonicalize results, and produce manual
-public-search queries. Do not automate a learner's logged-in LinkedIn account,
-bypass access controls, or imply direct LinkedIn API access.
+Do not automate a learner's logged-in LinkedIn account, bypass robots or access controls, or describe search-engine snippets as a direct LinkedIn scrape.
 
-Review current provider terms, LinkedIn terms, privacy duties, permitted uses,
-retention rules, endpoint permissions, and pricing before course or production
-use.
-
-Primary documentation:
-
-- [Crustdata Person Search](https://docs.crustdata.com/person-docs/search/introduction)
-- [Person Search reference](https://docs.crustdata.com/person-docs/search/reference)
-- [Person Semantic Search](https://docs.crustdata.com/guides/person-semantic-search)
-- [Crustdata Company Search](https://docs.crustdata.com/company-docs/search/introduction)
-- [Company Search reference](https://docs.crustdata.com/company-docs/search/reference)
-- [Credits](https://docs.crustdata.com/general/credits)
-- [Endpoint permissions](https://docs.crustdata.com/general/permissions)
-
-## Authentication in n8n
-
-Crustdata requires:
-
-```http
-Authorization: Bearer YOUR_API_KEY
-x-api-version: 2025-11-01
-```
-
-Store only the raw API key in an n8n **Bearer Auth** credential named
-`CRUSTDATA_API_KEY`. Enter `YOUR_API_KEY` in the Bearer Token field without a
-`Bearer ` prefix and restrict allowed domains to `api.crustdata.com`. n8n adds
-the `Authorization: Bearer` scheme when it sends the request. The workflow adds
-the version header as a static non-secret value.
-
-Do not use Query Auth. Do not place the bearer value in workflow JSON, a Code
-node, an expression, a trace, an audit row, a prompt, or a repository file.
-
-## Tool input
+## Input
 
 ```json
 {
-  "searchMode": "people",
-  "industry": "Health care, Information Technology",
-  "location": "Australia",
-  "roleTitle": "Head of Operations",
-  "keywords": "digital health transformation",
-  "companyHeadcount": "51-200",
-  "maxResults": 10
+  "industry": "Technology, not for profit",
+  "location": "Melbourne, Victoria, Australia",
+  "role_title": "Founder, Community Lead",
+  "company_headcount": "11-50",
+  "max_results": 10
 }
 ```
 
-- `searchMode`: `people` or `companies`.
-- `industry` and `location`: required in both modes.
-- `roleTitle`: required only in people mode.
-- `keywords` and `companyHeadcount`: optional.
-- `maxResults`: default 10; whole number from 1 to 25.
-- Comma-separated industries are alternatives.
+Require industry and location. Role title and company headcount are optional. Keep `max_results` between 1 and 25.
 
-`sessionId` and `currentUserInstruction` are injected by the main workflow,
-not chosen by the model.
+## Search strategy
 
-## Exact credit approval
+Generate at least these public queries:
 
-At current documented indexed-search pricing, the maximum is:
+- `site:linkedin.com/company/ "LOCATION" "INDUSTRY"`
+- `site:linkedin.com/in/ "ROLE" "LOCATION" "INDUSTRY"` when a role is supplied
+- one broader company query combining the same criteria with `LinkedIn`
 
-```text
-maxResults × 0.03 credits
+The broader query helps when a search engine canonicalizes or omits the `site:` result. It does not relax the evidence requirements.
+
+## Candidate input for local ranking
+
+The local script accepts candidate objects shaped like:
+
+```json
+{
+  "url": "https://www.linkedin.com/company/example-org",
+  "title": "Example Org | LinkedIn",
+  "snippet": "Melbourne technology community and not-for-profit organisation",
+  "source_query": "site:linkedin.com/company/ ..."
+}
 ```
 
-The first tool call returns a no-spend preview and an exact phrase such as:
+Only `url`, `title`, and `snippet` are needed. The script canonicalizes LinkedIn URLs, rejects non-LinkedIn hosts and unsafe schemes, scores visible criteria, and leaves missing evidence unverified.
 
-```text
-APPROVE CRUSTDATA 0.30 CREDITS A1B2C3D4
-```
-
-The final code is deterministically bound to mode, industries, location, role,
-keywords, headcount, and limit. The HTTP branch compares the full phrase
-byte-for-byte with the current normalized user message. Model arguments, old
-conversation history, documents, `yes`, and paraphrases cannot satisfy the
-gate. Any criteria or limit change produces a different phrase and requires
-fresh approval. The workflow performs no automatic retries.
-
-## Request strategy
-
-People mode calls `POST /person/search` with:
-
-- explicit current-title, current-employer industry, location, and optional
-  current-employer headcount filters;
-- top-level `mode: "exact"` so explicit filters remain hard constraints;
-- optional `search.mode: "hybrid"` only for ranking keyword/persona relevance
-  within that filtered set; and
-- only lightweight identity, current-role, LinkedIn URL, fit, and freshness
-  fields.
-
-Company mode calls `POST /company/search` with:
-
-- industry/category/speciality alternatives, headquarters, optional keywords,
-  and optional headcount filters;
-- a stable headcount sort; and
-- only identity, sourced professional-network URL, website, location,
-  taxonomy, headcount, type, and freshness fields.
-
-Both endpoints are fixed in validation code. The model cannot supply a URL.
-
-## Tool output
-
-The provider-neutral result contains:
+## Output
 
 ```json
 {
   "ok": true,
-  "approvalRequired": false,
-  "searchMode": "companies",
-  "searchCriteria": {},
-  "profiles": [],
-  "profileUrls": [],
+  "mode": "public_search_results",
   "companies": [],
-  "companyUrls": [],
-  "excludedResults": [],
-  "totalCount": 0,
-  "providerTotalCount": 0,
-  "creditsUsed": 0,
-  "estimatedMaxCredits": 0.3,
-  "coverage": "Bounded indexed Crustdata result; not exhaustive"
+  "people_evidence": [],
+  "excluded": [],
+  "total_count": 0,
+  "search_criteria": {},
+  "coverage": "Publicly indexed results only; bounded and potentially stale"
 }
 ```
 
-Person entries contain public name, current title, company, location, profile
-URL, returned company URL, headline, industry, headcount, fit, freshness, and
-match evidence. Company entries contain public name, sourced company URL,
-website, type, industry, headquarters, headcount, categories, specialities,
-freshness, and match evidence.
-
-Never return raw provider payloads, credentials, personal emails, business
-emails, phone numbers, home addresses, private messages, or contact-enrichment
-fields. Canonicalize and deduplicate `/in/` and `/company/` URLs and exclude
-records without the appropriate public LinkedIn URL.
-
-## Account checks
-
-Crustdata documents `GET /account/credits` and `GET /account/endpoints` as
-authenticated account endpoints. Use them manually when diagnosing balance or
-permissions, with the same Bearer Auth credential and API-version header. Do
-not expose their full payloads to the agent; the permissions response can be
-large. Check `/person/search` and `/company/search` specifically.
-
-## No-credential fallback
-
-Run:
-
-```bash
-python3 scripts/prospect_search.py --manual-query \
-  --mode companies \
-  --industry "Technology, Nonprofit" \
-  --location "Melbourne, Victoria, Australia" \
-  --keywords "AI communities"
-```
-
-This prints a search-engine query for a human or approved web-search tool. It
-does not execute the search and does not claim the results meet structured
-criteria such as company headcount.
+Never return guessed URLs, personal contact details, raw private page content, or a claim of exhaustive coverage. A company-headcount value is qualified only when the public title or snippet explicitly supports it; otherwise label it unverified.

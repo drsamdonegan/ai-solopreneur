@@ -210,8 +210,7 @@ Reset asks you to type `RESET`. The [operations and recovery guide](docs/LOCAL_O
 - A checksum-verified Node.js 24.18.0 and npm 11.16.0 bootstrap for macOS and Windows, stored only inside `.runtime/` when the computer needs it.
 - The exact pinned n8n release, installed with npm and kept in this project's folder.
 - A TypeScript chat gateway, custom browser interface, and isolated document reader.
-- Twelve reviewed n8n workflows, including the visual learner checklist and an
-  optional, exact-credit-approved Crustdata research tool.
+- Eleven reviewed n8n workflows, including the visual learner checklist.
 - Durable local SQLite chat history with browsing, full-text search, rename,
   deletion, and restart-safe bounded conversation memory.
 - Four local Data Tables for tasks, audits, pending confirmations, and enabled skills.

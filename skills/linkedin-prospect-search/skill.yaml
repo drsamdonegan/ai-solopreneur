@@ -1,4 +1,4 @@
 id: linkedin-prospect-search
 name: LinkedIn Prospect Search
-version: 2.0.0
-description: Build bounded, approval-gated people or company research lists from explicit filters, returning public LinkedIn URLs and match evidence.
+version: 1.1.0
+description: Build bounded LinkedIn company and person URL shortlists from publicly indexed web results with no paid prospect-data API key.

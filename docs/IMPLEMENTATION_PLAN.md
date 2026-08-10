@@ -26,7 +26,7 @@ execute as project-local Node.js processes and bind to loopback addresses.
 The local release includes:
 
 - a browser chat gateway;
-- n8n and twelve reviewed workflows;
+- n8n and eleven reviewed workflows;
 - a bounded PDF, DOCX, TXT, and pasted-text reader;
 - a Project Manager agent with local conversation memory;
 - local task, audit, pending-confirmation, and skill tables;
@@ -132,28 +132,6 @@ All are ignored where they may contain private or machine-specific data.
 - Generate a source-based instructor kit with workflows and checksums.
 - Provide the course guide, release checklist, feedback process, and template
   readiness validation.
-
-### Phase 9: Optional authenticated prospect research
-
-- Add a provider-neutral `search_linkedin_prospects` agent tool with separate
-  `people` and `companies` modes.
-- Keep the raw Crustdata API key only in an encrypted n8n Bearer Auth
-  credential so n8n adds the `Authorization: Bearer` scheme at request time;
-  never put it in source, prompts, traces, audit rows, or tool output.
-- Use indexed Person Search and Company Search for bounded discovery. Apply
-  industry, location, role, and headcount as explicit filters; use semantic
-  ranking only inside the hard-filtered person result set.
-- Preview the normalized criteria and maximum search cost before every paid
-  request. Require the current user to send the exact, session-visible phrase
-  `APPROVE CRUSTDATA <amount> CREDITS <criteria-code>` before the HTTP node can
-  run. The code binds approval to the previewed criteria and limit.
-- Default to 10 results, cap a single request at 25, request only the fields
-  needed for match evidence, and never fetch personal contact fields.
-- Canonicalize and deduplicate public LinkedIn URLs. Return contradictions and
-  missing evidence explicitly instead of silently broadening filters.
-- Keep the capability optional: without the credential or account permission,
-  local project-management workflows continue to work and the skill falls back
-  to a manual public-search plan.
 
 ## Verification
 

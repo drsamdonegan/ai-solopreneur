@@ -10,15 +10,6 @@
       "workflowId": "phase4ListTasks"
     },
     {
-      "id": "search_linkedin_prospects",
-      "risk": "external_read",
-      "available": true,
-      "modelCallable": true,
-      "mode": "exact_credit_approval_required",
-      "workflowId": "phase9SearchLinkedInProspects",
-      "maxResultsPerRequest": 25
-    },
-    {
       "id": "create_task",
       "risk": "write",
       "available": true,

@@ -1,40 +1,8 @@
-# LinkedIn Prospect Search (optional skill)
+# Free LinkedIn Prospect Search (optional skill)
 
-This skill helps the agent build a small, evidence-backed list of public
-LinkedIn people or company pages. It supports industry, location, role title,
-keywords, company headcount, and a bounded result count.
+This skill helps the agent find publicly indexed LinkedIn company URLs using industry, location, job title, and optional company-size clues. It uses ordinary public web search when the agent has a general search capability. It does not use a paid prospect database and does not need a Crustdata, Apollo, or other prospect-data API key.
 
-It can work in two ways:
-
-- without an account, it creates public search-engine queries for a person to
-  check manually;
-- with the reviewed n8n workflow and Crustdata credential, it searches
-  Crustdata's indexed people or company database and returns sourced LinkedIn
-  URLs. It does not request personal emails, phone numbers, or other contact
-  enrichment.
-
-## Configure the n8n credential
-
-Crustdata requires bearer-token authentication. Use n8n's **Bearer Auth**
-credential so the saved secret contains only the raw API key and n8n adds the
-`Authorization: Bearer` prefix when it sends each request.
-
-n8n cannot reveal or migrate a masked value between credential types. Create a
-new **Bearer Auth** credential after retrieving the key from your Crustdata
-account:
-
-| n8n field | Value |
-| --- | --- |
-| Credential display name | `CRUSTDATA_API_KEY` |
-| Bearer Token | `YOUR_RAW_CRUSTDATA_KEY` (starts with `cd_`; do not add `Bearer`) |
-| Allowed HTTP Request Domains | `api.crustdata.com` |
-
-Do not paste the key into chat, a Code node, an environment file, or Git. The
-workflow supplies the non-secret `x-api-version: 2025-11-01` header itself.
-
-After importing the branch workflows, open
-`23 - TOOL - search_linkedin_prospects`, select the new
-`CRUSTDATA_API_KEY` credential on **Crustdata Indexed Search**, and save.
+The result is a researched shortlist, not a complete copy of LinkedIn. Search engines may show incomplete or stale snippets, and employee count is often not visible. The agent labels those gaps instead of guessing.
 
 ## Install only this skill
 
@@ -45,14 +13,7 @@ git fetch https://github.com/drsamdonegan/ai-solopreneur.git skill/linkedin-pros
 git checkout FETCH_HEAD -- skills/linkedin-prospect-search
 ```
 
-This copies only the skill instructions and local test helper. It does not
-merge or switch branches and does not overwrite files outside this skill
-folder. If the destination skill folder already contains custom changes,
-commit or back it up before checkout.
-
-Live Crustdata research additionally needs the reviewed n8n workflow and main
-agent wiring from this branch. Copying only the skill folder intentionally does
-not change an existing agent's tools.
+This copies only the skill folder. It does not merge or switch branches. If you have already customized this folder, stop before the second command because it would replace that folder.
 
 ## Enable it
 
@@ -61,9 +22,9 @@ not change an existing agent's tools.
 3. Run `sync-skills.command` on macOS or `sync-skills-windows.cmd` on Windows.
 4. Start a new agent conversation.
 
-## Test the local logic (free)
+## Test the local logic
 
-This test uses no account and performs no network request:
+This test needs no account, credential, or network request:
 
 ```bash
 python3 skills/linkedin-prospect-search/scripts/prospect_search.py --self-test
@@ -72,75 +33,45 @@ python3 skills/linkedin-prospect-search/scripts/prospect_search.py --self-test
 Expected result:
 
 ```json
-{"ok": true, "tests": 8}
+{"ok": true, "tests": 6}
 ```
 
-You can also test company-mode query generation without a vendor:
+Generate the exact public-search queries without running a search:
 
 ```bash
 python3 skills/linkedin-prospect-search/scripts/prospect_search.py \
   --manual-query \
-  --mode companies \
-  --industry "Technology, Nonprofit" \
+  --industry "AI communities, technology, not for profit" \
   --location "Melbourne, Victoria, Australia" \
-  --keywords "AI communities"
+  --role-title "Founder, Community Lead"
 ```
 
-## Test the no-spend agent boundary
+## Test the agent
 
 Ask:
 
 ```text
-Use the LinkedIn Prospect Search skill in companies mode.
+Use the Free LinkedIn Prospect Search skill.
 
-Industry: Technology, Nonprofit
+Industry: AI communities in the technology and not-for-profit sectors
 Location: Melbourne, Victoria, Australia
-Keywords: AI communities
-Maximum results: 5
+Job titles: Founder, Community Lead, Executive Director
+Maximum results: 10
 
-Preview the search and cost. Do not spend credits yet.
+Use only publicly indexed web results. Return verified LinkedIn company URLs,
+show the public evidence for each result, label anything unverified, and do not
+guess company URLs or return personal contact details.
 ```
 
-With the tool connected, the result should contain the normalized criteria, a
-maximum of `0.15` credits, and an exact phrase matching
-`APPROVE CRUSTDATA 0.15 CREDITS XXXXXXXX`, where the final eight-character code
-binds the approval to those criteria and the five-result limit. It must contain
-no company results because the preview makes no provider request.
+A correct result:
 
-Without the tool, the agent should explain the limitation and offer a manual
-query. It must never fabricate prospects.
-
-## Run a minimal live test (costs up to 0.03 credits)
-
-First preview this one-result search:
-
-```text
-Use the LinkedIn Prospect Search skill in companies mode.
-Industry: Software Development
-Location: Australia
-Maximum results: 1
-Preview only and show me the exact maximum-credit approval phrase.
-```
-
-Only after checking the preview, send the exact returned approval phrase as a
-separate message. A correct live result reports `creditsUsed`, returns at most
-one sourced `/company/` URL, and never includes personal contact data. Crustdata
-may return no match, in which case the charged amount should be zero under its
-current indexed-search pricing.
-
-## Cost and quality controls
-
-- Indexed Person Search and Company Search are currently documented at `0.03`
-  credits per returned result. Confirm current pricing in your account.
-- Every request defaults to 10 and is capped at 25 results.
-- The tool never retries or broadens filters automatically.
-- People mode uses explicit hard filters and optional hybrid semantic ranking
-  inside the exact filtered result set.
-- Company mode searches companies directly; it does not claim a named job title
-  exists unless a separate people search proves it.
-- Results are bounded and provider-dependent, never exhaustive.
+- uses a public search engine if one is available, otherwise returns search queries;
+- returns only real LinkedIn `/company/` and supporting `/in/` URLs found in results;
+- distinguishes evidence from assumptions;
+- says that coverage is bounded and may be stale;
+- does not ask for a prospect-data API key; and
+- does not claim to have scraped LinkedIn or accessed a logged-in account.
 
 ## Turn it off
 
-Remove `linkedin-prospect-search` from `skills/enabled.txt` and sync the skills
-again. The folder and unused n8n credential may remain in the project.
+Remove `linkedin-prospect-search` from `skills/enabled.txt` and sync the skills again. The folder may remain in the project.

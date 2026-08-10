@@ -11,13 +11,12 @@ This directory contains portable workflow exports for the local AI agent.
 | `workflows/20-tool-list-tasks.json` | Validates filters, reads factual task rows, and audits the read |
 | `workflows/21-tool-create-task.json` | Idempotently creates one task when called by the confirmation dispatcher |
 | `workflows/22-tool-update-task-status.json` | Changes only one task status when called by the confirmation dispatcher |
-| `workflows/23-tool-search-linkedin-prospects.json` | Previews cost, requires exact current-user approval, then searches indexed public people or company records through Crustdata |
 | `workflows/30-tool-propose-create-task.json` | Model-facing create proposal with no task-table mutation |
 | `workflows/31-tool-propose-update-task-status.json` | Model-facing status proposal with no task-table mutation |
 | `workflows/40-confirm-task-write.json` | Enforces exact session binding, expiry, supersession, and single-use before a write |
 | `workflows/90-debug-agent-health.json` | Exposes a safe local health response without secrets |
 
-The workflow exports contain credential references named `Anthropic account` and `CRUSTDATA_API_KEY`, but no secret values. After import, create or select the real credentials inside n8n. Crustdata must use Bearer Auth with the raw API key as the token and allowed domain `api.crustdata.com`; n8n adds the `Authorization: Bearer` prefix automatically. Header Auth and Query Auth are not used by this workflow.
+The workflow exports contain a credential reference named `Anthropic account`, but no API key. After import, create or select a real Anthropic credential inside n8n.
 
 Use the repository import script rather than editing JSON by hand:
 
