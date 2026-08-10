@@ -1,0 +1,449 @@
+{
+  "name": "23 - TOOL - search_linkedin_prospects",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Optional authenticated prospect research\nThis externally read-only workflow searches Crustdata's indexed Person Search or Company Search endpoint. It is not automatic because a successful call consumes provider credits.\n\nSecurity boundary:\n- `CRUSTDATA_API_KEY` must be an n8n Header Auth credential.\n- Header name: `Authorization`\n- Header value: `Bearer <your key>`\n- Allowed domain: `api.crustdata.com`\n- The static `x-api-version` header is not secret.\n\nThe HTTP node is unreachable until the current user message exactly matches the calculated approval phrase. Searches are capped at 25 returned records and request no personal contact fields.",
+        "height": 470,
+        "width": 620,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -760,
+        -430
+      ],
+      "id": "43000000-0000-4000-8000-000000000001",
+      "name": "Research tool explanation"
+    },
+    {
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "sessionId",
+              "type": "string"
+            },
+            {
+              "name": "currentUserInstruction",
+              "type": "string"
+            },
+            {
+              "name": "searchMode",
+              "type": "string"
+            },
+            {
+              "name": "industry",
+              "type": "string"
+            },
+            {
+              "name": "location",
+              "type": "string"
+            },
+            {
+              "name": "roleTitle",
+              "type": "string"
+            },
+            {
+              "name": "keywords",
+              "type": "string"
+            },
+            {
+              "name": "companyHeadcount",
+              "type": "string"
+            },
+            {
+              "name": "maxResults",
+              "type": "number"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -620,
+        80
+      ],
+      "id": "43000000-0000-4000-8000-000000000002",
+      "name": "Tool Input"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const text = (value) => typeof value === 'string' ? value.trim() : '';\nconst sessionId = text($json.sessionId);\nconst currentUserInstruction = text($json.currentUserInstruction);\nconst searchMode = text($json.searchMode || 'people').toLowerCase();\nconst industry = text($json.industry);\nconst location = text($json.location);\nconst roleTitle = text($json.roleTitle);\nconst keywords = text($json.keywords);\nconst companyHeadcount = text($json.companyHeadcount);\nconst requestedLimit = Number($json.maxResults || 10);\nconst maxResults = Number.isInteger(requestedLimit) ? requestedLimit : NaN;\nconst uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;\nconst splitTerms = (value) => value.split(/[,;/|]+/).map((part) => part.trim()).filter(Boolean);\nconst headcountBounds = (value) => {\n  if (!value) return null;\n  const compact = value.replace(/[\\s,]/g, '').replace(/[–—]/g, '-');\n  let match = /^(\\d+)-(\\d+)$/.exec(compact);\n  if (match) {\n    const lower = Number(match[1]);\n    const upper = Number(match[2]);\n    return lower <= upper ? [lower, upper] : null;\n  }\n  match = /^(\\d+)\\+$/.exec(compact);\n  if (match) return [Number(match[1]), null];\n  if (/^\\d+$/.test(compact)) return [Number(compact), Number(compact)];\n  return null;\n};\nconst group = (op, conditions) => conditions.length === 1 ? conditions[0] : ({ op, conditions });\nconst headcountConditions = (field, value) => {\n  const bounds = headcountBounds(value);\n  if (!bounds) return [];\n  const conditions = [{ field, type: '=>', value: bounds[0] }];\n  if (bounds[1] !== null) conditions.push({ field, type: '=<', value: bounds[1] });\n  return conditions;\n};\n\nlet error = null;\nif (!uuidPattern.test(sessionId)) {\n  error = { code: 'INVALID_SESSION', message: 'The research request needs a valid conversation session.' };\n} else if (!['people', 'companies'].includes(searchMode)) {\n  error = { code: 'INVALID_SEARCH_MODE', message: 'searchMode must be people or companies.' };\n} else if (!industry || industry.length > 200) {\n  error = { code: 'INVALID_INDUSTRY', message: 'Industry is required and must be 200 characters or fewer.' };\n} else if (splitTerms(industry).length === 0) {\n  error = { code: 'INVALID_INDUSTRY', message: 'Industry must contain at least one searchable term.' };\n} else if (!location || location.length > 200) {\n  error = { code: 'INVALID_LOCATION', message: 'Location is required and must be 200 characters or fewer.' };\n} else if (searchMode === 'people' && (!roleTitle || roleTitle.length > 160)) {\n  error = { code: 'INVALID_ROLE_TITLE', message: 'People mode requires a role title of 160 characters or fewer.' };\n} else if (keywords.length > 500) {\n  error = { code: 'INVALID_KEYWORDS', message: 'Keywords must be 500 characters or fewer.' };\n} else if (!Number.isInteger(maxResults) || maxResults < 1 || maxResults > 25) {\n  error = { code: 'INVALID_LIMIT', message: 'maxResults must be a whole number between 1 and 25.' };\n} else if (companyHeadcount && !headcountBounds(companyHeadcount)) {\n  error = { code: 'INVALID_HEADCOUNT', message: 'Company headcount must be a number, a range such as 51-200, or a value such as 1001+.' };\n}\n\nconst criteria = { searchMode, industry, location, roleTitle: roleTitle || null, keywords: keywords || null, companyHeadcount: companyHeadcount || null, maxResults };\nconst estimatedMaxCredits = Number.isInteger(maxResults) ? Number((maxResults * 0.03).toFixed(2)) : 0;\nconst approvalScope = [searchMode, industry, location, roleTitle, keywords, companyHeadcount, String(maxResults)].join('\\u001f');\nlet approvalHash = 2166136261;\nfor (let index = 0; index < approvalScope.length; index += 1) {\n  approvalHash = Math.imul(approvalHash ^ approvalScope.charCodeAt(index), 16777619) >>> 0;\n}\nconst approvalCode = approvalHash.toString(16).toUpperCase().padStart(8, '0');\nconst approvalPhrase = `APPROVE CRUSTDATA ${estimatedMaxCredits.toFixed(2)} CREDITS ${approvalCode}`;\nlet endpoint = '';\nlet requestBody = null;\n\nif (!error) {\n  const industryTerms = splitTerms(industry);\n  const conditions = [];\n  if (searchMode === 'people') {\n    conditions.push(group('or', industryTerms.map((term) => ({\n      field: 'experience.employment_details.current.company_professional_network_industry',\n      type: '(.)',\n      value: term\n    }))));\n    conditions.push({ field: 'basic_profile.location.full_location', type: '(.)', value: location });\n    conditions.push({ field: 'experience.employment_details.current.title', type: '(.)', value: roleTitle });\n    conditions.push(...headcountConditions('experience.employment_details.current.company_headcount_latest', companyHeadcount));\n    requestBody = {\n      filters: { op: 'and', conditions },\n      mode: 'exact',\n      fields: [\n        'fit',\n        'metadata.updated_at',\n        'basic_profile',\n        'experience.employment_details.current',\n        'social_handles.professional_network_identifier.profile_url'\n      ],\n      limit: maxResults\n    };\n    if (keywords) {\n      requestBody.search = { query: `${roleTitle}. ${keywords}`, mode: 'hybrid' };\n    } else {\n      requestBody.sorts = [{ field: 'metadata.updated_at', order: 'desc' }];\n    }\n    endpoint = 'https://api.crustdata.com/person/search';\n  } else {\n    const industryFields = [\n      'taxonomy.professional_network_industry',\n      'taxonomy.categories',\n      'taxonomy.professional_network_specialities'\n    ];\n    conditions.push(group('or', industryTerms.flatMap((term) =>\n      industryFields.map((field) => ({ field, type: '(.)', value: term }))\n    )));\n    conditions.push({ field: 'locations.headquarters', type: '(.)', value: location });\n    if (keywords) {\n      conditions.push(group('or', [\n        'basic_info.name',\n        'taxonomy.categories',\n        'taxonomy.professional_network_specialities'\n      ].map((field) => ({ field, type: '(.)', value: keywords }))));\n    }\n    conditions.push(...headcountConditions('headcount.total', companyHeadcount));\n    requestBody = {\n      filters: { op: 'and', conditions },\n      fields: [\n        'metadata.updated_at',\n        'basic_info.name',\n        'basic_info.website',\n        'basic_info.professional_network_url',\n        'basic_info.company_type',\n        'headcount.total',\n        'locations.country',\n        'locations.state',\n        'locations.city',\n        'locations.headquarters',\n        'taxonomy.professional_network_industry',\n        'taxonomy.categories',\n        'taxonomy.professional_network_specialities'\n      ],\n      sorts: [{ column: 'headcount.total', order: 'desc' }],\n      limit: maxResults\n    };\n    endpoint = 'https://api.crustdata.com/company/search';\n  }\n}\n\nreturn {\n  json: {\n    valid: error === null,\n    approved: error === null && currentUserInstruction === approvalPhrase,\n    sessionId,\n    criteria,\n    estimatedMaxCredits,\n    approvalPhrase,\n    endpoint,\n    requestBody,\n    ...(error ? { response: { ok: false, approvalRequired: false, error } } : {})\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -360,
+        80
+      ],
+      "id": "43000000-0000-4000-8000-000000000003",
+      "name": "Validate and Build Search"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "43000000-0000-4000-8000-000000000004",
+              "leftValue": "={{ $json.approved }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -100,
+        80
+      ],
+      "id": "43000000-0000-4000-8000-000000000005",
+      "name": "Exact Credit Approval?"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.endpoint }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-version",
+              "value": "2025-11-01"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.requestBody }}",
+        "options": {
+          "timeout": 45000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        180,
+        -20
+      ],
+      "id": "43000000-0000-4000-8000-000000000006",
+      "name": "Crustdata Indexed Search",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "crustdataApiKey",
+          "name": "CRUSTDATA_API_KEY"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "if ($json.valid !== true) return { json: $json };\nreturn {\n  json: {\n    ...$json,\n    response: {\n      ok: true,\n      approvalRequired: true,\n      message: 'No provider request was made and no credits were spent. Send the exact approval phrase as a separate message to run this bounded search.',\n      approvalPhrase: $json.approvalPhrase,\n      estimatedMaxCredits: $json.estimatedMaxCredits,\n      estimatedPricing: 'Crustdata indexed search is currently documented at 0.03 credits per returned result; verify current account pricing.',\n      searchCriteria: $json.criteria,\n      coverage: 'Preview only; no research results yet'\n    }\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        180,
+        180
+      ],
+      "id": "43000000-0000-4000-8000-000000000007",
+      "name": "Return No-Spend Preview"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const input = $('Validate and Build Search').first().json;\nconst full = $json && typeof $json === 'object' ? $json : {};\nconst statusCode = Number(full.statusCode ?? 200);\nconst body = full.body && typeof full.body === 'object' ? full.body : full;\nconst headers = full.headers && typeof full.headers === 'object' ? full.headers : {};\nconst safeProviderError = () => {\n  if (statusCode === 401) return { code: 'CRUSTDATA_CREDENTIAL_INVALID', message: 'Crustdata rejected the credential. Recreate CRUSTDATA_API_KEY as Header Auth with Authorization: Bearer <key>.' };\n  if (statusCode === 403) return { code: 'CRUSTDATA_ACCESS_DENIED', message: 'The Crustdata account lacks permission or sufficient credits for this indexed search.' };\n  if (statusCode === 429) return { code: 'CRUSTDATA_RATE_LIMITED', message: 'Crustdata rate-limited the request. No automatic retry was attempted.' };\n  if (statusCode >= 400) return { code: 'CRUSTDATA_REQUEST_FAILED', message: 'Crustdata could not run the bounded search. Check the filters and account endpoint permissions.' };\n  if (body.error) return { code: 'CRUSTDATA_REQUEST_FAILED', message: 'Crustdata returned an error for the bounded search.' };\n  return null;\n};\nconst providerError = safeProviderError();\nif (providerError) {\n  return {\n    json: {\n      ...input,\n      response: {\n        ok: false,\n        approvalRequired: false,\n        searchCriteria: input.criteria,\n        estimatedMaxCredits: input.estimatedMaxCredits,\n        error: providerError\n      }\n    }\n  };\n}\n\nconst text = (value) => typeof value === 'string' ? value.trim() : '';\nconst nested = (value, path) => path.reduce((current, key) =>\n  current && typeof current === 'object' ? current[key] : undefined, value);\nconst firstText = (...values) => {\n  for (const value of values) {\n    if (typeof value === 'string' && value.trim()) return value.trim();\n    if (Array.isArray(value)) {\n      const joined = value.filter((item) => typeof item === 'string' && item.trim()).join(', ');\n      if (joined) return joined;\n    }\n    if (value && typeof value === 'object') {\n      for (const key of ['raw', 'full_location', 'name', 'value', 'url']) {\n        if (typeof value[key] === 'string' && value[key].trim()) return value[key].trim();\n      }\n    }\n  }\n  return '';\n};\nconst canonicalLinkedIn = (value, kind) => {\n  let raw = text(value);\n  if (!raw) return null;\n  if (!/^https?:\\/\\//i.test(raw)) raw = `https://${raw}`;\n  try {\n    const parsed = new URL(raw);\n    const host = parsed.hostname.toLowerCase();\n    if (host !== 'linkedin.com' && !host.endsWith('.linkedin.com')) return null;\n    const prefix = kind === 'person' ? '/in/' : '/company/';\n    const path = parsed.pathname.replace(/\\/+/, '/');\n    if (!path.toLowerCase().startsWith(prefix)) return null;\n    const slug = path.slice(prefix.length).replace(/^\\/+|\\/+$/g, '');\n    if (!slug || slug.includes('/') || !/^[A-Za-z0-9%_.~-]+$/.test(slug)) return null;\n    return `https://www.linkedin.com${prefix}${slug}`;\n  } catch {\n    return null;\n  }\n};\nconst currentRole = (profile) => {\n  const current = nested(profile, ['experience', 'employment_details', 'current']);\n  if (Array.isArray(current)) return current.find((item) => item && typeof item === 'object') || {};\n  return current && typeof current === 'object' ? current : {};\n};\nconst hardFilters = [\n  'industry',\n  'location',\n  ...(input.criteria.searchMode === 'people' ? ['current role title'] : []),\n  ...(input.criteria.keywords ? ['keywords'] : []),\n  ...(input.criteria.companyHeadcount ? ['company headcount'] : [])\n];\n\nconst excludedResults = [];\nconst qualified = [];\nconst seen = new Set();\nconst sourceItems = input.criteria.searchMode === 'people'\n  ? (Array.isArray(body.profiles) ? body.profiles : [])\n  : (Array.isArray(body.companies) ? body.companies : []);\n\nfor (const source of sourceItems) {\n  if (!source || typeof source !== 'object') continue;\n  if (input.criteria.searchMode === 'people') {\n    const basic = source.basic_profile && typeof source.basic_profile === 'object' ? source.basic_profile : {};\n    const role = currentRole(source);\n    const profileUrl = canonicalLinkedIn(firstText(\n      source.profile_url,\n      source.linkedin_url,\n      nested(source, ['social_handles', 'professional_network_identifier', 'profile_url'])\n    ), 'person');\n    const companyUrl = canonicalLinkedIn(firstText(\n      role.company_professional_network_profile_url,\n      role.company_linkedin_profile_url\n    ), 'company');\n    const item = {\n      name: firstText(source.name, basic.name) || null,\n      currentTitle: firstText(source.current_title, basic.current_title, role.title) || null,\n      company: firstText(source.company, source.current_company, role.name, role.company_name) || null,\n      location: firstText(source.location, basic.location) || null,\n      profileUrl,\n      companyProfileUrl: companyUrl,\n      headline: firstText(source.headline, basic.headline) || null,\n      industry: firstText(source.industry, role.company_professional_network_industry, role.company_industries) || null,\n      companyHeadcount: role.company_headcount_latest ?? firstText(role.company_headcount_range) ?? null,\n      fit: firstText(source.fit) || null,\n      lastUpdated: firstText(nested(source, ['metadata', 'updated_at'])) || null,\n      criteriaStatus: profileUrl ? 'qualified' : 'excluded',\n      matchEvidence: profileUrl ? hardFilters.map((field) => `Crustdata hard filter: ${field}`) : [],\n      unverifiedCriteria: [\n        ...(!firstText(source.location, basic.location) ? ['returned location field'] : []),\n        ...(!firstText(role.company_professional_network_industry, role.company_industries) ? ['returned industry field'] : [])\n      ],\n      conflictingCriteria: profileUrl ? [] : ['missing valid public LinkedIn person URL']\n    };\n    if (!profileUrl) {\n      excludedResults.push(item);\n    } else if (!seen.has(profileUrl)) {\n      seen.add(profileUrl);\n      qualified.push(item);\n    }\n  } else {\n    const basic = source.basic_info && typeof source.basic_info === 'object' ? source.basic_info : {};\n    const locations = source.locations && typeof source.locations === 'object' ? source.locations : {};\n    const taxonomy = source.taxonomy && typeof source.taxonomy === 'object' ? source.taxonomy : {};\n    const headcount = source.headcount && typeof source.headcount === 'object' ? source.headcount : {};\n    const companyUrl = canonicalLinkedIn(firstText(\n      source.company_profile_url,\n      source.linkedin_url,\n      basic.professional_network_url,\n      nested(source, ['social_profiles', 'professional_network'])\n    ), 'company');\n    const item = {\n      name: firstText(source.name, basic.name) || null,\n      companyProfileUrl: companyUrl,\n      website: firstText(basic.website) || null,\n      companyType: firstText(basic.company_type) || null,\n      industry: firstText(taxonomy.professional_network_industry, taxonomy.categories, taxonomy.professional_network_specialities) || null,\n      headquarters: firstText(locations.headquarters, [locations.city, locations.state, locations.country].filter(Boolean)) || null,\n      companyHeadcount: Number.isFinite(Number(headcount.total)) ? Number(headcount.total) : null,\n      categories: Array.isArray(taxonomy.categories) ? taxonomy.categories : [],\n      specialities: Array.isArray(taxonomy.professional_network_specialities) ? taxonomy.professional_network_specialities : [],\n      lastUpdated: firstText(nested(source, ['metadata', 'updated_at'])) || null,\n      criteriaStatus: companyUrl ? 'qualified' : 'excluded',\n      matchEvidence: companyUrl ? hardFilters.map((field) => `Crustdata hard filter: ${field}`) : [],\n      unverifiedCriteria: [\n        ...(!firstText(locations.headquarters, locations.city, locations.state, locations.country) ? ['returned headquarters field'] : []),\n        ...(!firstText(taxonomy.professional_network_industry, taxonomy.categories, taxonomy.professional_network_specialities) ? ['returned industry field'] : [])\n      ],\n      conflictingCriteria: companyUrl ? [] : ['missing valid public LinkedIn company URL']\n    };\n    if (!companyUrl) {\n      excludedResults.push(item);\n    } else if (!seen.has(companyUrl)) {\n      seen.add(companyUrl);\n      qualified.push(item);\n    }\n  }\n}\n\nconst rawCredits = headers['x-credits-used'] ?? headers['X-Credits-Used'] ?? body.credits_used ?? body.credits_cost;\nconst parsedCredits = Number(rawCredits);\nconst creditsUsed = Number.isFinite(parsedCredits)\n  ? parsedCredits\n  : Number((sourceItems.length * 0.03).toFixed(2));\nconst employerMap = new Map();\nif (input.criteria.searchMode === 'people') {\n  for (const profile of qualified) {\n    if (profile.companyProfileUrl && !employerMap.has(profile.companyProfileUrl)) {\n      employerMap.set(profile.companyProfileUrl, { company: profile.company, companyProfileUrl: profile.companyProfileUrl });\n    }\n  }\n}\nconst companies = input.criteria.searchMode === 'people' ? [...employerMap.values()] : qualified;\nreturn {\n  json: {\n    ...input,\n    response: {\n      ok: true,\n      approvalRequired: false,\n      searchMode: input.criteria.searchMode,\n      searchCriteria: input.criteria,\n      profiles: input.criteria.searchMode === 'people' ? qualified : [],\n      profileUrls: input.criteria.searchMode === 'people' ? qualified.map((item) => item.profileUrl) : [],\n      companies,\n      companyUrls: companies.map((item) => item.companyProfileUrl),\n      excludedResults,\n      totalCount: qualified.length,\n      providerTotalCount: Number.isFinite(Number(body.total_count)) ? Number(body.total_count) : null,\n      creditsUsed,\n      estimatedMaxCredits: input.estimatedMaxCredits,\n      coverage: 'Bounded indexed Crustdata result; not exhaustive',\n      safety: 'Public professional fields only; no personal contact data requested'\n    }\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        -20
+      ],
+      "id": "43000000-0000-4000-8000-000000000008",
+      "name": "Format Research Result"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const response = $json.response;\nconst summary = {\n  ok: response?.ok === true,\n  approvalRequired: response?.approvalRequired === true,\n  searchMode: $json.criteria?.searchMode ?? null,\n  returnedCount: Number(response?.totalCount ?? 0),\n  creditsUsed: response?.creditsUsed ?? 0,\n  estimatedMaxCredits: $json.estimatedMaxCredits ?? 0,\n  errorCode: response?.error?.code ?? null\n};\nreturn {\n  json: {\n    occurredAt: new Date().toISOString(),\n    sessionId: String($json.sessionId ?? ''),\n    requestId: '',\n    toolName: 'search_linkedin_prospects',\n    proposedInput: JSON.stringify($json.criteria ?? {}),\n    result: JSON.stringify(summary),\n    error: response?.ok === false ? String(response.error?.message ?? 'Research tool failed') : '',\n    response\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        700,
+        80
+      ],
+      "id": "43000000-0000-4000-8000-000000000009",
+      "name": "Prepare Research Audit"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "value": "tool_audit",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "occurredAt": "={{ $json.occurredAt }}",
+            "sessionId": "={{ $json.sessionId }}",
+            "requestId": "={{ $json.requestId }}",
+            "toolName": "={{ $json.toolName }}",
+            "proposedInput": "={{ $json.proposedInput }}",
+            "result": "={{ $json.result }}",
+            "error": "={{ $json.error }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "occurredAt",
+              "displayName": "occurredAt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "date"
+            },
+            {
+              "id": "sessionId",
+              "displayName": "sessionId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "requestId",
+              "displayName": "requestId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "toolName",
+              "displayName": "toolName",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "proposedInput",
+              "displayName": "proposedInput",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "result",
+              "displayName": "result",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "error",
+              "displayName": "error",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        960,
+        80
+      ],
+      "id": "43000000-0000-4000-8000-000000000010",
+      "name": "Write Tool Audit",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const prepared = $('Prepare Research Audit').item.json;\nconst response = { ...prepared.response };\nif (!Number.isInteger($json.id)) {\n  response.auditWarning = 'The research result could not be written to the local audit table.';\n}\nreturn { json: response };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1220,
+        80
+      ],
+      "id": "43000000-0000-4000-8000-000000000011",
+      "name": "Return Tool Result"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Tool Input": {
+      "main": [
+        [
+          {
+            "node": "Validate and Build Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate and Build Search": {
+      "main": [
+        [
+          {
+            "node": "Exact Credit Approval?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Exact Credit Approval?": {
+      "main": [
+        [
+          {
+            "node": "Crustdata Indexed Search",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Return No-Spend Preview",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crustdata Indexed Search": {
+      "main": [
+        [
+          {
+            "node": "Format Research Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Return No-Spend Preview": {
+      "main": [
+        [
+          {
+            "node": "Prepare Research Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Research Result": {
+      "main": [
+        [
+          {
+            "node": "Prepare Research Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Research Audit": {
+      "main": [
+        [
+          {
+            "node": "Write Tool Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Tool Audit": {
+      "main": [
+        [
+          {
+            "node": "Return Tool Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "executionTimeout": 55,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true
+  },
+  "versionId": "43000000-0000-4000-8000-000000000012",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "phase": 9,
+    "testedWithN8n": "2.30.5",
+    "toolRisk": "external_read_with_credit_approval",
+    "provider": "Crustdata",
+    "apiVersion": "2025-11-01",
+    "credentialType": "httpHeaderAuth"
+  },
+  "id": "phase9SearchLinkedInProspects",
+  "tags": []
+}

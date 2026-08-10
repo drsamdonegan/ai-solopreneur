@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Validate, format, and deduplicate bounded LinkedIn prospect searches.
+"""Validate and format bounded LinkedIn prospect research.
 
-The module contains no network code or credentials. Supply a reviewed search
-callable for live use, or run the manual-query mode to print search strings.
+This module deliberately contains no network or credential code. It builds the
+reviewable Crustdata request used by the n8n workflow, formats provider-neutral
+results, and produces public-search queries for the no-credential fallback.
 """
 
 from __future__ import annotations
@@ -10,16 +11,15 @@ from __future__ import annotations
 import argparse
 import json
 import re
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any
 from urllib.parse import urlsplit
 
 
-REQUIRED_FIELDS = ("industry", "location", "role_title")
-OPTIONAL_TEXT_FIELDS = ("company_headcount", "search_type")
-DEFAULT_SEARCH_TYPE = "Performance optimized"
 DEFAULT_LIMIT = 10
-MAX_LIMIT = 50
+MAX_LIMIT = 25
+SEARCH_CREDITS_PER_RESULT = 0.03
+SEARCH_MODES = ("people", "companies")
 
 
 def _text(value: Any) -> str:
@@ -32,9 +32,9 @@ def _normalise(value: Any) -> str:
 
 def _terms(value: Any) -> list[str]:
     return [
-        _normalise(part)
+        part.strip()
         for part in re.split(r"[,;/|]+", _text(value))
-        if _normalise(part)
+        if part.strip()
     ]
 
 
@@ -78,55 +78,224 @@ def _first_text(*values: Any) -> str:
         if isinstance(value, str) and value.strip():
             return value.strip()
         if isinstance(value, Mapping):
-            for key in ("raw", "full_location", "name", "value"):
+            for key in ("raw", "full_location", "name", "value", "url"):
                 nested = _text(value.get(key))
                 if nested:
                     return nested
+        if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+            joined = ", ".join(_text(item) for item in value if _text(item))
+            if joined:
+                return joined
     return ""
 
 
 def parse_input(params: Mapping[str, Any]) -> dict[str, Any]:
-    parsed: dict[str, Any] = {}
-    for key in REQUIRED_FIELDS:
+    mode = _text(params.get("search_mode") or params.get("mode") or "people").casefold()
+    if mode not in SEARCH_MODES:
+        raise ValueError("search_mode must be people or companies.")
+
+    parsed: dict[str, Any] = {"search_mode": mode}
+    for key in ("industry", "location"):
         value = _text(params.get(key))
         if not value:
             raise ValueError(f"{key} is required.")
-        if len(value) > 160:
-            raise ValueError(f"{key} must be 160 characters or fewer.")
+        if len(value) > 200:
+            raise ValueError(f"{key} must be 200 characters or fewer.")
+        parsed[key] = value
+    if not _terms(parsed["industry"]):
+        raise ValueError("industry must contain at least one searchable term.")
+
+    role_title = _text(params.get("role_title"))
+    if mode == "people" and not role_title:
+        raise ValueError("role_title is required for people mode.")
+    if len(role_title) > 160:
+        raise ValueError("role_title must be 160 characters or fewer.")
+    parsed["role_title"] = role_title
+
+    for key, maximum in (("keywords", 500), ("company_headcount", 40)):
+        value = _text(params.get(key))
+        if len(value) > maximum:
+            raise ValueError(f"{key} must be {maximum} characters or fewer.")
         parsed[key] = value
 
-    for key in OPTIONAL_TEXT_FIELDS:
-        value = _text(params.get(key))
-        if len(value) > 80:
-            raise ValueError(f"{key} must be 80 characters or fewer.")
-        parsed[key] = value
+    if parsed["company_headcount"] and not _headcount_bounds(parsed["company_headcount"]):
+        raise ValueError("company_headcount must be a number, range such as 51-200, or value such as 1001+.")
 
     raw_limit = params.get("max_results", DEFAULT_LIMIT)
     if isinstance(raw_limit, bool):
-        raise ValueError("max_results must be a whole number between 1 and 50.")
+        raise ValueError("max_results must be a whole number between 1 and 25.")
     try:
         limit = int(raw_limit)
     except (TypeError, ValueError) as error:
-        raise ValueError("max_results must be a whole number between 1 and 50.") from error
+        raise ValueError("max_results must be a whole number between 1 and 25.") from error
     if limit < 1 or limit > MAX_LIMIT:
-        raise ValueError("max_results must be a whole number between 1 and 50.")
+        raise ValueError("max_results must be a whole number between 1 and 25.")
     parsed["max_results"] = limit
-    parsed["search_type"] = parsed["search_type"] or DEFAULT_SEARCH_TYPE
     return parsed
 
 
-def build_search_params(parsed: Mapping[str, Any]) -> dict[str, Any]:
-    search_params: dict[str, Any] = {
-        "INDUSTRY": [_text(parsed.get("industry"))],
-        "REGION": [_text(parsed.get("location"))],
-        "CURRENT_TITLE": [_text(parsed.get("role_title"))],
-        "LIMIT": int(parsed.get("max_results", DEFAULT_LIMIT)),
-        "search_type": _text(parsed.get("search_type")) or DEFAULT_SEARCH_TYPE,
+def _condition_or_single(conditions: list[dict[str, Any]]) -> dict[str, Any]:
+    if len(conditions) == 1:
+        return conditions[0]
+    return {"op": "or", "conditions": conditions}
+
+
+def _headcount_conditions(field: str, value: str) -> list[dict[str, Any]]:
+    bounds = _headcount_bounds(value)
+    if not bounds:
+        return []
+    lower, upper = bounds
+    conditions = [{"field": field, "type": "=>", "value": lower}]
+    if upper is not None:
+        conditions.append({"field": field, "type": "=<", "value": upper})
+    return conditions
+
+
+def build_crustdata_request(parsed: Mapping[str, Any]) -> dict[str, Any]:
+    """Build a current, low-cost indexed Search API request."""
+
+    mode = _text(parsed.get("search_mode"))
+    industry_terms = _terms(parsed.get("industry"))
+    conditions: list[dict[str, Any]] = []
+
+    if mode == "people":
+        industry_conditions = [
+            {
+                "field": "experience.employment_details.current.company_professional_network_industry",
+                "type": "(.)",
+                "value": term,
+            }
+            for term in industry_terms
+        ]
+        conditions.extend(
+            [
+                _condition_or_single(industry_conditions),
+                {
+                    "field": "basic_profile.location.full_location",
+                    "type": "(.)",
+                    "value": _text(parsed.get("location")),
+                },
+                {
+                    "field": "experience.employment_details.current.title",
+                    "type": "(.)",
+                    "value": _text(parsed.get("role_title")),
+                },
+            ]
+        )
+        conditions.extend(
+            _headcount_conditions(
+                "experience.employment_details.current.company_headcount_latest",
+                _text(parsed.get("company_headcount")),
+            )
+        )
+        body: dict[str, Any] = {
+            "filters": {"op": "and", "conditions": conditions},
+            "mode": "exact",
+            "fields": [
+                "fit",
+                "metadata.updated_at",
+                "basic_profile",
+                "experience.employment_details.current",
+                "social_handles.professional_network_identifier.profile_url",
+            ],
+            "limit": int(parsed.get("max_results", DEFAULT_LIMIT)),
+        }
+        keywords = _text(parsed.get("keywords"))
+        if keywords:
+            body["search"] = {
+                "query": f"{_text(parsed.get('role_title'))}. {keywords}",
+                "mode": "hybrid",
+            }
+        else:
+            body["sorts"] = [{"field": "metadata.updated_at", "order": "desc"}]
+        endpoint = "https://api.crustdata.com/person/search"
+    else:
+        industry_conditions = [
+            {"field": field, "type": "(.)", "value": term}
+            for term in industry_terms
+            for field in (
+                "taxonomy.professional_network_industry",
+                "taxonomy.categories",
+                "taxonomy.professional_network_specialities",
+            )
+        ]
+        conditions.extend(
+            [
+                _condition_or_single(industry_conditions),
+                {
+                    "field": "locations.headquarters",
+                    "type": "(.)",
+                    "value": _text(parsed.get("location")),
+                },
+            ]
+        )
+        keywords = _text(parsed.get("keywords"))
+        if keywords:
+            conditions.append(
+                _condition_or_single(
+                    [
+                        {"field": field, "type": "(.)", "value": keywords}
+                        for field in (
+                            "basic_info.name",
+                            "taxonomy.categories",
+                            "taxonomy.professional_network_specialities",
+                        )
+                    ]
+                )
+            )
+        conditions.extend(_headcount_conditions("headcount.total", _text(parsed.get("company_headcount"))))
+        body = {
+            "filters": {"op": "and", "conditions": conditions},
+            "fields": [
+                "metadata.updated_at",
+                "basic_info.name",
+                "basic_info.website",
+                "basic_info.professional_network_url",
+                "basic_info.company_type",
+                "headcount.total",
+                "locations.country",
+                "locations.state",
+                "locations.city",
+                "locations.headquarters",
+                "taxonomy.professional_network_industry",
+                "taxonomy.categories",
+                "taxonomy.professional_network_specialities",
+            ],
+            "sorts": [{"column": "headcount.total", "order": "desc"}],
+            "limit": int(parsed.get("max_results", DEFAULT_LIMIT)),
+        }
+        endpoint = "https://api.crustdata.com/company/search"
+
+    max_credits = round(int(parsed.get("max_results", DEFAULT_LIMIT)) * SEARCH_CREDITS_PER_RESULT, 2)
+    scope = "\x1f".join(
+        _text(parsed.get(key))
+        for key in (
+            "search_mode",
+            "industry",
+            "location",
+            "role_title",
+            "keywords",
+            "company_headcount",
+        )
+    ) + f"\x1f{int(parsed.get('max_results', DEFAULT_LIMIT))}"
+    digest = 2166136261
+    utf16 = scope.encode("utf-16le")
+    for index in range(0, len(utf16), 2):
+        code_unit = utf16[index] | (utf16[index + 1] << 8)
+        digest = ((digest ^ code_unit) * 16777619) & 0xFFFFFFFF
+    approval_code = f"{digest:08X}"
+    return {
+        "endpoint": endpoint,
+        "api_version": "2025-11-01",
+        "body": body,
+        "estimated_max_credits": max_credits,
+        "approval_phrase": f"APPROVE CRUSTDATA {max_credits:.2f} CREDITS {approval_code}",
     }
-    headcount = _text(parsed.get("company_headcount"))
-    if headcount:
-        search_params["COMPANY_HEADCOUNT"] = [headcount]
-    return search_params
+
+
+def approval_matches(current_user_instruction: Any, parsed: Mapping[str, Any]) -> bool:
+    expected = build_crustdata_request(parsed)["approval_phrase"]
+    return _text(current_user_instruction) == expected
 
 
 def _canonical_linkedin_url(value: Any, kind: str) -> str | None:
@@ -159,91 +328,58 @@ def _current_role(profile: Mapping[str, Any]) -> Mapping[str, Any]:
     return current if isinstance(current, Mapping) else {}
 
 
-def _format_profile(profile: Mapping[str, Any], parsed: Mapping[str, Any]) -> dict[str, Any]:
-    role = _current_role(profile)
-    basic = profile.get("basic_profile") if isinstance(profile.get("basic_profile"), Mapping) else {}
-    social = profile.get("social_handles") if isinstance(profile.get("social_handles"), Mapping) else {}
-    network_identifier = (
-        social.get("professional_network_identifier")
-        if isinstance(social.get("professional_network_identifier"), Mapping)
-        else {}
-    )
-
-    name = _first_text(profile.get("name"), basic.get("name"))
-    title = _first_text(
-        profile.get("current_title"), basic.get("current_title"), role.get("title")
-    )
-    company = _first_text(
-        profile.get("company"), profile.get("current_company"), role.get("name"), role.get("company_name")
-    )
-    location = _first_text(
-        profile.get("location"), basic.get("location"), _nested(profile, "professional_network", "location")
-    )
-    headline = _first_text(profile.get("headline"), basic.get("headline"))
-    industry = _first_text(
-        profile.get("industry"),
-        role.get("company_professional_network_industry"),
-        role.get("company_industry"),
-    )
-    headcount = _first_text(
-        profile.get("company_headcount"),
-        role.get("company_headcount_range"),
-        str(role.get("company_headcount_latest")) if role.get("company_headcount_latest") is not None else "",
-    )
-    profile_url = _canonical_linkedin_url(
-        _first_text(
-            profile.get("profile_url"),
-            profile.get("linkedin_url"),
-            network_identifier.get("profile_url"),
-        ),
-        "person",
-    )
-    company_url = _canonical_linkedin_url(
-        _first_text(
-            profile.get("company_profile_url"),
-            profile.get("company_linkedin_url"),
-            profile.get("current_company_linkedin_url"),
-            role.get("company_professional_network_profile_url"),
-            role.get("company_linkedin_profile_url"),
-        ),
-        "company",
-    )
-
+def _criteria_status(
+    parsed: Mapping[str, Any], visible: Mapping[str, Any], fields: Sequence[tuple[str, str]]
+) -> tuple[str, list[str], list[str], list[str]]:
     evidence: list[str] = []
     unverified: list[str] = []
     conflicts: list[str] = []
-    visible = {
-        "role_title": " ".join(filter(None, (title, headline))),
-        "location": location,
-        "industry": " ".join(filter(None, (industry, headline))),
-        "company_headcount": headcount,
-    }
-    for key, label in (
-        ("role_title", "role title"),
-        ("location", "location"),
-        ("industry", "industry"),
-        ("company_headcount", "company headcount"),
-    ):
-        expected = _normalise(parsed.get(key))
-        if not expected:
+    for key, label in fields:
+        expected_raw = parsed.get(key)
+        if not _text(expected_raw):
             continue
-        actual = _normalise(visible[key])
+        actual = _normalise(visible.get(key))
         if not actual:
             unverified.append(label)
-        elif key == "industry" and any(
-            term in actual for term in _terms(parsed.get("industry"))
-        ):
-            evidence.append(label)
-        elif key == "company_headcount" and _headcount_matches(
-            parsed.get("company_headcount"), visible[key]
-        ):
-            evidence.append(label)
-        elif expected in actual or actual in expected:
-            evidence.append(label)
+            continue
+        if key == "company_headcount":
+            matches = _headcount_matches(expected_raw, visible.get(key))
+        elif key == "industry":
+            matches = any(_normalise(term) in actual for term in _terms(expected_raw))
         else:
-            conflicts.append(label)
+            expected = _normalise(expected_raw)
+            matches = expected in actual or actual in expected
+        (evidence if matches else conflicts).append(label)
+    status = "excluded" if conflicts else ("qualified" if evidence else "unverified")
+    return status, evidence, unverified, conflicts
 
-    status = "excluded" if conflicts else ("qualified" if len(evidence) >= 2 else "unverified")
+
+def _format_profile(profile: Mapping[str, Any], parsed: Mapping[str, Any]) -> dict[str, Any]:
+    role = _current_role(profile)
+    basic = profile.get("basic_profile") if isinstance(profile.get("basic_profile"), Mapping) else {}
+    network = _nested(profile, "social_handles", "professional_network_identifier") or {}
+    name = _first_text(profile.get("name"), basic.get("name"))
+    title = _first_text(profile.get("current_title"), basic.get("current_title"), role.get("title"))
+    company = _first_text(profile.get("company"), profile.get("current_company"), role.get("name"), role.get("company_name"))
+    location = _first_text(profile.get("location"), basic.get("location"), _nested(profile, "professional_network", "location"))
+    headline = _first_text(profile.get("headline"), basic.get("headline"))
+    industry = _first_text(profile.get("industry"), role.get("company_professional_network_industry"), role.get("company_industries"))
+    headcount = _first_text(profile.get("company_headcount"), role.get("company_headcount_range"), str(role.get("company_headcount_latest")) if role.get("company_headcount_latest") is not None else "")
+    profile_url = _canonical_linkedin_url(_first_text(profile.get("profile_url"), profile.get("linkedin_url"), network.get("profile_url")), "person")
+    company_url = _canonical_linkedin_url(_first_text(profile.get("company_profile_url"), profile.get("company_linkedin_url"), role.get("company_professional_network_profile_url"), role.get("company_linkedin_profile_url")), "company")
+    status, evidence, unverified, conflicts = _criteria_status(
+        parsed,
+        {
+            "role_title": " ".join(filter(None, (title, headline))),
+            "location": location,
+            "industry": " ".join(filter(None, (industry, headline))),
+            "company_headcount": headcount,
+        },
+        (("role_title", "role title"), ("location", "location"), ("industry", "industry"), ("company_headcount", "company headcount")),
+    )
+    if not profile_url:
+        conflicts.append("missing valid public LinkedIn profile URL")
+        status = "excluded"
     return {
         "name": name or None,
         "current_title": title or None,
@@ -254,6 +390,44 @@ def _format_profile(profile: Mapping[str, Any], parsed: Mapping[str, Any]) -> di
         "headline": headline or None,
         "industry": industry or None,
         "company_headcount": headcount or None,
+        "fit": _first_text(profile.get("fit")) or None,
+        "last_updated": _first_text(_nested(profile, "metadata", "updated_at")) or None,
+        "criteria_status": status,
+        "match_evidence": evidence,
+        "unverified_criteria": unverified,
+        "conflicting_criteria": conflicts,
+    }
+
+
+def _format_company(company: Mapping[str, Any], parsed: Mapping[str, Any]) -> dict[str, Any]:
+    basic = company.get("basic_info") if isinstance(company.get("basic_info"), Mapping) else {}
+    locations = company.get("locations") if isinstance(company.get("locations"), Mapping) else {}
+    taxonomy = company.get("taxonomy") if isinstance(company.get("taxonomy"), Mapping) else {}
+    headcount = company.get("headcount") if isinstance(company.get("headcount"), Mapping) else {}
+    name = _first_text(company.get("name"), basic.get("name"))
+    location = _first_text(locations.get("headquarters"), ", ".join(filter(None, (_text(locations.get("city")), _text(locations.get("state")), _text(locations.get("country"))))))
+    industry = _first_text(taxonomy.get("professional_network_industry"), taxonomy.get("categories"), taxonomy.get("professional_network_specialities"))
+    keyword_text = " ".join(filter(None, (name, _first_text(taxonomy.get("categories")), _first_text(taxonomy.get("professional_network_specialities")))))
+    company_url = _canonical_linkedin_url(_first_text(company.get("company_profile_url"), company.get("linkedin_url"), basic.get("professional_network_url"), _nested(company, "social_profiles", "professional_network")), "company")
+    status, evidence, unverified, conflicts = _criteria_status(
+        parsed,
+        {"location": location, "industry": industry, "keywords": keyword_text, "company_headcount": str(headcount.get("total")) if headcount.get("total") is not None else ""},
+        (("location", "location"), ("industry", "industry"), ("keywords", "keywords"), ("company_headcount", "company headcount")),
+    )
+    if not company_url:
+        conflicts.append("missing valid public LinkedIn company URL")
+        status = "excluded"
+    return {
+        "name": name or None,
+        "company_profile_url": company_url,
+        "website": _first_text(basic.get("website")) or None,
+        "company_type": _first_text(basic.get("company_type")) or None,
+        "industry": industry or None,
+        "headquarters": location or None,
+        "company_headcount": headcount.get("total") if isinstance(headcount.get("total"), (int, float)) else None,
+        "categories": taxonomy.get("categories") if isinstance(taxonomy.get("categories"), list) else [],
+        "specialities": taxonomy.get("professional_network_specialities") if isinstance(taxonomy.get("professional_network_specialities"), list) else [],
+        "last_updated": _first_text(_nested(company, "metadata", "updated_at")) or None,
         "criteria_status": status,
         "match_evidence": evidence,
         "unverified_criteria": unverified,
@@ -262,271 +436,136 @@ def _format_profile(profile: Mapping[str, Any], parsed: Mapping[str, Any]) -> di
 
 
 def format_response(response: Mapping[str, Any], parsed: Mapping[str, Any]) -> dict[str, Any]:
-    payload = response.get("data", response.get("profiles", []))
-    raw_profiles = (
-        payload
-        if isinstance(payload, Sequence) and not isinstance(payload, (str, bytes))
-        else []
-    )
-    profiles: list[dict[str, Any]] = []
+    mode = _text(parsed.get("search_mode"))
+    key = "profiles" if mode == "people" else "companies"
+    raw_items = response.get(key, response.get("data", []))
+    if not isinstance(raw_items, Sequence) or isinstance(raw_items, (str, bytes)):
+        raw_items = []
+    formatter = _format_profile if mode == "people" else _format_company
+    qualified: list[dict[str, Any]] = []
     excluded: list[dict[str, Any]] = []
-    seen_people: set[str] = set()
-
-    for raw in raw_profiles:
+    seen: set[str] = set()
+    url_key = "profile_url" if mode == "people" else "company_profile_url"
+    for raw in raw_items:
         if not isinstance(raw, Mapping):
             continue
-        item = _format_profile(raw, parsed)
-        if not item["profile_url"]:
-            item["conflicting_criteria"].append("missing valid public LinkedIn profile URL")
-            item["criteria_status"] = "excluded"
-        key = item["profile_url"] or "|".join(
-            _normalise(item.get(field)) for field in ("name", "company", "current_title")
-        )
-        if not key or key in seen_people:
+        item = formatter(raw, parsed)
+        identity = item.get(url_key)
+        if not identity or identity in seen:
+            if item.get("criteria_status") == "excluded" and identity not in seen:
+                excluded.append(item)
             continue
-        seen_people.add(key)
-        if item["criteria_status"] == "excluded":
-            excluded.append(item)
-        else:
-            profiles.append(item)
-        if len(profiles) >= int(parsed["max_results"]):
+        seen.add(identity)
+        (excluded if item["criteria_status"] == "excluded" else qualified).append(item)
+        if len(qualified) >= int(parsed.get("max_results", DEFAULT_LIMIT)):
             break
 
-    companies: list[dict[str, Any]] = []
-    seen_companies: set[str] = set()
-    for profile in profiles:
-        url = profile.get("company_profile_url")
-        if not url or url in seen_companies:
-            continue
-        seen_companies.add(url)
-        companies.append({"company": profile.get("company"), "company_profile_url": url})
+    employer_companies: list[dict[str, Any]] = []
+    if mode == "people":
+        company_seen: set[str] = set()
+        for profile in qualified:
+            url = profile.get("company_profile_url")
+            if url and url not in company_seen:
+                company_seen.add(url)
+                employer_companies.append({"company": profile.get("company"), "company_profile_url": url})
 
-    credits = response.get("credits_cost")
+    credits = response.get("credits_cost", response.get("credits_used"))
     if not isinstance(credits, (int, float)) or isinstance(credits, bool):
-        credits = None
+        credits = round(len(raw_items) * SEARCH_CREDITS_PER_RESULT, 2)
+    criteria = {key: parsed.get(key) or None for key in ("search_mode", "industry", "location", "role_title", "keywords", "company_headcount", "max_results")}
     return {
         "ok": True,
-        "profiles": profiles,
-        "profile_urls": [profile["profile_url"] for profile in profiles],
-        "companies": companies,
-        "company_urls": [company["company_profile_url"] for company in companies],
-        "excluded_profiles": excluded,
-        "total_count": len(profiles),
+        "search_mode": mode,
+        "profiles": qualified if mode == "people" else [],
+        "profile_urls": [item["profile_url"] for item in qualified] if mode == "people" else [],
+        "companies": employer_companies if mode == "people" else qualified,
+        "company_urls": [item["company_profile_url"] for item in (employer_companies if mode == "people" else qualified)],
+        "excluded_results": excluded,
+        "total_count": len(qualified),
+        "provider_total_count": response.get("total_count"),
         "credits_cost": credits,
-        "search_criteria": {
-            key: parsed.get(key) or None
-            for key in (*REQUIRED_FIELDS, "company_headcount", "max_results", "search_type")
-        },
-        "coverage": "Bounded provider result; not exhaustive",
+        "search_criteria": criteria,
+        "coverage": "Bounded indexed-provider result; not exhaustive",
     }
-
-
-def search_with_helper(
-    params: Mapping[str, Any],
-    search: Callable[[dict[str, Any]], Mapping[str, Any]],
-) -> dict[str, Any]:
-    parsed = parse_input(params)
-    try:
-        response = search(build_search_params(parsed))
-    except Exception:
-        return {
-            "ok": False,
-            "profiles": [],
-            "profile_urls": [],
-            "companies": [],
-            "company_urls": [],
-            "excluded_profiles": [],
-            "total_count": 0,
-            "credits_cost": None,
-            "search_criteria": {
-                key: parsed.get(key) or None
-                for key in (*REQUIRED_FIELDS, "company_headcount", "max_results", "search_type")
-            },
-            "coverage": "No live provider result",
-            "error": {
-                "code": "PROVIDER_UNAVAILABLE",
-                "message": "The approved prospect-search provider is unavailable.",
-            },
-        }
-    if not isinstance(response, Mapping):
-        response = {}
-    return format_response(response, parsed)
 
 
 def build_manual_queries(params: Mapping[str, Any]) -> dict[str, Any]:
     parsed = parse_input(params)
     quote = lambda value: f'"{_text(value).replace(chr(34), "")}"'
-    people = " ".join(
-        (
-            "site:linkedin.com/in/",
-            quote(parsed["role_title"]),
-            quote(parsed["location"]),
-            quote(parsed["industry"]),
-        )
-    )
-    companies = " ".join(
-        (
-            "site:linkedin.com/company/",
-            quote(parsed["location"]),
-            quote(parsed["industry"]),
-        )
-    )
+    if parsed["search_mode"] == "people":
+        query = " ".join(("site:linkedin.com/in/", quote(parsed["role_title"]), quote(parsed["location"]), quote(parsed["industry"]), quote(parsed["keywords"]) if parsed["keywords"] else "")).strip()
+        cannot_verify = ["current role assignment"]
+    else:
+        query = " ".join(("site:linkedin.com/company/", quote(parsed["location"]), quote(parsed["industry"]), quote(parsed["keywords"]) if parsed["keywords"] else "")).strip()
+        cannot_verify = []
+    if parsed.get("company_headcount"):
+        cannot_verify.append("company_headcount")
     return {
         "ok": True,
         "mode": "manual_query_only",
-        "queries": [people, companies],
-        "cannot_verify_from_query": [
-            value
-            for value in (
-                "company_headcount" if parsed.get("company_headcount") else None,
-                "current role assignment",
-            )
-            if value
-        ],
-        "message": "These are search strings, not returned or qualified prospects.",
+        "search_mode": parsed["search_mode"],
+        "queries": [query],
+        "cannot_verify_from_query": cannot_verify,
+        "message": "This is a search string, not returned or qualified research.",
     }
 
 
 def _self_test() -> None:
-    params = {
-        "industry": "Health care",
-        "location": "Australia",
-        "role_title": "Head of Operations",
-        "company_headcount": "51-200",
-        "max_results": 10,
-    }
-    parsed = parse_input(params)
-    built = build_search_params(parsed)
-    assert built["CURRENT_TITLE"] == ["Head of Operations"]
-    assert built["COMPANY_HEADCOUNT"] == ["51-200"]
+    people = parse_input({"search_mode": "people", "industry": "Health care, Information Technology", "location": "Australia", "role_title": "Head of Operations", "company_headcount": "51-200", "keywords": "digital health", "max_results": 10})
+    request = build_crustdata_request(people)
+    assert request["endpoint"].endswith("/person/search")
+    assert request["estimated_max_credits"] == 0.3
+    assert re.fullmatch(r"APPROVE CRUSTDATA 0\.30 CREDITS [A-F0-9]{8}", request["approval_phrase"])
+    assert request["body"]["mode"] == "exact" and request["body"]["search"]["mode"] == "hybrid"
+    assert approval_matches(request["approval_phrase"], people)
+    assert not approval_matches("yes", people)
 
-    response = {
-        "credits_cost": 0.06,
-        "data": [
-            {
-                "name": "Alex Morgan",
-                "current_title": "Head of Operations",
-                "company": "Care Systems",
-                "location": "Melbourne, Australia",
-                "linkedin_url": "https://au.linkedin.com/in/alex-morgan/?trk=test",
-                "company_linkedin_url": "https://linkedin.com/company/care-systems/",
-                "headline": "Health care operations leader",
-                "industry": "Health care",
-                "company_headcount": "51-200",
-            },
-            {
-                "basic_profile": {
-                    "name": "Jordan Lee",
-                    "headline": "Head of Operations in health care technology",
-                    "location": {"raw": "Sydney, Australia"},
-                },
-                "social_handles": {
-                    "professional_network_identifier": {
-                        "profile_url": "https://linkedin.com/in/jordan-lee"
-                    }
-                },
-                "experience": {
-                    "employment_details": {
-                        "current": [
-                            {
-                                "name": "Clinic Cloud",
-                                "title": "Head of Operations",
-                                "company_professional_network_profile_url": "https://linkedin.com/company/clinic-cloud",
-                                "company_professional_network_industry": "Information Technology",
-                                "company_headcount_latest": 125,
-                            }
-                        ]
-                    }
-                },
-            },
-            {
-                "name": "Alex Morgan duplicate",
-                "profile_url": "https://www.linkedin.com/in/alex-morgan",
-                "current_title": "Head of Operations",
-                "location": "Australia",
-                "industry": "Health care",
-            },
-            {
-                "name": "Wrong Region",
-                "profile_url": "https://www.linkedin.com/in/wrong-region",
-                "current_title": "Head of Operations",
-                "location": "Canada",
-                "industry": "Health care",
-            },
-            {
-                "name": "Unsafe URL",
-                "profile_url": "https://example.com/person",
-                "current_title": "Head of Operations",
-                "location": "Australia",
-                "industry": "Health care",
-            },
-        ],
-    }
-    result = search_with_helper(params, lambda _: response)
-    assert result["total_count"] == 2
-    assert result["profile_urls"] == [
-        "https://www.linkedin.com/in/alex-morgan",
-        "https://www.linkedin.com/in/jordan-lee",
-    ]
-    assert result["company_urls"] == [
-        "https://www.linkedin.com/company/care-systems",
-        "https://www.linkedin.com/company/clinic-cloud",
-    ]
-    assert len(result["excluded_profiles"]) == 2
-    assert result["credits_cost"] == 0.06
+    person_result = format_response({"profiles": [{"basic_profile": {"name": "Alex Morgan", "headline": "Health care operations leader", "location": {"full_location": "Melbourne, Australia"}}, "social_handles": {"professional_network_identifier": {"profile_url": "https://au.linkedin.com/in/alex-morgan/?trk=test"}}, "experience": {"employment_details": {"current": [{"name": "Care Systems", "title": "Head of Operations", "company_professional_network_profile_url": "https://linkedin.com/company/care-systems/", "company_professional_network_industry": "Health care", "company_headcount_latest": 125}]}}}], "total_count": 1}, people)
+    assert person_result["profile_urls"] == ["https://www.linkedin.com/in/alex-morgan"]
+    assert person_result["company_urls"] == ["https://www.linkedin.com/company/care-systems"]
 
-    failed = search_with_helper(
-        params,
-        lambda _: (_ for _ in ()).throw(RuntimeError("secret provider response")),
-    )
-    assert failed["error"]["code"] == "PROVIDER_UNAVAILABLE"
-    assert "secret provider response" not in json.dumps(failed)
+    companies = parse_input({"search_mode": "companies", "industry": "Technology, Nonprofit", "location": "Melbourne, Victoria, Australia", "keywords": "AI communities", "max_results": 5})
+    company_request = build_crustdata_request(companies)
+    assert company_request["endpoint"].endswith("/company/search")
+    assert company_request["estimated_max_credits"] == 0.15
+    company_result = format_response({"companies": [{"basic_info": {"name": "Melbourne AI Communities", "website": "https://example.org", "professional_network_url": "https://linkedin.com/company/melbourne-ai-community"}, "locations": {"headquarters": "Melbourne, Victoria, Australia"}, "taxonomy": {"professional_network_industry": "Nonprofit", "categories": ["AI Communities"]}, "headcount": {"total": 12}}]}, companies)
+    assert company_result["company_urls"] == ["https://www.linkedin.com/company/melbourne-ai-community"]
 
-    manual = build_manual_queries(params)
-    assert manual["mode"] == "manual_query_only"
-    assert len(manual["queries"]) == 2
-    assert "company_headcount" in manual["cannot_verify_from_query"]
+    manual = build_manual_queries(companies)
+    assert manual["search_mode"] == "companies" and len(manual["queries"]) == 1
 
-    try:
-        parse_input({"industry": "Health care", "location": "Australia"})
-    except ValueError as error:
-        assert "role_title" in str(error)
-    else:
-        raise AssertionError("Missing role_title should fail")
-
-    try:
-        parse_input({**params, "max_results": 500})
-    except ValueError as error:
-        assert "between 1 and 50" in str(error)
-    else:
-        raise AssertionError("Unbounded result limit should fail")
+    for invalid in (
+        {"search_mode": "people", "industry": "Health care", "location": "Australia"},
+        {"search_mode": "companies", "industry": "Tech", "location": "Australia", "max_results": 500},
+        {"search_mode": "companies", "industry": "Tech", "location": "Australia", "company_headcount": "many"},
+    ):
+        try:
+            parse_input(invalid)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"Invalid input should fail: {invalid}")
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--self-test", action="store_true")
     parser.add_argument("--manual-query", action="store_true")
+    parser.add_argument("--mode", choices=SEARCH_MODES, default="people")
     parser.add_argument("--industry")
     parser.add_argument("--location")
-    parser.add_argument("--role-title")
+    parser.add_argument("--role-title", default="")
+    parser.add_argument("--keywords", default="")
     parser.add_argument("--company-headcount", default="")
     parser.add_argument("--max-results", type=int, default=DEFAULT_LIMIT)
     args = parser.parse_args()
 
     if args.self_test:
         _self_test()
-        print(json.dumps({"ok": True, "tests": 5}))
+        print(json.dumps({"ok": True, "tests": 8}))
         return
     if args.manual_query:
-        result = build_manual_queries(
-            {
-                "industry": args.industry,
-                "location": args.location,
-                "role_title": args.role_title,
-                "company_headcount": args.company_headcount,
-                "max_results": args.max_results,
-            }
-        )
+        result = build_manual_queries({"search_mode": args.mode, "industry": args.industry, "location": args.location, "role_title": args.role_title, "keywords": args.keywords, "company_headcount": args.company_headcount, "max_results": args.max_results})
         print(json.dumps(result, indent=2))
         return
     parser.error("Choose --self-test or --manual-query.")

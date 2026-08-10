@@ -13,6 +13,7 @@ const expectedFiles = [
   "20-tool-list-tasks.json",
   "21-tool-create-task.json",
   "22-tool-update-task-status.json",
+  "23-tool-search-linkedin-prospects.json",
   "30-tool-propose-create-task.json",
   "31-tool-propose-update-task-status.json",
   "40-confirm-task-write.json",
@@ -150,7 +151,7 @@ if (agentWorkflow) {
   );
   check(
     agentWorkflow.nodes.filter((node) => node.type !== "n8n-nodes-base.stickyNote")
-      .length <= 17,
+      .length <= 18,
     "Agent workflow must keep confirmation routing and tool wiring explainable",
   );
   check(
@@ -301,8 +302,39 @@ if (agentWorkflow) {
     .map(([name]) => name);
   check(
     JSON.stringify(connectedToolNames) ===
-      JSON.stringify(["list_tasks", "create_task", "update_task_status"]),
-    "Agent: only the reviewed read and proposal-only task tools may be connected",
+      JSON.stringify([
+        "list_tasks",
+        "create_task",
+        "update_task_status",
+        "search_linkedin_prospects",
+      ]),
+    "Agent: only the reviewed task and credit-gated research tools may be connected",
+  );
+
+  const researchTool = nodeByName(agentWorkflow, "search_linkedin_prospects");
+  check(
+    researchTool?.type === "@n8n/n8n-nodes-langchain.toolWorkflow" &&
+      researchTool?.typeVersion === 2.2 &&
+      researchTool?.parameters?.workflowId?.value ===
+        "phase9SearchLinkedInProspects",
+    "Agent: search_linkedin_prospects must call the reviewed research workflow",
+  );
+  check(
+    connectionTargets(
+      agentWorkflow,
+      "search_linkedin_prospects",
+      "ai_tool",
+      0,
+    ).includes("Project Partner Agent"),
+    "Agent: search_linkedin_prospects must be connected as an AI tool",
+  );
+  check(
+    researchTool?.parameters?.workflowInputs?.value?.currentUserInstruction ===
+      "={{ $('Validate and Normalise').item.json.message }}" &&
+      /exact credit-approval phrase/i.test(
+        researchTool?.parameters?.description ?? "",
+      ),
+    "Agent: research approval must come from the current normalized user instruction",
   );
 
   const createTool = nodeByName(agentWorkflow, "create_task");
@@ -610,6 +642,134 @@ for (const file of toolFiles) {
   );
 }
 
+const researchWorkflow = workflows.get(
+  "23-tool-search-linkedin-prospects.json",
+);
+if (researchWorkflow) {
+  check(
+    researchWorkflow.name === "23 - TOOL - search_linkedin_prospects" &&
+      researchWorkflow.id === "phase9SearchLinkedInProspects" &&
+      researchWorkflow.meta?.toolRisk ===
+        "external_read_with_credit_approval",
+    "Research tool must retain its stable name, ID, and credit-gated risk metadata",
+  );
+  const trigger = nodeByName(researchWorkflow, "Tool Input");
+  const inputNames =
+    trigger?.parameters?.workflowInputs?.values?.map((input) => input.name) ??
+    [];
+  check(
+    trigger?.type === "n8n-nodes-base.executeWorkflowTrigger" &&
+      trigger?.typeVersion === 1.2 &&
+      JSON.stringify(inputNames) ===
+        JSON.stringify([
+          "sessionId",
+          "currentUserInstruction",
+          "searchMode",
+          "industry",
+          "location",
+          "roleTitle",
+          "keywords",
+          "companyHeadcount",
+          "maxResults",
+        ]),
+    "Research tool input schema changed unexpectedly",
+  );
+
+  const validation = nodeByName(
+    researchWorkflow,
+    "Validate and Build Search",
+  );
+  const validationCode = validation?.parameters?.jsCode ?? "";
+  check(
+    /maxResults > 25/.test(validationCode) &&
+      /maxResults \* 0\.03/.test(validationCode) &&
+      /currentUserInstruction === approvalPhrase/.test(validationCode) &&
+      /approvalScope/.test(validationCode) &&
+      /approvalCode/.test(validationCode),
+    "Research tool must cap results, calculate cost, bind criteria, and compare exact current-user approval",
+  );
+  check(
+    /https:\/\/api\.crustdata\.com\/person\/search/.test(validationCode) &&
+      /https:\/\/api\.crustdata\.com\/company\/search/.test(validationCode) &&
+      /mode: 'exact'/.test(validationCode) &&
+      /mode: 'hybrid'/.test(validationCode),
+    "Research tool must use fixed indexed endpoints and exact-filtered semantic ranking",
+  );
+  check(
+    !/contact\./.test(validationCode) &&
+      /company_professional_network_industry/.test(validationCode) &&
+      /company_headcount_latest/.test(validationCode),
+    "Research request must avoid contact fields and retain current-employer quality filters",
+  );
+
+  const approval = nodeByName(researchWorkflow, "Exact Credit Approval?");
+  check(
+    connectionTargets(
+      researchWorkflow,
+      "Exact Credit Approval?",
+      "main",
+      0,
+    ).includes("Crustdata Indexed Search") &&
+      connectionTargets(
+        researchWorkflow,
+        "Exact Credit Approval?",
+        "main",
+        1,
+      ).includes("Return No-Spend Preview"),
+    "Research HTTP request must be reachable only through exact credit approval",
+  );
+
+  const request = nodeByName(researchWorkflow, "Crustdata Indexed Search");
+  const requestHeaders =
+    request?.parameters?.headerParameters?.parameters ?? [];
+  check(
+    request?.type === "n8n-nodes-base.httpRequest" &&
+      request?.typeVersion === 4.4 &&
+      request?.parameters?.method === "POST" &&
+      request?.parameters?.authentication === "genericCredentialType" &&
+      request?.parameters?.genericAuthType === "httpHeaderAuth" &&
+      request?.credentials?.httpHeaderAuth?.name === "CRUSTDATA_API_KEY",
+    "Research HTTP node must use the CRUSTDATA_API_KEY Header Auth credential",
+  );
+  check(
+    requestHeaders.length === 1 &&
+      requestHeaders[0]?.name === "x-api-version" &&
+      requestHeaders[0]?.value === "2025-11-01" &&
+      !requestHeaders.some((header) =>
+        /^authorization$/i.test(String(header?.name ?? "")),
+      ),
+    "Research workflow must keep Authorization in the credential and pin the API version header",
+  );
+  check(
+    request?.parameters?.url === "={{ $json.endpoint }}" &&
+      request?.parameters?.jsonBody === "={{ $json.requestBody }}" &&
+      request?.parameters?.options?.response?.response?.neverError === true &&
+      request?.parameters?.options?.timeout === 45_000,
+    "Research HTTP node must use validated request data, bounded timeout, and safe error shaping",
+  );
+
+  const formatterCode =
+    nodeByName(researchWorkflow, "Format Research Result")?.parameters
+      ?.jsCode ?? "";
+  check(
+    /canonicalLinkedIn/.test(formatterCode) &&
+      /excludedResults/.test(formatterCode) &&
+      /Public professional fields only/.test(formatterCode) &&
+      !/personal_email|phone_number|business_email/i.test(formatterCode),
+    "Research output must canonicalize URLs, expose exclusions, and omit contact data",
+  );
+  const auditNode = nodeByName(researchWorkflow, "Write Tool Audit");
+  check(
+    auditNode?.parameters?.operation === "insert" &&
+      auditNode?.parameters?.dataTableId?.value === "tool_audit" &&
+      /returnedCount/.test(
+        nodeByName(researchWorkflow, "Prepare Research Audit")?.parameters
+          ?.jsCode ?? "",
+      ),
+    "Research workflow must audit only criteria, counts, credits, and safe status",
+  );
+}
+
 const listWorkflow = workflows.get("20-tool-list-tasks.json");
 if (listWorkflow) {
   const taskNodes = listWorkflow.nodes.filter(
@@ -908,6 +1068,7 @@ const OPTIONAL_SKILL_IDS = [
   "prospect-research",
   "deal-desk",
   "customer-support",
+  "linkedin-prospect-search",
 ];
 
 const skillBundle = await compileSkills(join(projectRoot, "skills"));
@@ -939,6 +1100,11 @@ check(
     ) ===
       JSON.stringify([
         ["list_tasks", "read", "automatic"],
+        [
+          "search_linkedin_prospects",
+          "external_read",
+          "exact_credit_approval_required",
+        ],
         ["create_task", "write", "confirmation_required"],
         ["update_task_status", "write", "confirmation_required"],
       ]),

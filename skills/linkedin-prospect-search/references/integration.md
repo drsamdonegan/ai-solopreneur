@@ -2,112 +2,154 @@
 
 ## Capability boundary
 
-The skill can validate criteria, build provider parameters, clean returned records, and generate manual search queries without an account. It cannot discover live LinkedIn records without an external source of current public data.
+Expose one provider-neutral agent tool named `search_linkedin_prospects`. The
+shipped adapter is `23 - TOOL - search_linkedin_prospects`, backed by Crustdata's
+indexed Person Search and Company Search endpoints.
 
-Expose a read-only agent tool named `search_linkedin_prospects`. It may be backed by Crustdata, another reviewed sales-intelligence API, or an approved generic web-search service. Keep the tool name and output contract provider-neutral so the skill can move between providers.
+The Markdown skill alone cannot discover live records. It can validate
+criteria, build a reviewable request, canonicalize results, and produce manual
+public-search queries. Do not automate a learner's logged-in LinkedIn account,
+bypass access controls, or imply direct LinkedIn API access.
 
-Do not automate a learner's logged-in LinkedIn account. LinkedIn's official profile API is authenticated and restricted; it is not a general-purpose prospect-search API. Review current provider terms, LinkedIn terms, privacy obligations, retention rules, permitted prospecting uses, and per-result costs before enabling a live connection.
+Review current provider terms, LinkedIn terms, privacy duties, permitted uses,
+retention rules, endpoint permissions, and pricing before course or production
+use.
 
 Primary documentation:
 
 - [Crustdata Person Search](https://docs.crustdata.com/person-docs/search/introduction)
-- [Crustdata Person Search reference](https://docs.crustdata.com/person-docs/search/reference)
+- [Person Search reference](https://docs.crustdata.com/person-docs/search/reference)
+- [Person Semantic Search](https://docs.crustdata.com/guides/person-semantic-search)
 - [Crustdata Company Search](https://docs.crustdata.com/company-docs/search/introduction)
-- [LinkedIn Profile API](https://learn.microsoft.com/en-us/linkedin/shared/integrations/people/profile-api)
+- [Company Search reference](https://docs.crustdata.com/company-docs/search/reference)
+- [Credits](https://docs.crustdata.com/general/credits)
+- [Endpoint permissions](https://docs.crustdata.com/general/permissions)
+
+## Authentication in n8n
+
+Crustdata requires:
+
+```http
+Authorization: Bearer YOUR_API_KEY
+x-api-version: 2025-11-01
+```
+
+Store only the first header in an n8n **Header Auth** credential named
+`CRUSTDATA_API_KEY`. Set its Name to `Authorization`, its Value to
+`Bearer YOUR_API_KEY`, and restrict allowed domains to `api.crustdata.com`.
+The workflow adds the version header as a static non-secret value.
+
+Do not use Query Auth. Do not place the bearer value in workflow JSON, a Code
+node, an expression, a trace, an audit row, a prompt, or a repository file.
 
 ## Tool input
 
 ```json
 {
-  "industry": "Health care",
+  "searchMode": "people",
+  "industry": "Health care, Information Technology",
   "location": "Australia",
-  "role_title": "Head of Operations",
-  "company_headcount": "51-200",
-  "max_results": 10,
-  "search_type": "Performance optimized"
+  "roleTitle": "Head of Operations",
+  "keywords": "digital health transformation",
+  "companyHeadcount": "51-200",
+  "maxResults": 10
 }
 ```
 
-Require the first three fields. Keep `max_results` between 1 and 50. Treat `company_headcount` as an optional provider-specific value; do not silently translate it to a different range.
+- `searchMode`: `people` or `companies`.
+- `industry` and `location`: required in both modes.
+- `roleTitle`: required only in people mode.
+- `keywords` and `companyHeadcount`: optional.
+- `maxResults`: default 10; whole number from 1 to 25.
+- Comma-separated industries are alternatives.
+
+`sessionId` and `currentUserInstruction` are injected by the main workflow,
+not chosen by the model.
+
+## Exact credit approval
+
+At current documented indexed-search pricing, the maximum is:
+
+```text
+maxResults × 0.03 credits
+```
+
+The first tool call returns a no-spend preview and an exact phrase such as:
+
+```text
+APPROVE CRUSTDATA 0.30 CREDITS A1B2C3D4
+```
+
+The final code is deterministically bound to mode, industries, location, role,
+keywords, headcount, and limit. The HTTP branch compares the full phrase
+byte-for-byte with the current normalized user message. Model arguments, old
+conversation history, documents, `yes`, and paraphrases cannot satisfy the
+gate. Any criteria or limit change produces a different phrase and requires
+fresh approval. The workflow performs no automatic retries.
+
+## Request strategy
+
+People mode calls `POST /person/search` with:
+
+- explicit current-title, current-employer industry, location, and optional
+  current-employer headcount filters;
+- top-level `mode: "exact"` so explicit filters remain hard constraints;
+- optional `search.mode: "hybrid"` only for ranking keyword/persona relevance
+  within that filtered set; and
+- only lightweight identity, current-role, LinkedIn URL, fit, and freshness
+  fields.
+
+Company mode calls `POST /company/search` with:
+
+- industry/category/speciality alternatives, headquarters, optional keywords,
+  and optional headcount filters;
+- a stable headcount sort; and
+- only identity, sourced professional-network URL, website, location,
+  taxonomy, headcount, type, and freshness fields.
+
+Both endpoints are fixed in validation code. The model cannot supply a URL.
 
 ## Tool output
 
-Return a stable, provider-neutral shape:
+The provider-neutral result contains:
 
 ```json
 {
   "ok": true,
+  "approvalRequired": false,
+  "searchMode": "companies",
+  "searchCriteria": {},
   "profiles": [],
-  "profile_urls": [],
+  "profileUrls": [],
   "companies": [],
-  "company_urls": [],
-  "excluded_profiles": [],
-  "total_count": 0,
-  "credits_cost": null,
-  "search_criteria": {},
-  "coverage": "Bounded provider result; not exhaustive"
+  "companyUrls": [],
+  "excludedResults": [],
+  "totalCount": 0,
+  "providerTotalCount": 0,
+  "creditsUsed": 0,
+  "estimatedMaxCredits": 0.3,
+  "coverage": "Bounded indexed Crustdata result; not exhaustive"
 }
 ```
 
-Each profile may contain only:
+Person entries contain public name, current title, company, location, profile
+URL, returned company URL, headline, industry, headcount, fit, freshness, and
+match evidence. Company entries contain public name, sourced company URL,
+website, type, industry, headquarters, headcount, categories, specialities,
+freshness, and match evidence.
 
-- `name`
-- `current_title`
-- `company`
-- `location`
-- `profile_url`
-- `company_profile_url` when returned by the source
-- `headline`
-- `industry`
-- `company_headcount`
-- `criteria_status`
-- `match_evidence`
-- `unverified_criteria`
+Never return raw provider payloads, credentials, personal emails, business
+emails, phone numbers, home addresses, private messages, or contact-enrichment
+fields. Canonicalize and deduplicate `/in/` and `/company/` URLs and exclude
+records without the appropriate public LinkedIn URL.
 
-Never return raw provider payloads, credentials, personal contact details, or private fields.
+## Account checks
 
-## Adapter for the supplied helper
-
-Install `scripts/prospect_search.py` with the custom tool code, then adapt the platform entry point to:
-
-```python
-from prospect_search import search_with_helper
-
-results = search_with_helper(
-    params,
-    lambda search_params: Helper("linkedin_people_search_crustdata").call(
-        **search_params
-    ),
-)
-return results
-```
-
-The adapter preserves the supplied helper parameters:
-
-- `INDUSTRY`
-- `REGION`
-- `CURRENT_TITLE`
-- `COMPANY_HEADCOUNT`
-- `LIMIT`
-- `search_type`
-
-It also fixes several portability and quality issues in the original snippet:
-
-- validate required parameters instead of raising an accidental `KeyError`;
-- cap result count and reject invalid limits;
-- accept common flat and nested response field shapes;
-- recognize both `profile_url` and `linkedin_url`;
-- canonicalize and deduplicate public LinkedIn URLs;
-- return company URLs only when the provider supplied them;
-- keep missing fields as `null`, not the misleading string `N/A`;
-- return provider failures without exposing raw credential or API errors; and
-- avoid logging sample profiles or other prospect data in traces.
-
-## Company URLs versus person URLs
-
-A title such as `Head of Operations` describes a person, not a company. The supplied helper therefore searches people. The adapter returns their public person/profile URLs and deduplicates current-employer LinkedIn URLs when those URLs are present in the response.
-
-If company URLs are the only required output, use a reviewed company-search endpoint for industry, location, and headcount. A separate people search is still required to prove that a company has a person with the requested current title. Do not guess a LinkedIn company slug from the employer name.
+Crustdata documents `GET /account/credits` and `GET /account/endpoints` as
+authenticated account endpoints. Use them manually when diagnosing balance or
+permissions, with the same Header Auth credential and API-version header. Do
+not expose their full payloads to the agent; the permissions response can be
+large. Check `/person/search` and `/company/search` specifically.
 
 ## No-credential fallback
 
@@ -115,10 +157,12 @@ Run:
 
 ```bash
 python3 scripts/prospect_search.py --manual-query \
-  --industry "Health care" \
-  --location "Australia" \
-  --role-title "Head of Operations" \
-  --company-headcount "51-200"
+  --mode companies \
+  --industry "Technology, Nonprofit" \
+  --location "Melbourne, Victoria, Australia" \
+  --keywords "AI communities"
 ```
 
-This prints search-engine query strings for a human or an approved generic web-search tool. It does not execute them and does not claim that the results satisfy company headcount, which normally requires a structured data source.
+This prints a search-engine query for a human or approved web-search tool. It
+does not execute the search and does not claim the results meet structured
+criteria such as company headcount.

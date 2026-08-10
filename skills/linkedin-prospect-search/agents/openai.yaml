@@ -1,4 +1,4 @@
 interface:
   display_name: "LinkedIn Prospect Search"
   short_description: "Build filtered public professional prospect lists"
-  default_prompt: "Use $linkedin-prospect-search to find public professional prospects matching my industry, location, role, and company-size filters."
+  default_prompt: "Use $linkedin-prospect-search to preview a bounded people or company search from my industry, location, role, keyword, and company-size filters. Show the maximum Crustdata cost and wait for my exact approval before spending credits."

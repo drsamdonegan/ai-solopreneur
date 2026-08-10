@@ -29,7 +29,7 @@ Anthropic API access is billed separately from a Claude web-chat subscription. T
 
 ## 1. Confirm the automatic workflow import
 
-The repository includes eleven reviewed workflow exports. First setup imports them automatically, so learners do not need to build nodes from a blank canvas.
+The repository includes twelve reviewed workflow exports. First setup imports them automatically, so learners do not need to build nodes from a blank canvas.
 
 Refresh the n8n Overview. If `01 - START HERE - Learner Checklist` appears, continue to step 2.
 
@@ -45,9 +45,9 @@ If macOS blocks it, Control-click the file, choose **Open**, then confirm.
 
 Double-click `import-workflows-windows.cmd`.
 
-The fallback opens a terminal, checks the workflows and Markdown skills, starts n8n if needed, and imports all eleven workflows. It briefly enables localhost-only setup endpoints to create local tables and sync enabled skills, then immediately removes both endpoints. It publishes the reviewed runtime subworkflows but does not publish the main agent, health workflow, or an API key.
+The fallback opens a terminal, checks the workflows and Markdown skills, starts n8n if needed, and imports all twelve workflows. It briefly enables localhost-only setup endpoints to create local tables and sync enabled skills, then immediately removes both endpoints. It publishes the reviewed runtime subworkflows but does not publish the main agent, health workflow, or an API key.
 
-Refresh the n8n Overview. All eleven workflows should appear:
+Refresh the n8n Overview. All twelve workflows should appear:
 
 - `00 - START HERE - Project Partner`
 - `01 - START HERE - Learner Checklist`
@@ -56,12 +56,13 @@ Refresh the n8n Overview. All eleven workflows should appear:
 - `20 - TOOL - list_tasks`
 - `21 - TOOL - create_task`
 - `22 - TOOL - update_task_status`
+- `23 - TOOL - search_linkedin_prospects`
 - `30 - TOOL - Propose create_task`
 - `31 - TOOL - Propose update_task_status`
 - `40 - CONFIRM - Task Write`
 - `90 - DEBUG - Agent Health`
 
-The six runtime dependencies—read tool, two proposal tools, confirmation dispatcher, and two write workers—are published automatically. The write workers are callable only by workflow `40`; no AI Tool node points to them. The main agent, health workflow, and two temporary setup workflows remain inactive drafts. The learner checklist is an inactive visual guide that can be opened or run manually.
+The seven runtime dependencies—local read tool, credit-gated research tool, two proposal tools, confirmation dispatcher, and two write workers—are published automatically. The write workers are callable only by workflow `40`; no AI Tool node points to them. The main agent, health workflow, and two temporary setup workflows remain inactive drafts. The learner checklist is an inactive visual guide that can be opened or run manually.
 
 Open **Data tables** in n8n:
 

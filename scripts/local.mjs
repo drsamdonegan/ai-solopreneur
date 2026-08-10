@@ -106,6 +106,7 @@ const workflowIds = {
   skillSync: "phase5SyncEnabledSkills",
   tools: [
     "phase4ListTasks",
+    "phase9SearchLinkedInProspects",
     "phase4CreateTask",
     "phase4UpdateTaskStatus",
     "phase5ProposeCreateTask",
@@ -122,6 +123,7 @@ const exportedWorkflowFiles = [
   ["phase4ListTasks", "20-tool-list-tasks.json"],
   ["phase4CreateTask", "21-tool-create-task.json"],
   ["phase4UpdateTaskStatus", "22-tool-update-task-status.json"],
+  ["phase9SearchLinkedInProspects", "23-tool-search-linkedin-prospects.json"],
   ["phase5ProposeCreateTask", "30-tool-propose-create-task.json"],
   ["phase5ProposeTaskStatus", "31-tool-propose-update-task-status.json"],
   ["phase5ConfirmTaskWrite", "40-confirm-task-write.json"],
