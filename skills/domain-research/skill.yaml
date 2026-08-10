@@ -1,4 +1,4 @@
 id: domain-research
 name: Domain Research Memory
 version: 1.0.0
-description: Scan an owned public business domain for a company overview, competitors, and seed keywords, then save verified results to local memory.
+description: Scan a directly requested public business domain for a company overview, competitors, and seed keywords, then save verified results to local memory.

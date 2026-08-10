@@ -130,7 +130,7 @@ Open `00 - START HERE - Project Partner`. The sticky notes describe the read, pr
 | **start_domain_research** | Starts one explicitly authorised public-domain research job and binds it to this conversation |
 | **complete_domain_research** | Checks that bound job and saves only completed or partial results to local SQLite memory |
 | **get_business_memory** | Reads saved company, competitor, keyword, source, and warning facts |
-| **start_paid_domain_research** | Runs one owner-authorised, market-specific, explicitly cost-approved DataForSEO pipeline and saves its evidence |
+| **start_paid_domain_research** | Runs one directly requested, market-specific, explicitly cost-approved DataForSEO pipeline and saves its evidence |
 | **complete_paid_domain_research** | Reads one exact paid attempt from this conversation without another provider call |
 | **get_paid_domain_research** | Reads saved rankings, SEO competitors, keywords, SERPs, costs, sources, and warnings |
 | **Confirm Stored Action** | Calls the deterministic confirmation workflow before either write worker |

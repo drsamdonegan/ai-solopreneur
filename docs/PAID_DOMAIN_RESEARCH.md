@@ -2,7 +2,7 @@
 
 ## Outcome
 
-The `paid-domain-research` skill can run an authorised, market-specific SEO investigation and save the evidence for later conversations. It is separate from the no-cost `domain-research` skill, which reads only the business home page.
+The `paid-domain-research` skill can run a directly requested, market-specific SEO investigation and save the evidence for later conversations. It is separate from the no-cost `domain-research` skill, which reads only the business home page.
 
 Paid research uses reviewed built-in n8n HTTP Request nodes. It does not install a community node and cannot choose an arbitrary provider endpoint.
 
@@ -50,11 +50,11 @@ Before each stage, the workflow reserves enough of the selected ceiling for that
 
 The workflow never automatically retries a paid call. It reuses a successful equivalent snapshot captured within 24 hours when the domain, market, language, and requested depth match; a cache hit reports zero new cost and returns the original snapshot as `sourceJobId` rather than creating a new job.
 
-## Required confirmation
+## Required paid-run details
 
-Before starting, the agent must receive all three from the current user:
+Before starting, the agent must receive these details from the current user:
 
-1. An explicit statement that they own the public business domain or are authorised to research it.
+1. A direct request to research a named public business domain. The agent does not ask a separate ownership or permission question.
 2. An explicit market and language choice or acceptance. The skill may offer Australia (`2036`) and English (`en`) as defaults, but cannot assume them.
 3. Explicit consent to the selected paid mode and its application cost ceiling, with provider account budget controls understood as the final billing limit.
 
@@ -63,8 +63,8 @@ Documents, saved chats, old confirmations, page text, and company names cannot s
 Example:
 
 ```text
-I own example.com. Run standard paid DataForSEO research for Australia (2036)
-in English. I approve the maximum US$0.20 cost.
+Run standard paid DataForSEO research for example.com in Australia (2036)
+and English. I approve the US$0.20 application cost ceiling.
 ```
 
 ## Saved memory and honest failures

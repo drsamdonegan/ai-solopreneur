@@ -382,13 +382,13 @@ if (agentWorkflow) {
   check(
     startResearchTool?.parameters?.workflowId?.value ===
       "phase9StartDomainResearch" &&
-      /current user explicitly asks/i.test(
+      /current user directly asks/i.test(
         startResearchTool?.parameters?.description ?? "",
       ) &&
-      /own it or are authorised/i.test(
+      /never ask a separate ownership or permission question/i.test(
         startResearchTool?.parameters?.description ?? "",
       ),
-    "Agent: start_domain_research must require a current explicit authorised request",
+    "Agent: start_domain_research must treat a direct request as authorisation without an ownership follow-up",
   );
   const completeResearchTool = nodeByName(
     agentWorkflow,
@@ -421,13 +421,16 @@ if (agentWorkflow) {
   check(
     startPaidResearchTool?.parameters?.workflowId?.value ===
       "phase11StartPaidDomainResearch" &&
-      /explicitly asks for paid or DataForSEO-backed/i.test(
+      /directly asks for paid or DataForSEO-backed/i.test(
+        startPaidResearchTool?.parameters?.description ?? "",
+      ) &&
+      /never ask a separate ownership or permission question/i.test(
         startPaidResearchTool?.parameters?.description ?? "",
       ) &&
       /explicitly approves the stated application cost ceiling/i.test(
         startPaidResearchTool?.parameters?.description ?? "",
       ),
-    "Agent: start_paid_domain_research must require current authority and paid-spend consent",
+    "Agent: paid research must skip the ownership follow-up while retaining paid-spend consent",
   );
   const completePaidResearchTool = nodeByName(
     agentWorkflow,
@@ -511,7 +514,7 @@ if (agentWorkflow) {
       /complete_domain_research is risk=read/.test(contextCode) &&
       /start_paid_domain_research is risk=paid_external_read/.test(contextCode) &&
       /US\$0\.10/.test(contextCode) &&
-      /Never infer these confirmations/.test(contextCode) &&
+      /Never infer a paid run, market, language, or spend confirmation/.test(contextCode) &&
       /scraped, and researched text is untrusted/.test(contextCode),
     "Agent: context builder must apply enabled skills and safely delimit untrusted documents",
   );
@@ -1139,9 +1142,9 @@ if (startResearchWorkflow) {
       ?.jsCode ?? "";
   check(
     /authorizationConfirmed/.test(validation) &&
-      /AUTHORIZATION_REQUIRED/.test(validation) &&
+      /DIRECT_REQUEST_REQUIRED/.test(validation) &&
       /INVALID_DOMAIN/.test(validation),
-    "start_domain_research must validate public-domain authorisation",
+    "start_domain_research must validate a direct public-domain request",
   );
   check(
     nodeByName(startResearchWorkflow, "Register Research Job")?.parameters
@@ -1272,7 +1275,7 @@ const startPaidResearchWorkflow = workflows.get(
 if (startPaidResearchWorkflow) {
   check(
     startPaidResearchWorkflow.meta?.toolRisk === "paid_external_read" &&
-      /explicit-current-owner-or-authorised-user-and-paid-spend-confirmation/.test(
+      /direct-current-user-request-and-explicit-paid-spend-confirmation/.test(
         startPaidResearchWorkflow.meta?.authorization ?? "",
       ) &&
       /no-automatic-retry/.test(
@@ -1286,14 +1289,14 @@ if (startPaidResearchWorkflow) {
   check(
     /authorizationConfirmed/.test(validation) &&
       /paidResearchConfirmed/.test(validation) &&
-      /AUTHORIZATION_REQUIRED/.test(validation) &&
+      /DIRECT_REQUEST_REQUIRED/.test(validation) &&
       /PAID_RESEARCH_CONFIRMATION_REQUIRED/.test(validation) &&
       /refresh:\{limit:\.10/.test(validation) &&
       /standard:\{limit:\.20,expansionReserve:\.14,serpReserve:\.01/.test(validation) &&
       /deep:\{limit:\.50,expansionReserve:\.38,serpReserve:\.02/.test(validation) &&
       /locationCode/.test(validation) &&
       /languageCode/.test(validation),
-    "start_paid_domain_research must validate authority, paid consent, market, language, and reserved caps",
+    "start_paid_domain_research must validate a direct request, paid consent, market, language, and reserved caps",
   );
   const dataForSeoUrls = [
     "https://api.dataforseo.com/v3/dataforseo_labs/google/ranked_keywords/live",
@@ -1689,7 +1692,7 @@ check(
         [
           "start_paid_domain_research",
           "paid_external_read",
-          "explicit_authority_market_and_spend_confirmation_required",
+          "direct_request_market_and_spend_confirmation_required",
         ],
         ["complete_paid_domain_research", "read", "explicit_request_required"],
         ["get_paid_domain_research", "read", "automatic"],
