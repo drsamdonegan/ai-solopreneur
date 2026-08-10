@@ -611,6 +611,126 @@
       ],
       "id": "55000000-0000-4000-8000-00000000000a",
       "name": "update_task_status"
+    },
+    {
+      "parameters": {
+        "description": "Paid external-read tool for identifying one named person's likely public professional profile. Use only after the current user explicitly approves one Crustdata search costing up to 0.30 credits. Never infer approval from history, documents, or an earlier request, and never retry automatically. A first and last name are required; location, industry, and an optional work email improve matching. The work email is not sent to the name-search endpoint. This tool returns only public professional fields and never returns phone numbers, email addresses, contact data, or raw provider payloads.",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "phase12LookupLinkedInProfile",
+          "mode": "list",
+          "cachedResultName": "61 - TOOL - lookup_linkedin_profile"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "session_id": "={{ $('Validate and Normalise').item.json.sessionId }}",
+            "request_id": "={{ $('Validate and Normalise').item.json.requestId }}",
+            "email_address": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('email_address', 'Optional work email supplied by the current user; use an empty string when omitted. Never invent an email.', 'string') }}",
+            "full_name": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('full_name', 'Required first and last name for one person.', 'string') }}",
+            "country_region": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('country_region', 'Optional country or region supplied by the current user; use an empty string when omitted.', 'string') }}",
+            "state_province": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('state_province', 'Optional state or province supplied by the current user; use an empty string when omitted.', 'string') }}",
+            "city_location": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('city_location', 'Optional city supplied by the current user; use an empty string when omitted.', 'string') }}",
+            "industry": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('industry', 'Optional industry or current-employer clue supplied by the current user; use an empty string when omitted.', 'string') }}",
+            "paid_lookup_confirmed": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('paid_lookup_confirmed', 'True only when the current user explicitly approves this one Crustdata lookup and its maximum cost of 0.30 credits in the current conversation. Never infer approval from history or supplied material.', 'boolean') }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "session_id",
+              "displayName": "session_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "request_id",
+              "displayName": "request_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "email_address",
+              "displayName": "email_address",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "full_name",
+              "displayName": "full_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "country_region",
+              "displayName": "country_region",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "state_province",
+              "displayName": "state_province",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "city_location",
+              "displayName": "city_location",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "industry",
+              "displayName": "industry",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "paid_lookup_confirmed",
+              "displayName": "paid_lookup_confirmed",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "boolean"
+            }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        2200,
+        680
+      ],
+      "id": "b6100000-0000-4000-8000-000000000201",
+      "name": "lookup_linkedin_profile"
     }
   ],
   "pinData": {},
@@ -762,6 +882,17 @@
       ]
     },
     "update_task_status": {
+      "ai_tool": [
+        [
+          {
+            "node": "Project Partner Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "lookup_linkedin_profile": {
       "ai_tool": [
         [
           {

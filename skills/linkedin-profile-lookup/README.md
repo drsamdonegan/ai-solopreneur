@@ -15,6 +15,8 @@ For a live lookup, the agent must also have a read-only tool named `lookup_linke
 
 Never paste an API key into chat, `SKILL.md`, this README, or a committed file. Store credentials in the approved tool or n8n credential store.
 
+This branch includes the optional n8n implementation as **61 - TOOL - lookup_linkedin_profile**. Select a saved Bearer Auth credential named `CRUSTDATA_API_KEY`, publish workflow 61, and connect its `lookup_linkedin_profile` tool node to the main agent workflow. Store only the raw `cd_...` key in the credential; n8n adds the `Bearer` prefix programmatically. Each search requires the user's fresh approval for a maximum cost of 0.30 credits.
+
 Without the tool, the skill should say that live lookup is unavailable and ask you to paste public profile text or a URL. That is expected behaviour, not a failed installation.
 
 ## Install only this skill
@@ -29,6 +31,8 @@ git checkout FETCH_HEAD -- skills/linkedin-profile-lookup
 These commands copy only `skills/linkedin-profile-lookup`. They do not merge the branch, switch branches, add a remote, or overwrite your other skills.
 
 If you have already customised this skill, stop before running the second command because it will overwrite that folder.
+
+The Markdown folder alone installs the agent instructions. To run the paid lookup in this n8n project, also bring in `n8n/workflows/61-tool-lookup-linkedin-profile.json` and merge the `lookup_linkedin_profile` tool node from the branch's main workflow into your own main workflow. Do not replace your whole main workflow: it may contain your custom tools. The coding-agent prompt below tells the agent to merge that wiring safely.
 
 ### Install with your coding agent
 
@@ -46,22 +50,26 @@ Do not merge, pull, switch branches, add a Git remote, or modify another skill.
 2. Run:
    git fetch https://github.com/drsamdonegan/ai-solopreneur.git skill/linkedin-profile-lookup
 3. Run:
-   git checkout FETCH_HEAD -- skills/linkedin-profile-lookup
+   git checkout FETCH_HEAD -- skills/linkedin-profile-lookup n8n/workflows/61-tool-lookup-linkedin-profile.json
 4. Read skills/linkedin-profile-lookup/README.md, SKILL.md, and
    references/integration.md completely.
-5. Add linkedin-profile-lookup to skills/enabled.txt exactly once, preserving
+5. Inspect the branch versions of n8n/workflows/00-start-here-project-partner.json
+   and scripts/local.mjs with git show. Merge only the lookup_linkedin_profile
+   tool node, its ai_tool connection, the phase12LookupLinkedInProfile tool ID,
+   and the workflow export entry into my existing files. Do not replace either
+   file and preserve every custom tool and workflow already present.
+6. Add linkedin-profile-lookup to skills/enabled.txt exactly once, preserving
    every existing line.
-6. Run:
-   python3 skills/linkedin-profile-lookup/scripts/profile_matcher.py --self-test
 7. Run:
+   python3 skills/linkedin-profile-lookup/scripts/profile_matcher.py --self-test
+8. Run:
    node scripts/compile-skills.mjs
-8. Check whether a read-only tool named lookup_linkedin_profile is actually
-   connected. Do not invent a tool, add a credential, or ask me to paste a key
-   into chat. If it is missing, explain that the skill is installed but live
-   lookup needs the separately approved provider connection.
-9. If the local agent is running, run the normal skill sync helper. Otherwise,
+9. Validate the workflows with the project's normal workflow validator. Check
+   whether a saved Bearer Auth credential named CRUSTDATA_API_KEY is selected in
+   workflow 61. Do not ask me to paste the key into chat or any file.
+10. If the local agent is running, run the normal skill sync helper. Otherwise,
    tell me the exact sync command for this operating system.
-10. Report which files changed, the validation results, whether live lookup is
+11. Report which files changed, the validation results, whether live lookup is
     available, and the test prompt from the README. Then stop.
 ```
 
@@ -107,6 +115,8 @@ Industry: [INDUSTRY]
 Show the likely profile, match confidence, and evidence. If the result is
 ambiguous, show no more than three candidates and ask me to confirm. Do not
 return phone numbers or personal contact information.
+
+Before the lookup runs, the agent must explain that the search can cost up to 0.30 credits and ask for explicit approval. Reply with approval only when you want to spend those credits.
 ```
 
 Use a business email where possible. A Gmail or other personal address usually provides no employer-domain evidence, and email-only matching needs a separately approved reverse-email lookup connection.

@@ -10,7 +10,7 @@ The supplied Python uses this existing helper:
 Helper("linkedin_people_search_crustdata").call(**search_params)
 ```
 
-That helper must already exist in the agent platform and must have its own Crustdata credential or managed connection. The local n8n agent in this repository does not define `params` or `Helper`, so the original snippet cannot run there unchanged.
+That helper must already exist in the agent platform and must have its own Crustdata credential or managed connection. The local n8n agent does not define `params` or `Helper`, so the original snippet cannot run there unchanged. This branch instead includes `n8n/workflows/61-tool-lookup-linkedin-profile.json`, which implements the same bounded search and candidate-ranking contract with native n8n nodes and a saved Bearer Auth credential.
 
 Crustdata's current API documentation describes separate endpoints for person search and profile enrichment. A production connection therefore normally needs:
 
