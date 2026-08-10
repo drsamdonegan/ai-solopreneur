@@ -118,7 +118,9 @@ Rules:
 - `version` uses three numbers such as `1.0.0`.
 - `description` is 240 characters or fewer.
 - `SKILL.md` contains 1-8,000 characters.
-- The combined enabled instructions may contain at most 24,000 characters.
+- The combined enabled instructions may contain at most 200,000 characters. This
+  is a runaway guard, not a budget to plan around: enabling every skill in the
+  repo stays well under it, so adding a skill never means removing another.
 
 The helper rejects an invalid skill before changing the running agent. It stores a content hash alongside the compiled bundle so technical contributors can see exactly which version is active.
 

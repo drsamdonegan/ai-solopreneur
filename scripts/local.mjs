@@ -1126,6 +1126,58 @@ async function compileSkillBundle() {
   return JSON.stringify(await compileSkills());
 }
 
+// n8n's Overview page is always a flat list of every workflow, so the skill
+// folders only show up inside the local owner's Personal project. Grouping the
+// workflows is what makes that page worth opening; skillsUrl is how a learner
+// finds it.
+// Returns false when grouping was skipped for a good reason, most often an n8n
+// with no folder licence. Only a real failure throws.
+function applyWorkflowFolders(extraArgs = []) {
+  const result = spawnSync(
+    process.execPath,
+    [
+      "--no-warnings",
+      join(projectRoot, "scripts", "apply-workflow-folders.mjs"),
+      `--database=${join(paths.n8nDataDir, "database.sqlite")}`,
+      ...extraArgs,
+    ],
+    { stdio: "inherit" },
+  );
+  if (result.status === 3) {
+    return false;
+  }
+  if (result.status !== 0) {
+    throw new Error("Grouping the workflows into skill folders failed.");
+  }
+  return true;
+}
+
+function personalProjectId() {
+  const databasePath = join(paths.n8nDataDir, "database.sqlite");
+  if (!existsSync(databasePath)) {
+    return null;
+  }
+  const script = [
+    "const { DatabaseSync } = require('node:sqlite');",
+    "const database = new DatabaseSync(process.argv[1], { readOnly: true });",
+    "const row = database.prepare(\"SELECT id FROM project WHERE type = 'personal' ORDER BY createdAt ASC LIMIT 1\").get();",
+    "database.close();",
+    "if (row) process.stdout.write(row.id);",
+  ].join(" ");
+  const result = spawnSync(process.execPath, ["-e", script, databasePath], {
+    encoding: "utf8",
+    env: process.env,
+  });
+  const id = result.status === 0 ? result.stdout.trim() : "";
+  return /^[A-Za-z0-9_-]+$/.test(id) ? id : null;
+}
+
+function skillsUrl(cfg) {
+  const projectId = personalProjectId();
+  const base = `http://localhost:${cfg.n8nPort}`;
+  return projectId ? `${base}/projects/${projectId}/workflows` : null;
+}
+
 async function importReviewedWorkflows() {
   validateWorkflowFiles();
 
@@ -1143,6 +1195,7 @@ async function importReviewedWorkflows() {
 
   print("\nPreparing local data, enabled skills, and reviewed tool dependencies...");
   const published = [];
+  let groupedIntoFolders = false;
   try {
     for (const id of [workflowIds.taskSetup, workflowIds.skillSync]) {
       n8nCliOrThrow(["publish:workflow", `--id=${id}`], `Publishing ${id}`);
@@ -1168,6 +1221,9 @@ async function importReviewedWorkflows() {
         `Enabled skill sync returned an unexpected response: ${skillResponse.body}`,
       );
     }
+
+    print("\nGrouping the workflows into skill folders...");
+    groupedIntoFolders = applyWorkflowFolders();
   } finally {
     for (const id of published) {
       runN8nCli(["unpublish:workflow", `--id=${id}`], { capture: true });
@@ -1178,8 +1234,14 @@ async function importReviewedWorkflows() {
   print("\nWorkflows imported successfully.");
   print("Local task tables and three sample tasks are ready.");
   print("Enabled Markdown skills are synced into the agent.");
+  if (groupedIntoFolders) {
+    print("The workflows are grouped into five skill folders.");
+  }
   const cfg = config();
-  print(`Open http://localhost:${cfg.n8nPort} and follow docs/N8N_AGENT_SETUP.md.`);
+  const skills = skillsUrl(cfg);
+  print(
+    `Open ${skills ?? `http://localhost:${cfg.n8nPort}`} and follow docs/N8N_AGENT_SETUP.md.`,
+  );
   print(
     "The main agent stays inactive until you select your Anthropic credential and publish it.",
   );
@@ -1472,9 +1534,13 @@ async function commandSetupUnlocked() {
   await waitForService("chat");
 
   const cfg = config();
+  const skills = skillsUrl(cfg);
   print("\nLocal stack is healthy.");
   print(`  Chat app:          http://localhost:${cfg.chatPort}`);
   print(`  n8n editor:        http://localhost:${cfg.n8nPort}`);
+  if (skills) {
+    print(`  Your agent's skills: ${skills}`);
+  }
   print("  Next: create the local n8n owner, then open 01 - START HERE - Learner Checklist.");
   return 0;
 }
@@ -1491,9 +1557,13 @@ async function commandStartUnlocked() {
   await startStack();
 
   const cfg = config();
+  const skills = skillsUrl(cfg);
   print("AI Solopreneur is healthy.");
   print(`  Chat app:          http://localhost:${cfg.chatPort}`);
   print(`  n8n editor:        http://localhost:${cfg.n8nPort}`);
+  if (skills) {
+    print(`  Your agent's skills: ${skills}`);
+  }
   return 0;
 }
 
@@ -1555,6 +1625,22 @@ function commandLogs(target = "n8n", lineCount = "100") {
 async function commandImportWorkflows() {
   requireLocalInstall();
   await importReviewedWorkflows();
+  return 0;
+}
+
+async function commandGroupWorkflows(args = []) {
+  requireLocalInstall();
+  const grouped = applyWorkflowFolders(
+    args.includes("--undo") ? ["--undo"] : [],
+  );
+  const cfg = config();
+  const skills = skillsUrl(cfg);
+  if (grouped && skills) {
+    print(`Open ${skills} to see your agent's skills.`);
+  } else if (skills) {
+    print(`Your workflows are at ${skills}.`);
+  }
+  print("Refresh n8n if it is already open in a browser tab.");
   return 0;
 }
 
@@ -2088,6 +2174,9 @@ Everyday commands (also available as double-click files in the project folder):
 Maintenance commands:
   import-workflows   Re-import the reviewed workflows, sample data, and skills.
   sync-skills        Validate and load the enabled Markdown skills.
+  group-workflows [--undo]
+                     File the workflows into their skill folders in n8n, or put
+                     them all back at the top level. Needs an n8n folder licence.
   export-workflows   Export normalised workflow copies for Git review.
   backup             Save a private copy of chats, n8n data, and settings.
   restore <folder>   Restore chats and n8n data from a saved backup.
@@ -2126,6 +2215,8 @@ async function main() {
       return commandImportWorkflows();
     case "sync-skills":
       return commandSyncSkills();
+    case "group-workflows":
+      return commandGroupWorkflows(rest);
     case "export-workflows":
       return commandExportWorkflows();
     case "backup":

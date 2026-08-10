@@ -1,6 +1,7 @@
 import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { readFolderManifest } from "./apply-workflow-folders.mjs";
 import { compileSkills } from "./compile-skills.mjs";
 
 const projectRoot = fileURLToPath(new URL("..", import.meta.url));
@@ -52,6 +53,45 @@ check(
   JSON.stringify(actualFiles) === JSON.stringify(expectedFiles),
   `Expected only ${expectedFiles.join(", ")} in n8n/workflows`,
 );
+
+// A workflow missing from n8n/folders.manifest.json would still import, but it
+// would land outside every skill folder and be invisible to a learner who only
+// ever opens the Personal project.
+const folderManifest = await readFolderManifest();
+const folderIds = new Set();
+const filedWorkflows = new Map();
+for (const folder of folderManifest.folders) {
+  check(
+    Boolean(folder.id) && !folderIds.has(folder.id),
+    `Folder manifest: "${folder.id}" is missing an id or repeats one`,
+  );
+  folderIds.add(folder.id);
+  check(
+    typeof folder.name === "string" &&
+      folder.name.length > 0 &&
+      folder.name.length <= 128,
+    `Folder manifest: "${folder.id}" needs a name of 1 to 128 characters`,
+  );
+  for (const file of folder.workflows) {
+    check(
+      !filedWorkflows.has(file),
+      `Folder manifest: ${file} appears in both ${filedWorkflows.get(file)} and ${folder.id}`,
+    );
+    filedWorkflows.set(file, folder.id);
+  }
+}
+for (const file of expectedFiles) {
+  check(
+    filedWorkflows.has(file),
+    `Folder manifest: ${file} is not in any skill folder`,
+  );
+}
+for (const file of filedWorkflows.keys()) {
+  check(
+    expectedFiles.includes(file),
+    `Folder manifest: ${file} is filed in a folder but is not a workflow export`,
+  );
+}
 
 const workflows = new Map();
 for (const file of expectedFiles) {
@@ -313,8 +353,9 @@ if (agentWorkflow) {
         "start_domain_research",
         "complete_domain_research",
         "get_business_memory",
+        "find_signals",
       ]),
-    "Agent: only the reviewed task and domain-research tools may be connected",
+    "Agent: only the reviewed task, domain-research, and signal-research tools may be connected",
   );
 
   const createTool = nodeByName(agentWorkflow, "create_task");
@@ -541,7 +582,7 @@ if (skillSyncWorkflow) {
   check(
     /schemaVersion/.test(bundleValidation) &&
       /enabledSkills/.test(bundleValidation) &&
-      /combinedInstructions\.length > 24000/.test(bundleValidation) &&
+      /combinedInstructions\.length > 200000/.test(bundleValidation) &&
       /\[a-f0-9\]\{64\}/.test(bundleValidation),
     "Skill sync: bundle metadata, size, and source hash must be validated",
   );
@@ -1260,6 +1301,8 @@ const OPTIONAL_SKILL_IDS = [
   "prospect-research",
   "deal-desk",
   "customer-support",
+  "signal-research",
+  "linkedin-profile-lookup",
 ];
 
 const skillBundle = await compileSkills(join(projectRoot, "skills"));
@@ -1275,7 +1318,7 @@ check(
   "Enabled skill list must contain only reviewed or shipped optional skills",
 );
 check(
-  skillBundle.combinedInstructions.length <= 24_000 &&
+  skillBundle.combinedInstructions.length <= 200_000 &&
     /^[a-f0-9]{64}$/.test(skillBundle.sourceHash),
   "Compiled skill bundle must remain bounded and content-addressed",
 );

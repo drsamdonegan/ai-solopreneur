@@ -207,7 +207,7 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "const input = $('Validate Signal Input').first().json;\nconst phrases = input.phrases || [];\nconst videos = $('List Videos').all().map((item) => item.json);\n\n// YouTube returns HTML-escaped text. A mangled quote is worse than no quote,\n// because the whole point is capturing someone's exact words.\nconst decode = (value) => String(value || '')\n  .replace(/<[^>]+>/g, ' ')\n  .replace(/&quot;/g, '\"')\n  .replace(/&#0?39;/g, \"'\")\n  .replace(/&#x27;/g, \"'\")\n  .replace(/&#x2F;/g, '/')\n  .replace(/&lt;/g, '<')\n  .replace(/&gt;/g, '>')\n  .replace(/&amp;/g, '&')\n  .replace(/\\s+/g, ' ')\n  .trim();\n\nconst rows = [];\nconst seen = new Set();\n\n$input.all().forEach((response, index) => {\n  const video = videos[index] || {};\n  const threads = response.json.items || [];\n\n  threads.forEach((thread) => {\n    const parts = [];\n    const top = thread.snippet && thread.snippet.topLevelComment;\n    if (top) {\n      parts.push({ id: thread.id, snippet: top.snippet });\n    }\n    // Replies arrive on the same call at no extra quota cost, and threads under\n    // a complaint are where people compare notes on what they already tried.\n    const replies = (thread.replies && thread.replies.comments) || [];\n    replies.forEach((reply) => parts.push({ id: reply.id, snippet: reply.snippet }));\n\n    parts.forEach((part) => {\n      const snippet = part.snippet;\n      if (!snippet || seen.has(part.id)) {\n        return;\n      }\n      const text = decode(snippet.textDisplay);\n      if (text.length < 20) {\n        return;\n      }\n      const lower = text.toLowerCase();\n      const matched = phrases.filter((phrase) => lower.includes(phrase));\n      if (matched.length === 0) {\n        return;\n      }\n      seen.add(part.id);\n      rows.push({\n        json: {\n          capturedAt: new Date().toISOString(),\n          sessionId: input.sessionId,\n          source: 'youtube',\n          topic: input.topic,\n          author: snippet.authorDisplayName || '',\n          authorUrl: snippet.authorChannelUrl || '',\n          quote: text.slice(0, 900),\n          matched: matched.join(', '),\n          videoTitle: video.videoTitle || '',\n          channel: video.channel || '',\n          permalink: 'https://www.youtube.com/watch?v=' + (video.videoId || '') + '&lc=' + part.id,\n          publishedAt: String(snippet.publishedAt || '').slice(0, 10),\n        },\n      });\n    });\n  });\n});\n\nif (rows.length === 0) {\n  return [{ json: { empty: true } }];\n}\n\nreturn rows;"
+        "jsCode": "const input = $('Validate Signal Input').first().json;\nconst phrases = input.phrases || [];\nconst videos = $('List Videos').all().map((item) => item.json);\n\n// YouTube returns HTML-escaped text. A mangled quote is worse than no quote,\n// because the whole point is capturing someone's exact words.\nconst decode = (value) => String(value || '')\n  .replace(/<[^>]+>/g, ' ')\n  .replace(/&quot;/g, '\"')\n  .replace(/&#0?39;/g, \"'\")\n  .replace(/&#x27;/g, \"'\")\n  .replace(/&#x2F;/g, '/')\n  .replace(/&lt;/g, '<')\n  .replace(/&gt;/g, '>')\n  .replace(/&amp;/g, '&')\n  .replace(/\\s+/g, ' ')\n  .trim();\n\nconst rows = [];\nconst seen = new Set();\n\n$input.all().forEach((response, index) => {\n  const video = videos[index] || {};\n  const threads = response.json.items || [];\n\n  threads.forEach((thread) => {\n    const parts = [];\n    const top = thread.snippet && thread.snippet.topLevelComment;\n    if (top) {\n      parts.push({ id: thread.id, snippet: top.snippet });\n    }\n    // Replies arrive on the same call at no extra quota cost, and threads under\n    // a complaint are where people compare notes on what they already tried.\n    const replies = (thread.replies && thread.replies.comments) || [];\n    replies.forEach((reply) => parts.push({ id: reply.id, snippet: reply.snippet }));\n\n    parts.forEach((part) => {\n      const snippet = part.snippet;\n      if (!snippet || seen.has(part.id)) {\n        return;\n      }\n      const text = decode(snippet.textDisplay);\n      if (text.length < 20) {\n        return;\n      }\n      const lower = text.toLowerCase();\n      const matched = phrases.filter((phrase) => lower.includes(phrase));\n      if (matched.length === 0) {\n        return;\n      }\n      seen.add(part.id);\n      rows.push({\n        json: {\n          hasMatch: true,\n          capturedAt: new Date().toISOString(),\n          sessionId: input.sessionId,\n          source: 'youtube',\n          topic: input.topic,\n          author: snippet.authorDisplayName || '',\n          authorUrl: snippet.authorChannelUrl || '',\n          quote: text.slice(0, 900),\n          matched: matched.join(', '),\n          videoTitle: video.videoTitle || '',\n          channel: video.channel || '',\n          permalink: 'https://www.youtube.com/watch?v=' + (video.videoId || '') + '&lc=' + part.id,\n          publishedAt: String(snippet.publishedAt || '').slice(0, 10),\n        },\n      });\n    });\n  });\n});\n\nif (rows.length === 0) {\n  return [{ json: { hasMatch: false, empty: true } }];\n}\n\nreturn rows;"
       },
       "id": "b1000000-0000-4000-8000-000000000007",
       "name": "Match Phrases",
@@ -224,17 +224,17 @@
           "options": {
             "caseSensitive": true,
             "leftValue": "",
-            "typeValidation": "loose",
+            "typeValidation": "strict",
             "version": 3
           },
           "conditions": [
             {
               "id": "b2000000-0000-4000-8000-000000000002",
-              "leftValue": "={{ $json.empty }}",
+              "leftValue": "={{ $json.hasMatch }}",
               "rightValue": "",
               "operator": {
                 "type": "boolean",
-                "operation": "notTrue",
+                "operation": "true",
                 "singleValue": true
               }
             }
@@ -255,11 +255,21 @@
     {
       "parameters": {
         "resource": "row",
-        "operation": "insert",
+        "operation": "upsert",
         "dataTableId": {
           "__rl": true,
           "value": "signals",
           "mode": "name"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "permalink",
+              "condition": "eq",
+              "keyValue": "={{ $json.permalink }}"
+            }
+          ]
         },
         "columns": {
           "mappingMode": "defineBelow",
@@ -399,7 +409,7 @@
     },
     {
       "parameters": {
-        "content": "## Your API key\n\nBoth blue boxes below need the **YouTube API Key** credential.\n\nIf they show a red warning, open each one, click the Credential dropdown, and pick it. Create it once under **Credentials \u2192 Query Auth** with the name `key`.\n\nFull instructions: `docs/YOUTUBE_SIGNALS.md`",
+        "content": "## Your API key\n\nBoth blue boxes below need the **YouTube API Key** credential.\n\nIf they show a red warning, open each one, click the Credential dropdown, and pick it. Create it once under **Credentials → Query Auth** with the name `key`.\n\nFull instructions: `docs/YOUTUBE_SIGNALS.md`",
         "height": 300,
         "width": 380,
         "color": 3

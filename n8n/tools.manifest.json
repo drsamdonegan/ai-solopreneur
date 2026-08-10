@@ -1,0 +1,71 @@
+{
+  "schemaVersion": 1,
+  "_comment": [
+    "Plain-language descriptions of what the agent can DO, for the skills table students read.",
+    "One entry per capability, not per workflow: 'Add a task' is one capability spread across",
+    "three workflows (propose, confirm, write), and a learner should meet it as one idea.",
+    "Write descriptions the way you would explain them out loud. No node names, no tool ids.",
+    "When you add a tool workflow, add it here too, or it stays invisible to learners."
+  ],
+  "capabilities": [
+    {
+      "id": "see-tasks",
+      "name": "See your tasks",
+      "description": "Read the tasks saved on your computer and tell you what is open, blocked, or finished.",
+      "workflows": ["20-tool-list-tasks.json"],
+      "needs": null,
+      "changesYourData": false
+    },
+    {
+      "id": "add-task",
+      "name": "Add a task",
+      "description": "Write down a task you describe. It always shows you the exact wording and waits for you to confirm before saving anything.",
+      "workflows": [
+        "30-tool-propose-create-task.json",
+        "40-confirm-task-write.json",
+        "21-tool-create-task.json"
+      ],
+      "needs": null,
+      "changesYourData": true
+    },
+    {
+      "id": "change-task-status",
+      "name": "Change a task's status",
+      "description": "Move a task to in progress, blocked, or done. It confirms with you first, the same way adding a task does.",
+      "workflows": [
+        "31-tool-propose-update-task-status.json",
+        "40-confirm-task-write.json",
+        "22-tool-update-task-status.json"
+      ],
+      "needs": null,
+      "changesYourData": true
+    },
+    {
+      "id": "research-your-website",
+      "name": "Research your own website",
+      "description": "Scan a website you own to build a summary of the business, who it competes with, and the words people might search for.",
+      "workflows": [
+        "50-tool-start-domain-research.json",
+        "51-tool-complete-domain-research.json"
+      ],
+      "needs": "Your Anthropic credential, selected on workflow 50",
+      "changesYourData": true
+    },
+    {
+      "id": "recall-business-details",
+      "name": "Recall what it learned about your business",
+      "description": "Look up the research it saved earlier, so you do not have to explain your business again every time.",
+      "workflows": ["52-tool-get-business-memory.json"],
+      "needs": null,
+      "changesYourData": false
+    },
+    {
+      "id": "find-signals",
+      "name": "Find people who have a problem you solve",
+      "description": "Search YouTube comments for people describing a problem you help with, and save what they said in their own words.",
+      "workflows": ["60-tool-find-signals.json"],
+      "needs": "A YouTube API Key credential",
+      "changesYourData": true
+    }
+  ]
+}

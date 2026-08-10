@@ -1,0 +1,4 @@
+interface:
+  display_name: "LinkedIn Profile Lookup"
+  short_description: "Match and summarize a public professional profile"
+  default_prompt: "Use $linkedin-profile-lookup to find the likely professional profile for this person and explain the match confidence."

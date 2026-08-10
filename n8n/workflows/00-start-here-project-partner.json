@@ -634,12 +634,60 @@
           },
           "matchingColumns": [],
           "schema": [
-            { "id": "sessionId", "displayName": "sessionId", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
-            { "id": "requestId", "displayName": "requestId", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
-            { "id": "domain", "displayName": "domain", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
-            { "id": "companyName", "displayName": "companyName", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
-            { "id": "researchDepth", "displayName": "researchDepth", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
-            { "id": "authorizationConfirmed", "displayName": "authorizationConfirmed", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "boolean" }
+            {
+              "id": "sessionId",
+              "displayName": "sessionId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "requestId",
+              "displayName": "requestId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "domain",
+              "displayName": "domain",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "companyName",
+              "displayName": "companyName",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "researchDepth",
+              "displayName": "researchDepth",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "authorizationConfirmed",
+              "displayName": "authorizationConfirmed",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "boolean"
+            }
           ],
           "attemptToConvertTypes": true,
           "convertFieldsToString": false
@@ -647,7 +695,10 @@
       },
       "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
       "typeVersion": 2.2,
-      "position": [940, 680],
+      "position": [
+        940,
+        680
+      ],
       "id": "95000000-0000-4000-8000-000000000201",
       "name": "start_domain_research"
     },
@@ -670,9 +721,33 @@
           },
           "matchingColumns": [],
           "schema": [
-            { "id": "sessionId", "displayName": "sessionId", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
-            { "id": "requestId", "displayName": "requestId", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
-            { "id": "jobId", "displayName": "jobId", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" }
+            {
+              "id": "sessionId",
+              "displayName": "sessionId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "requestId",
+              "displayName": "requestId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "jobId",
+              "displayName": "jobId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
           ],
           "attemptToConvertTypes": true,
           "convertFieldsToString": false
@@ -680,7 +755,10 @@
       },
       "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
       "typeVersion": 2.2,
-      "position": [1120, 680],
+      "position": [
+        1120,
+        680
+      ],
       "id": "95100000-0000-4000-8000-000000000201",
       "name": "complete_domain_research"
     },
@@ -703,9 +781,33 @@
           },
           "matchingColumns": [],
           "schema": [
-            { "id": "sessionId", "displayName": "sessionId", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
-            { "id": "requestId", "displayName": "requestId", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
-            { "id": "domain", "displayName": "domain", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" }
+            {
+              "id": "sessionId",
+              "displayName": "sessionId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "requestId",
+              "displayName": "requestId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "domain",
+              "displayName": "domain",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
           ],
           "attemptToConvertTypes": true,
           "convertFieldsToString": false
@@ -713,9 +815,72 @@
       },
       "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
       "typeVersion": 2.2,
-      "position": [1300, 680],
+      "position": [
+        1300,
+        680
+      ],
       "id": "95200000-0000-4000-8000-000000000201",
       "name": "get_business_memory"
+    },
+    {
+      "parameters": {
+        "description": "Search public YouTube comments for people describing a problem the user solves. Use when the user asks to find prospects, learn how their market describes a problem, discover what words real buyers use, or gather quotes for messaging. Pass a topic describing the problem rather than the product, and a comma-separated list of short phrases to look for. Reads public pages only; it never posts or contacts anyone.",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "phase10FindSignals",
+          "mode": "list",
+          "cachedResultName": "60 - TOOL - find_signals"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "sessionId": "={{ $('Validate and Normalise').item.json.sessionId }}",
+            "topic": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('topic', 'What to search YouTube for. Describe the problem people have, not the product being sold.', 'string') }}",
+            "phrases": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('phrases', 'Comma-separated short phrases to look for in comments, such as: not technical, where to start, none of them stuck.', 'string') }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "sessionId",
+              "displayName": "sessionId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "topic",
+              "displayName": "topic",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "phrases",
+              "displayName": "phrases",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        1480,
+        680
+      ],
+      "id": "95300000-0000-4000-8000-000000000301",
+      "name": "find_signals"
     }
   ],
   "pinData": {},
@@ -900,6 +1065,17 @@
       ]
     },
     "get_business_memory": {
+      "ai_tool": [
+        [
+          {
+            "node": "Project Partner Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "find_signals": {
       "ai_tool": [
         [
           {

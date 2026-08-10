@@ -32,7 +32,11 @@ Anthropic API access is billed separately from a Claude web-chat subscription. T
 
 The repository includes fourteen reviewed workflow exports. First setup imports them automatically, so learners do not need to build nodes from a blank canvas.
 
-Refresh the n8n Overview. If `01 - START HERE - Learner Checklist` appears, continue to step 2.
+Open **Personal** in the n8n sidebar. This is the page to work from.
+
+If this n8n has a folder licence, import also files every workflow into a folder named after a skill, so the list reads as the handful of things the agent can do rather than a wall of workflows. Without one the workflows sit in a single flat list, which changes nothing about how the agent works. The **Overview** page is always flat and never shows folders.
+
+If `01 - START HERE - Learner Checklist` appears, in a `1. Start here` folder or on its own, continue to step 2.
 
 If the workflows are missing or automatic import was interrupted, use the repeatable manual fallback:
 
@@ -48,22 +52,15 @@ Double-click `import-workflows-windows.cmd`.
 
 The fallback opens a terminal, checks the workflows and Markdown skills, starts n8n if needed, and imports all fourteen workflows. It briefly enables localhost-only setup endpoints to create local tables and sync enabled skills, then immediately removes both endpoints. It publishes the reviewed runtime subworkflows but does not publish the main agent, health workflow, or an API key.
 
-Refresh the n8n Overview. All fourteen workflows should appear:
+Refresh **Personal**. All fourteen workflows should appear. With a folder licence they are grouped into five folders:
 
-- `00 - START HERE - Project Partner`
-- `01 - START HERE - Learner Checklist`
-- `10 - SETUP - Local Task Data`
-- `11 - SETUP - Sync Enabled Skills`
-- `20 - TOOL - list_tasks`
-- `21 - TOOL - create_task`
-- `22 - TOOL - update_task_status`
-- `30 - TOOL - Propose create_task`
-- `31 - TOOL - Propose update_task_status`
-- `40 - CONFIRM - Task Write`
-- `50 - TOOL - start_domain_research`
-- `51 - TOOL - complete_domain_research`
-- `52 - TOOL - get_business_memory`
-- `90 - DEBUG - Agent Health`
+- `1. Start here` — `00 - START HERE - Project Partner`, `01 - START HERE - Learner Checklist`
+- `2. Tasks` — `20 - TOOL - list_tasks`, `21 - TOOL - create_task`, `22 - TOOL - update_task_status`, `30 - TOOL - Propose create_task`, `31 - TOOL - Propose update_task_status`, `40 - CONFIRM - Task Write`
+- `3. Your business` — `50 - TOOL - start_domain_research`, `51 - TOOL - complete_domain_research`, `52 - TOOL - get_business_memory`
+- `4. Finding customers` — `60 - TOOL - find_signals`, once the optional signal-research skill is installed
+- `5. Setup and health` — `10 - SETUP - Local Task Data`, `11 - SETUP - Sync Enabled Skills`, `90 - DEBUG - Agent Health`
+
+If the workflows are there but sitting loose instead of in folders, this n8n has no folder licence — that is expected, and nothing about the agent depends on it. After registering the free community edition inside n8n, run `node scripts/local.mjs group-workflows` and refresh.
 
 The nine runtime dependencies—task read tool, two proposal tools, confirmation dispatcher, two task write workers, and three domain-research tools—are published automatically. The task write workers are callable only by workflow `40`; no AI Tool node points to them. The main agent, health workflow, and two temporary setup workflows remain inactive drafts. The learner checklist is an inactive visual guide that can be opened or run manually.
 

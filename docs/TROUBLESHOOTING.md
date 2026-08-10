@@ -17,7 +17,10 @@ Run `diagnose.command` on macOS or `diagnose-windows.cmd` on Windows first. It d
 | PDF says no readable text was found | The PDF is probably an image-only scan | Create a searchable PDF with trusted OCR software or paste reviewed text |
 | File type is unsupported | The file is not searchable PDF, DOCX, or UTF-8 TXT | Export it to a supported format and retry |
 | Diagnostic says the Anthropic credential is missing | The Claude node still references a nonexistent placeholder | Create `Anthropic account`, select it in the Claude node, save, and publish |
-| n8n Overview has no learner checklist | Automatic import was interrupted | Run the platform's `import-workflows` fallback |
+| n8n Personal has no learner checklist | Automatic import was interrupted | Run the platform's `import-workflows` fallback |
+| n8n shows a flat list instead of skill folders | Looking at Overview, which never groups | Click **Personal** in the sidebar |
+| Personal is flat too | This n8n has no folder licence, which is normal | Nothing to fix; the agent works the same either way |
+| Personal looks empty after grouping | Workflows were filed into folders n8n cannot draw | Run `node scripts/local.mjs group-workflows --undo` and refresh |
 | Claude returns an authentication error | API key is invalid or revoked | Replace only the n8n credential; never put the key in a file |
 | Claude returns a credit/rate error | API billing or workspace limit | Check the Anthropic Console balance and limits |
 | Plain `yes` does not create a task | Expected safety behaviour | Send the exact, current `CONFIRM XXXXXXXX` phrase |
@@ -110,7 +113,7 @@ The browser intentionally does not show raw workflow errors or credentials.
 ## A workflow does not appear after import
 
 1. Confirm the terminal reported `Workflows imported successfully`.
-2. Refresh the n8n Overview.
+2. Refresh **Personal** in n8n and open each skill folder.
 3. Check that the local n8n owner account has been created.
 4. Run the import fallback again; the fixed workflow IDs prevent duplicate copies.
 5. Ask a technical helper to run `node scripts/local.mjs logs n8n`.

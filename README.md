@@ -97,8 +97,11 @@ Success ends with:
 Local stack is healthy.
   Chat app:          http://localhost:3000
   n8n editor:        http://localhost:5678
+  Your agent's skills: http://localhost:5678/projects/xxxxxxxxxxxxxxxx/workflows
   Next: create the local n8n owner, then open 01 - START HERE - Learner Checklist.
 ```
+
+The skills link ends in a code unique to this computer. Copy the one your own terminal prints; it is the same page as clicking **Personal** in the n8n sidebar.
 
 If automatic workflow import is interrupted, wait for n8n to become healthy and use the manual fallback:
 
@@ -113,7 +116,7 @@ Open [http://localhost:5678](http://localhost:5678). On the first visit, create 
 
 ![The local n8n owner-account screen](docs/images/01-n8n-owner-setup.png)
 
-When the n8n Overview appears, open `01 - START HERE - Learner Checklist`. Its five cards take you through the remaining setup.
+When n8n finishes, click **Personal** in the left sidebar. That is where your agent's workflows live; the **Overview** page above it lists everything at once and is not needed. Open `01 - START HERE - Learner Checklist` — inside the `1. Start here` folder if this n8n groups workflows into skill folders. Its five cards take you through the remaining setup.
 
 ![The five-step learner checklist inside n8n](docs/images/02-n8n-learner-checklist.png)
 
