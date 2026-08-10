@@ -1,0 +1,4 @@
+interface:
+  display_name: "SEO Article Writer"
+  short_description: "Grounded SEO articles from saved research"
+  default_prompt: "Use $seo-article-writer to draft a grounded SEO article for my business."

@@ -118,6 +118,9 @@ const workflowIds = {
     "phase11StartPaidDomainResearch",
     "phase11CompletePaidDomainResearch",
     "phase11GetPaidDomainResearch",
+    "phase13StartSeoArticle",
+    "phase13WriteSeoArticle",
+    "phase13GetSeoArticle",
     "phase12LookupLinkedInProfile",
   ],
 };
@@ -139,6 +142,9 @@ const exportedWorkflowFiles = [
   ["phase11StartPaidDomainResearch", "53-tool-start-paid-domain-research.json"],
   ["phase11CompletePaidDomainResearch", "54-tool-complete-paid-domain-research.json"],
   ["phase11GetPaidDomainResearch", "55-tool-get-paid-domain-research.json"],
+  ["phase13StartSeoArticle", "56-tool-start-seo-article.json"],
+  ["phase13WriteSeoArticle", "57-internal-write-seo-article.json"],
+  ["phase13GetSeoArticle", "58-tool-get-seo-article.json"],
   ["phase12LookupLinkedInProfile", "61-tool-lookup-linkedin-profile.json"],
   ["phase3AgentHealth", "90-debug-agent-health.json"],
 ];
@@ -2110,12 +2116,19 @@ async function commandDiagnose() {
           { capture: true },
         );
         if (result.status === 0) {
-          const reference = mainWorkflow.nodes?.find(
-            (node) => node.name === "Claude - Sonnet 4.6",
-          )?.credentials?.anthropicApi;
+          const articleWorkflow = exportedWorkflow("phase13WriteSeoArticle");
+          const references = [
+            mainWorkflow.nodes?.find((node) => node.name === "Claude - Sonnet 4.6")
+              ?.credentials?.anthropicApi,
+            articleWorkflow?.nodes?.find((node) => node.name === "Draft With Claude")
+              ?.credentials?.anthropicApi,
+            articleWorkflow?.nodes?.find((node) => node.name === "Repair With Claude")
+              ?.credentials?.anthropicApi,
+          ].filter(Boolean);
           const credentials = readExportedRows(credentialExport);
-          credentialSelected = Boolean(
-            reference?.id &&
+          credentialSelected = references.length === 3 && references.every(
+            (reference) =>
+              reference?.id &&
               credentials.some(
                 (credential) =>
                   credential.id === reference.id &&
@@ -2129,9 +2142,9 @@ async function commandDiagnose() {
         rmSync(credentialExport, { force: true });
       }
       if (credentialSelected) {
-        ok("An Anthropic credential exists and is selected by the Claude node.");
+        ok("An Anthropic credential is selected by the agent and article writer.");
       } else {
-        action("Create an Anthropic credential named Anthropic account and select it in Claude - Sonnet 4.6.");
+        action("Create an Anthropic credential named Anthropic account and select it in the agent plus both Claude nodes in workflow 57.");
       }
 
       const paidWorkflow = exportedWorkflow("phase11StartPaidDomainResearch");

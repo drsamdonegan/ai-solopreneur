@@ -916,6 +916,18 @@ textarea:focus-visible,
   white-space: pre-wrap;
 }
 
+.message__download {
+  color: var(--brand-primary);
+  font-weight: 700;
+  text-decoration: underline;
+  text-decoration-thickness: 0.08em;
+  text-underline-offset: 0.16em;
+}
+
+.message__download:hover {
+  text-decoration-thickness: 0.14em;
+}
+
 .message--user .message__copy {
   border-color: transparent;
   border-radius: 1rem 0.25rem 1rem 1rem;

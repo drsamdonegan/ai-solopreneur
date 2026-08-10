@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { lookup } from "node:dns";
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import {
@@ -9,8 +8,6 @@ import {
   type Server,
   type ServerResponse,
 } from "node:http";
-import { request as httpsRequest } from "node:https";
-import { isIP, type LookupFunction } from "node:net";
 import { basename, extname, resolve, sep } from "node:path";
 import Busboy from "busboy";
 import {
@@ -30,10 +27,15 @@ import {
   type BusinessMemoryInput,
   type HistoryMessage,
   type PaidComponentStatus,
+  type SeoArticleJobInput,
+  type SeoArticleJobStatus,
+  type SeoArticleVersionInput,
   type SeoSnapshotInput,
   type StoredAttachment,
 } from "./chat-store.js";
 import { ProfileStore, ProfileValidationError } from "./profile.js";
+import { fetchPublicDomainPage, fetchPublicWebPages } from "./public-web.js";
+import { validateSeoArticleResult } from "./seo-article.js";
 
 const MAX_MESSAGE_LENGTH = 8_000;
 // A saved picture is base64 inside the JSON body, so this endpoint alone needs
@@ -41,7 +43,7 @@ const MAX_MESSAGE_LENGTH = 8_000;
 const MAX_PROFILE_REQUEST_BYTES = 512 * 1_024;
 const MAX_BUSINESS_MEMORY_REQUEST_BYTES = 256 * 1_024;
 const MAX_PAID_RESEARCH_REQUEST_BYTES = 1_024 * 1_024;
-const MAX_PUBLIC_PAGE_BYTES = 512 * 1_024;
+const MAX_SEO_ARTICLE_REQUEST_BYTES = 1_024 * 1_024;
 const MAX_REQUEST_BYTES = 65_536;
 const MAX_UPSTREAM_BYTES = 65_536;
 const UUID_PATTERN =
@@ -81,6 +83,8 @@ type ErrorCode =
   | "RATE_LIMITED"
   | "REQUEST_IN_PROGRESS"
   | "RESEARCH_JOB_NOT_FOUND"
+  | "SEO_ARTICLE_ERROR"
+  | "SEO_ARTICLE_NOT_FOUND"
   | "TOO_MANY_DOCUMENTS"
   | "UNSUPPORTED_FILE_TYPE";
 
@@ -155,6 +159,22 @@ function sendJson(
     "Content-Type": "application/json; charset=utf-8",
   });
   response.end(payload);
+}
+
+function sendMarkdown(
+  response: ServerResponse,
+  markdown: string,
+  fileName: string,
+): void {
+  const safeName = fileName.replace(/[^a-z0-9._-]+/gi, "-").replace(/^-+|-+$/g, "") || "seo-article.md";
+  response.writeHead(200, {
+    ...SECURITY_HEADERS,
+    "Cache-Control": "no-store",
+    "Content-Disposition": `attachment; filename="${safeName.endsWith(".md") ? safeName : `${safeName}.md`}"`,
+    "Content-Length": Buffer.byteLength(markdown).toString(),
+    "Content-Type": "text/markdown; charset=utf-8",
+  });
+  response.end(markdown);
 }
 
 function sendError(response: ServerResponse, error: PublicError): void {
@@ -390,175 +410,6 @@ function validateBusinessDomain(value: unknown): string {
   return domain;
 }
 
-function isPublicIpAddress(address: string): boolean {
-  const family = isIP(address);
-  if (family === 4) {
-    const octets = address.split(".").map(Number);
-    const a = octets[0] ?? -1;
-    const b = octets[1] ?? -1;
-    const c = octets[2] ?? -1;
-    return !(
-      a === 0 ||
-      a === 10 ||
-      a === 127 ||
-      (a === 100 && b >= 64 && b <= 127) ||
-      (a === 169 && b === 254) ||
-      (a === 172 && b >= 16 && b <= 31) ||
-      (a === 192 && b === 0 && c === 0) ||
-      (a === 192 && b === 0 && c === 2) ||
-      (a === 192 && b === 168) ||
-      (a === 198 && (b === 18 || b === 19)) ||
-      (a === 198 && b === 51 && c === 100) ||
-      (a === 203 && b === 0 && c === 113) ||
-      a >= 224
-    );
-  }
-  if (family === 6) {
-    const normalised = address.toLowerCase();
-    // Permit only global unicast IPv6 and exclude the documentation prefix.
-    return /^[23]/.test(normalised) && !normalised.startsWith("2001:db8:");
-  }
-  return false;
-}
-
-interface PublicDomainPage {
-  url: string;
-  statusCode: number;
-  text: string;
-  truncated: boolean;
-}
-
-async function fetchPublicDomainPage(domain: string): Promise<PublicDomainPage> {
-  const safeLookup: LookupFunction = (hostname, options, callback) => {
-    lookup(hostname, { all: true, verbatim: true }, (error, addresses) => {
-      if (error) {
-        callback(error, "", 0);
-        return;
-      }
-      const requestedFamily = Number(options.family ?? 0);
-      // Reject mixed public/private answers instead of selecting the safe-looking one.
-      if (addresses.length === 0 || addresses.some((entry) => !isPublicIpAddress(entry.address))) {
-        const lookupError = new Error("Domain resolved to a non-public address") as NodeJS.ErrnoException;
-        lookupError.code = "ENETUNREACH";
-        callback(lookupError, "", 0);
-        return;
-      }
-      const compatible = addresses.filter(
-        (entry) => requestedFamily === 0 || entry.family === requestedFamily,
-      );
-      if (compatible.length === 0) {
-        callback(new Error("Domain has no usable public address"), "", 0);
-        return;
-      }
-      if (options.all) {
-        callback(null, compatible);
-      } else {
-        const selected = compatible[0];
-        if (selected === undefined) {
-          callback(new Error("Domain has no usable public address"), "", 0);
-          return;
-        }
-        callback(null, selected.address, selected.family);
-      }
-    });
-  };
-
-  const readOnce = async (url: URL): Promise<{
-    statusCode: number;
-    location?: string;
-    text: string;
-    truncated: boolean;
-  }> => await new Promise((resolvePage, rejectPage) => {
-    const request = httpsRequest(
-      url,
-      {
-        method: "GET",
-        headers: {
-          Accept: "text/html,application/xhtml+xml,text/plain;q=0.8",
-          "User-Agent": "AI-Solopreneur-Domain-Research/1.0",
-        },
-        lookup: safeLookup,
-        timeout: 15_000,
-      },
-      (upstream) => {
-        const statusCode = upstream.statusCode ?? 0;
-        const location = upstream.headers.location;
-        if ([301, 302, 303, 307, 308].includes(statusCode) && location) {
-          upstream.resume();
-          resolvePage({ statusCode, location, text: "", truncated: false });
-          return;
-        }
-        const contentType = String(upstream.headers["content-type"] ?? "");
-        if (!/^(?:text\/|application\/xhtml\+xml)/i.test(contentType)) {
-          upstream.resume();
-          resolvePage({ statusCode, text: "", truncated: false });
-          return;
-        }
-        const chunks: Buffer[] = [];
-        let bytes = 0;
-        let truncated = false;
-        upstream.on("data", (rawChunk: Buffer | string) => {
-          if (truncated) return;
-          const chunk = Buffer.isBuffer(rawChunk) ? rawChunk : Buffer.from(rawChunk);
-          const remaining = MAX_PUBLIC_PAGE_BYTES - bytes;
-          if (chunk.length > remaining) {
-            if (remaining > 0) chunks.push(chunk.subarray(0, remaining));
-            bytes = MAX_PUBLIC_PAGE_BYTES;
-            truncated = true;
-            resolvePage({
-              statusCode,
-              text: Buffer.concat(chunks).toString("utf8"),
-              truncated: true,
-            });
-            upstream.destroy();
-            return;
-          }
-          chunks.push(chunk);
-          bytes += chunk.length;
-        });
-        upstream.on("end", () => {
-          resolvePage({
-            statusCode,
-            text: Buffer.concat(chunks).toString("utf8"),
-            truncated,
-          });
-        });
-        upstream.on("error", rejectPage);
-      },
-    );
-    request.on("timeout", () => request.destroy(new Error("Public page request timed out")));
-    request.on("error", rejectPage);
-    request.end();
-  });
-
-  let current = new URL(`https://${domain}/`);
-  for (let redirects = 0; redirects <= 3; redirects += 1) {
-    const page = await readOnce(current);
-    if (page.location === undefined) {
-      return {
-        url: current.toString(),
-        statusCode: page.statusCode,
-        text: page.text,
-        truncated: page.truncated,
-      };
-    }
-    if (redirects === 3) throw new Error("Public page redirected too many times");
-    const next = new URL(page.location, current);
-    const nextDomain = next.hostname.toLowerCase().replace(/^www\./, "");
-    if (
-      next.protocol !== "https:" ||
-      next.username !== "" ||
-      next.password !== "" ||
-      (next.port !== "" && next.port !== "443") ||
-      validateBusinessDomain(nextDomain) !== domain
-    ) {
-      throw new Error("Public page redirected outside the authorised domain");
-    }
-    current = next;
-  }
-  throw new Error("Public page could not be read");
-}
-
 function validateBusinessMemory(body: unknown): BusinessMemoryInput {
   const candidate = businessMemoryObject(body, "payload");
   if (candidate.schemaVersion !== 1) {
@@ -678,6 +529,122 @@ function validateSeoSnapshot(body: unknown): SeoSnapshotInput {
     input.expiresAt = new Date(candidate.expiresAt).toISOString();
   }
   return input;
+}
+
+function seoArticleUrlArray(value: unknown, field: string): string[] {
+  const urls = businessMemoryStringArray(value ?? [], field, 12, 2_000);
+  for (const raw of urls) {
+    let parsed: URL;
+    try {
+      parsed = new URL(raw);
+    } catch {
+      throw new PublicError(400, "INVALID_REQUEST", `The article request has an invalid ${field}.`);
+    }
+    if (parsed.protocol !== "https:" || parsed.username !== "" || parsed.password !== "") {
+      throw new PublicError(400, "INVALID_REQUEST", `The article request has an invalid ${field}.`);
+    }
+  }
+  return urls;
+}
+
+function validateSeoArticleJobInput(body: unknown): SeoArticleJobInput {
+  const candidate = businessMemoryObject(body, "article request");
+  const sessionId = validateSessionId(candidate.sessionId);
+  const requestId = validateSessionId(candidate.requestId);
+  const domain = validateBusinessDomain(candidate.domain);
+  const primaryKeyword = businessMemoryText(candidate.primaryKeyword, "primary keyword", 200);
+  if (primaryKeyword.length < 2) {
+    throw new PublicError(400, "INVALID_REQUEST", "Choose a main keyword or ask to use the strongest saved opportunity.");
+  }
+  const supportingKeywords = businessMemoryStringArray(
+    candidate.supportingKeywords ?? [],
+    "supporting keywords",
+    20,
+    200,
+  );
+  const input = {
+    targetAudience: businessMemoryText(candidate.targetAudience ?? "", "target audience", 1_000),
+    goal: businessMemoryText(candidate.goal ?? "", "article goal", 1_000),
+    sourceUrls: seoArticleUrlArray(candidate.sourceUrls, "source URLs"),
+    requestedAt: new Date().toISOString(),
+  };
+  return { sessionId, requestId, domain, primaryKeyword, supportingKeywords, input };
+}
+
+function validateSeoArticleJobUpdate(body: unknown): {
+  sessionId: string;
+  jobId: string;
+  status: SeoArticleJobStatus;
+  stage: string;
+  errorCode?: string;
+  errorMessage?: string;
+} {
+  const candidate = businessMemoryObject(body, "article job update");
+  const allowed: readonly SeoArticleJobStatus[] = [
+    "running",
+    "failed",
+    "interrupted",
+  ];
+  if (!allowed.includes(candidate.status as SeoArticleJobStatus)) {
+    throw new PublicError(400, "INVALID_REQUEST", "The article job has an invalid status.");
+  }
+  const errorCode = businessMemoryText(candidate.errorCode ?? "", "article error code", 100);
+  const errorMessage = businessMemoryText(candidate.errorMessage ?? "", "article error message", 2_000);
+  return {
+    sessionId: validateSessionId(candidate.sessionId),
+    jobId: businessMemoryText(candidate.jobId, "article job ID", 160),
+    status: candidate.status as SeoArticleJobStatus,
+    stage: businessMemoryText(candidate.stage, "article stage", 80),
+    ...(errorCode ? { errorCode } : {}),
+    ...(errorMessage ? { errorMessage } : {}),
+  };
+}
+
+function articleVersionInput(
+  candidate: Record<string, unknown>,
+  primaryKeyword: string,
+  domain: string,
+  supportingKeywords: string[],
+): SeoArticleVersionInput {
+  let result;
+  try {
+    result = validateSeoArticleResult(candidate.result, primaryKeyword);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Invalid article result";
+    throw new PublicError(400, "INVALID_REQUEST", `The article result could not be saved: ${message}.`);
+  }
+  if (!result.qualityReport.passed) {
+    throw new PublicError(
+      422,
+      "SEO_ARTICLE_ERROR",
+      `The draft did not pass its final checks: ${result.qualityReport.errors.join(" ")}`,
+    );
+  }
+  return {
+    status: result.status,
+    domain,
+    primaryKeyword,
+    supportingKeywords,
+    context: businessMemoryObject(candidate.context ?? {}, "article context"),
+    plan: result.plan,
+    markdown: result.markdown,
+    structuredData: result.structuredData,
+    metadata: {
+      seoTitle: result.seoTitle,
+      metaDescription: result.metaDescription,
+      slug: result.slug,
+      canonicalSuggestion: result.canonicalSuggestion,
+      keywordMap: result.keywordMap,
+    },
+    answerBlocks: result.answerBlocks,
+    faq: result.faq,
+    sources: result.sources,
+    claimLedger: result.claims,
+    qualityReport: result.qualityReport as unknown as Record<string, unknown>,
+    warnings: [...result.warnings, ...result.qualityReport.warnings],
+    reviewStatus: result.reviewStatus,
+    model: result.model,
+  };
 }
 
 interface UploadedFile {
@@ -1369,6 +1336,263 @@ export function createChatHandler(options: ChatGatewayOptions): RequestListener 
             );
           }
         }
+        return;
+      }
+
+      if (url.pathname === "/api/public-research-pages") {
+        try {
+          if (request.method !== "POST") {
+            sendJson(
+              response,
+              405,
+              { error: { code: "INVALID_REQUEST", message: "That method is not supported." } },
+              { Allow: "POST" },
+            );
+            return;
+          }
+          const candidate = businessMemoryObject(
+            await readRequestBody(request, MAX_SEO_ARTICLE_REQUEST_BYTES),
+            "public research request",
+          );
+          const urls = seoArticleUrlArray(candidate.urls, "source URLs");
+          if (urls.length === 0) {
+            throw new PublicError(400, "INVALID_REQUEST", "Add at least one public source URL.");
+          }
+          const pages = await fetchPublicWebPages(urls);
+          sendJson(response, 200, { schemaVersion: 1, pages });
+        } catch (error) {
+          if (error instanceof PublicError) {
+            sendError(response, error);
+          } else {
+            options.logError?.("Could not safely read public research pages", error);
+            sendError(
+              response,
+              new PublicError(502, "SEO_ARTICLE_ERROR", "The public sources could not be read safely."),
+            );
+          }
+        }
+        return;
+      }
+
+      if (url.pathname === "/api/seo-article/jobs") {
+        try {
+          if (request.method === "POST") {
+            const registered = chatStore.registerSeoArticleJob(
+              validateSeoArticleJobInput(
+                await readRequestBody(request, MAX_SEO_ARTICLE_REQUEST_BYTES),
+              ),
+            );
+            sendJson(response, registered.created ? 201 : 200, {
+              schemaVersion: 1,
+              ...registered,
+            });
+            return;
+          }
+          if (request.method === "PATCH") {
+            const update = validateSeoArticleJobUpdate(
+              await readRequestBody(request, MAX_SEO_ARTICLE_REQUEST_BYTES),
+            );
+            const job = chatStore.updateSeoArticleJob(update.sessionId, update.jobId, update);
+            sendJson(response, 200, { schemaVersion: 1, job });
+            return;
+          }
+          if (request.method === "GET") {
+            const sessionId = validateSessionId(url.searchParams.get("sessionId"));
+            const jobId = url.searchParams.get("jobId");
+            const domain = url.searchParams.get("domain");
+            const job = jobId !== null
+              ? chatStore.getSeoArticleJob(
+                  sessionId,
+                  businessMemoryText(jobId, "article job ID", 160),
+                )
+              : domain !== null
+                ? chatStore.getLatestSeoArticleJob(sessionId, validateBusinessDomain(domain))
+                : undefined;
+            if (job === undefined) {
+              throw new PublicError(
+                404,
+                "SEO_ARTICLE_NOT_FOUND",
+                "That article job is not saved for this conversation.",
+              );
+            }
+            const version = job.latestVersionId === undefined
+              ? undefined
+              : chatStore.getSeoArticleVersionForJob(sessionId, job.jobId, job.latestVersionId);
+            const previousVersion = version === undefined
+              ? chatStore.getLatestSuccessfulSeoArticleVersion(sessionId, job.domain)
+              : undefined;
+            sendJson(response, 200, {
+              schemaVersion: 1,
+              job,
+              ...(version === undefined
+                ? {}
+                : {
+                    article: {
+                      versionId: version.versionId,
+                      versionNumber: version.versionNumber,
+                      status: version.status,
+                      metadata: version.metadata,
+                      warnings: version.warnings,
+                      reviewStatus: version.reviewStatus,
+                      qualityReport: version.qualityReport,
+                      createdAt: version.createdAt,
+                      downloadUrl: `/api/seo-article/download/${version.downloadToken}.md`,
+                    },
+                  }),
+              ...(previousVersion === undefined
+                ? {}
+                : {
+                    previousArticle: {
+                      versionId: previousVersion.versionId,
+                      versionNumber: previousVersion.versionNumber,
+                      status: previousVersion.status,
+                      metadata: previousVersion.metadata,
+                      warnings: previousVersion.warnings,
+                      reviewStatus: previousVersion.reviewStatus,
+                      qualityReport: previousVersion.qualityReport,
+                      createdAt: previousVersion.createdAt,
+                      downloadUrl: `/api/seo-article/download/${previousVersion.downloadToken}.md`,
+                    },
+                  }),
+            });
+            return;
+          }
+          sendJson(
+            response,
+            405,
+            { error: { code: "INVALID_REQUEST", message: "That method is not supported." } },
+            { Allow: "GET, POST, PATCH" },
+          );
+        } catch (error) {
+          if (error instanceof PublicError) {
+            sendError(response, error);
+          } else {
+            options.logError?.("Could not access the SEO article job", error);
+            sendError(
+              response,
+              new PublicError(409, "SEO_ARTICLE_ERROR", "The article job could not be updated safely."),
+            );
+          }
+        }
+        return;
+      }
+
+      if (url.pathname === "/api/seo-article/context") {
+        try {
+          if (request.method !== "GET") {
+            sendJson(
+              response,
+              405,
+              { error: { code: "INVALID_REQUEST", message: "That method is not supported." } },
+              { Allow: "GET" },
+            );
+            return;
+          }
+          const sessionId = validateSessionId(url.searchParams.get("sessionId"));
+          const jobId = businessMemoryText(url.searchParams.get("jobId"), "article job ID", 160);
+          const job = chatStore.getSeoArticleJob(sessionId, jobId);
+          if (job === undefined) {
+            throw new PublicError(404, "SEO_ARTICLE_NOT_FOUND", "That article job is not saved for this conversation.");
+          }
+          const memory = chatStore.getBusinessMemory(job.domain);
+          const snapshot = chatStore.getLatestSeoSnapshot(job.domain);
+          const profile = profileStore === undefined ? undefined : await profileStore.read();
+          sendJson(response, 200, {
+            schemaVersion: 1,
+            job,
+            ...(memory === undefined ? {} : { memory }),
+            ...(snapshot === undefined ? {} : { snapshot }),
+            ...(profile === undefined ? {} : { profile }),
+          });
+        } catch (error) {
+          if (error instanceof PublicError) sendError(response, error);
+          else {
+            options.logError?.("Could not prepare SEO article context", error);
+            sendError(response, new PublicError(500, "SEO_ARTICLE_ERROR", "The saved research could not be prepared."));
+          }
+        }
+        return;
+      }
+
+      if (url.pathname === "/api/seo-article/versions") {
+        try {
+          if (request.method !== "PUT") {
+            sendJson(
+              response,
+              405,
+              { error: { code: "INVALID_REQUEST", message: "That method is not supported." } },
+              { Allow: "PUT" },
+            );
+            return;
+          }
+          const candidate = businessMemoryObject(
+            await readRequestBody(request, MAX_SEO_ARTICLE_REQUEST_BYTES),
+            "article version",
+          );
+          const sessionId = validateSessionId(candidate.sessionId);
+          const jobId = businessMemoryText(candidate.jobId, "article job ID", 160);
+          const job = chatStore.getSeoArticleJob(sessionId, jobId);
+          if (job === undefined) {
+            throw new PublicError(404, "SEO_ARTICLE_NOT_FOUND", "That article job is not saved for this conversation.");
+          }
+          const saved = chatStore.saveSeoArticleVersion(
+            sessionId,
+            jobId,
+            articleVersionInput(candidate, job.primaryKeyword, job.domain, job.supportingKeywords),
+          );
+          sendJson(response, 200, {
+            schemaVersion: 1,
+            job: saved.job,
+            article: {
+              versionId: saved.version.versionId,
+              versionNumber: saved.version.versionNumber,
+              status: saved.version.status,
+              metadata: saved.version.metadata,
+              warnings: saved.version.warnings,
+              reviewStatus: saved.version.reviewStatus,
+              qualityReport: saved.version.qualityReport,
+              createdAt: saved.version.createdAt,
+              downloadUrl: `/api/seo-article/download/${saved.version.downloadToken}.md`,
+            },
+          });
+        } catch (error) {
+          if (error instanceof PublicError) sendError(response, error);
+          else {
+            options.logError?.("Could not save SEO article version", error);
+            sendError(response, new PublicError(500, "SEO_ARTICLE_ERROR", "The article could not be saved."));
+          }
+        }
+        return;
+      }
+
+      const articleDownload = url.pathname.match(/^\/api\/seo-article\/download\/([A-Za-z0-9_-]{40,60})\.md$/);
+      if (articleDownload !== null) {
+        if (request.method !== "GET" && request.method !== "HEAD") {
+          sendJson(
+            response,
+            405,
+            { error: { code: "INVALID_REQUEST", message: "That method is not supported." } },
+            { Allow: "GET, HEAD" },
+          );
+          return;
+        }
+        const token = articleDownload[1] ?? "";
+        const version = chatStore.getSeoArticleVersionByDownloadToken(token);
+        if (version === undefined) {
+          sendError(response, new PublicError(404, "SEO_ARTICLE_NOT_FOUND", "That article download is not available."));
+          return;
+        }
+        const slug = typeof version.metadata.slug === "string" ? version.metadata.slug : "seo-article";
+        if (request.method === "HEAD") {
+          response.writeHead(200, {
+            ...SECURITY_HEADERS,
+            "Cache-Control": "no-store",
+            "Content-Type": "text/markdown; charset=utf-8",
+          });
+          response.end();
+          return;
+        }
+        sendMarkdown(response, version.markdown, `${slug}.md`);
         return;
       }
 

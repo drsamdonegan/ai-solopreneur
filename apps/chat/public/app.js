@@ -361,6 +361,23 @@
     return attachment;
   }
 
+  function appendSafeMessageText(element, text) {
+    const localDownload = /\/api\/seo-article\/download\/[A-Za-z0-9_-]{40,60}\.md/g;
+    let offset = 0;
+    for (const match of text.matchAll(localDownload)) {
+      const index = match.index ?? 0;
+      element.append(document.createTextNode(text.slice(offset, index)));
+      const link = document.createElement("a");
+      link.className = "message__download";
+      link.href = match[0];
+      link.download = "";
+      link.textContent = "Download the article (.md)";
+      element.append(link);
+      offset = index + match[0].length;
+    }
+    element.append(document.createTextNode(text.slice(offset)));
+  }
+
   function addMessage(kind, text, attachments = [], options = {}) {
     const wrapper = document.createElement("article");
     wrapper.className = `message message--${kind}`;
@@ -380,7 +397,7 @@
 
     const copy = document.createElement("p");
     copy.className = "message__copy";
-    copy.textContent = text;
+    appendSafeMessageText(copy, text);
 
     body.append(label);
     if (kind === "user" && attachments.length > 0) {

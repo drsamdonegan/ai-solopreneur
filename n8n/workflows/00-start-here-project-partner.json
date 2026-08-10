@@ -1176,6 +1176,76 @@
       "position": [2200, 680],
       "id": "b6100000-0000-4000-8000-000000000201",
       "name": "lookup_linkedin_profile"
+    },
+    {
+      "parameters": {
+        "description": "Background, bounded-local-write tool for drafting one SEO article after domain research. Use when the current user asks to write a blog or SEO article for a named or immediately unambiguous saved business domain. It reuses saved research and verified public source pages; it makes no new DataForSEO purchase and never publishes. Do not ask whether the user owns the domain. A main keyword is required unless the user explicitly asks to choose the strongest saved opportunity. The tool returns quickly with a queued job; never call it twice for the same request.",
+        "source": "database",
+        "workflowId": { "__rl": true, "value": "phase13StartSeoArticle", "mode": "list", "cachedResultName": "56 - TOOL - start_seo_article" },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "sessionId": "={{ $('Validate and Normalise').item.json.sessionId }}",
+            "requestId": "={{ $('Validate and Normalise').item.json.requestId }}",
+            "domain": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('domain', 'Bare saved business domain for the requested article.', 'string') }}",
+            "primaryKeyword": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('primaryKeyword', 'Main keyword or topic stated by the user; empty only when chooseStrongestKeyword is true.', 'string') }}",
+            "chooseStrongestKeyword": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('chooseStrongestKeyword', 'True only when the current user asks you to choose the strongest saved keyword opportunity.', 'boolean') }}",
+            "supportingKeywords": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('supportingKeywords', 'Optional comma-separated supporting keywords from the user; otherwise an empty string.', 'string') }}",
+            "targetAudience": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('targetAudience', 'Optional audience supplied by the user; otherwise an empty string.', 'string') }}",
+            "goal": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('goal', 'Optional article goal supplied by the user; otherwise an empty string.', 'string') }}",
+            "sourceUrls": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('sourceUrls', 'Optional whitespace-separated public HTTPS source URLs supplied by the user; otherwise an empty string.', 'string') }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            { "id": "sessionId", "displayName": "sessionId", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
+            { "id": "requestId", "displayName": "requestId", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
+            { "id": "domain", "displayName": "domain", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
+            { "id": "primaryKeyword", "displayName": "primaryKeyword", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
+            { "id": "chooseStrongestKeyword", "displayName": "chooseStrongestKeyword", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "boolean" },
+            { "id": "supportingKeywords", "displayName": "supportingKeywords", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
+            { "id": "targetAudience", "displayName": "targetAudience", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
+            { "id": "goal", "displayName": "goal", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
+            { "id": "sourceUrls", "displayName": "sourceUrls", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [2380, 680],
+      "id": "b5600000-0000-4000-8000-000000000201",
+      "name": "start_seo_article"
+    },
+    {
+      "parameters": {
+        "description": "Read-only source of truth for an SEO article job in this conversation. Use when the user asks whether the background article is ready, asks for the latest draft for a domain, or wants its download link. Pass the exact job ID when available; otherwise pass the saved business domain. It makes no model call, no paid call, and never changes or publishes an article.",
+        "source": "database",
+        "workflowId": { "__rl": true, "value": "phase13GetSeoArticle", "mode": "list", "cachedResultName": "58 - TOOL - get_seo_article" },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "sessionId": "={{ $('Validate and Normalise').item.json.sessionId }}",
+            "requestId": "={{ $('Validate and Normalise').item.json.requestId }}",
+            "jobId": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('jobId', 'Exact article job ID from this conversation, or an empty string.', 'string') }}",
+            "domain": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('domain', 'Saved business domain when the exact job ID is unavailable, or an empty string.', 'string') }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            { "id": "sessionId", "displayName": "sessionId", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
+            { "id": "requestId", "displayName": "requestId", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
+            { "id": "jobId", "displayName": "jobId", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
+            { "id": "domain", "displayName": "domain", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [2560, 680],
+      "id": "b5800000-0000-4000-8000-000000000201",
+      "name": "get_seo_article"
     }
   ],
   "pinData": {},
@@ -1422,6 +1492,20 @@
             "type": "ai_tool",
             "index": 0
           }
+        ]
+      ]
+    },
+    "start_seo_article": {
+      "ai_tool": [
+        [
+          { "node": "Project Partner Agent", "type": "ai_tool", "index": 0 }
+        ]
+      ]
+    },
+    "get_seo_article": {
+      "ai_tool": [
+        [
+          { "node": "Project Partner Agent", "type": "ai_tool", "index": 0 }
         ]
       ]
     },

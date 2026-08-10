@@ -18,6 +18,7 @@ In about 30 minutes you will have:
 - Local project tasks and conversation memory.
 - Editable Markdown skills.
 - Optional paid DataForSEO-backed domain and SEO research with durable evidence snapshots.
+- Background SEO article drafts grounded in saved research and verified public sources.
 - Confirmation-gated task creation and status changes.
 
 Everything runs locally as ordinary Node.js processes. Nothing is deployed to the cloud in this release.
@@ -242,6 +243,7 @@ multi-user authentication, RAG, queues, and autonomous background work.
 - [GitHub Desktop workflow](docs/GITHUB_DESKTOP.md)
 - [Connect the visual agent to Claude](docs/N8N_AGENT_SETUP.md)
 - [Set up paid DataForSEO domain research](docs/PAID_DOMAIN_RESEARCH.md)
+- [Create grounded SEO article drafts](docs/SEO_ARTICLE_WRITER.md)
 - [Customise the chat](docs/CUSTOMISE_CHAT.md)
 - [Customise Markdown skills](docs/CUSTOMISE_SKILLS.md)
 - [Use documents and long transcripts](docs/DOCUMENT_UPLOADS.md)

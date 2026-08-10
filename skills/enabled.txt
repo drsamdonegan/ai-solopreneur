@@ -10,5 +10,6 @@ deal-desk
 customer-support
 domain-research
 paid-domain-research
+seo-article-writer
 signal-research
 linkedin-profile-lookup

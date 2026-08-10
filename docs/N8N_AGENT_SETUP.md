@@ -131,6 +131,8 @@ Open `00 - START HERE - Project Partner`. The sticky notes describe the read, pr
 | **complete_domain_research** | Checks that bound job and saves only completed or partial results to local SQLite memory |
 | **get_business_memory** | Reads saved company, competitor, keyword, source, and warning facts |
 | **start_paid_domain_research** | Default domain-research path: standard DataForSEO evidence for Australia and English, with no ownership follow-up |
+| **start_seo_article** | Queue a grounded review draft from saved domain research; makes no new paid SEO call |
+| **get_seo_article** | Check a conversation-bound article job and get its local Markdown download when ready |
 | **complete_paid_domain_research** | Reads one exact paid attempt from this conversation without another provider call |
 | **get_paid_domain_research** | Reads saved rankings, SEO competitors, keywords, SERPs, costs, sources, and warnings |
 | **Confirm Stored Action** | Calls the deterministic confirmation workflow before either write worker |

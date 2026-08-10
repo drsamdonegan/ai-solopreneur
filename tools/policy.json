@@ -76,6 +76,30 @@
       "workflowId": "phase11GetPaidDomainResearch"
     },
     {
+      "id": "start_seo_article",
+      "risk": "bounded_local_write",
+      "available": true,
+      "modelCallable": true,
+      "mode": "explicit_request_required",
+      "workflowId": "phase13StartSeoArticle"
+    },
+    {
+      "id": "write_seo_article",
+      "risk": "bounded_external_read_and_local_write",
+      "available": true,
+      "modelCallable": false,
+      "mode": "internal_background_only",
+      "workflowId": "phase13WriteSeoArticle"
+    },
+    {
+      "id": "get_seo_article",
+      "risk": "read",
+      "available": true,
+      "modelCallable": true,
+      "mode": "automatic",
+      "workflowId": "phase13GetSeoArticle"
+    },
+    {
       "id": "delete_task",
       "risk": "destructive",
       "available": false,
