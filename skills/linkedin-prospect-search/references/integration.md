@@ -34,10 +34,11 @@ Authorization: Bearer YOUR_API_KEY
 x-api-version: 2025-11-01
 ```
 
-Store only the first header in an n8n **Header Auth** credential named
-`CRUSTDATA_API_KEY`. Set its Name to `Authorization`, its Value to
-`Bearer YOUR_API_KEY`, and restrict allowed domains to `api.crustdata.com`.
-The workflow adds the version header as a static non-secret value.
+Store only the raw API key in an n8n **Bearer Auth** credential named
+`CRUSTDATA_API_KEY`. Enter `YOUR_API_KEY` in the Bearer Token field without a
+`Bearer ` prefix and restrict allowed domains to `api.crustdata.com`. n8n adds
+the `Authorization: Bearer` scheme when it sends the request. The workflow adds
+the version header as a static non-secret value.
 
 Do not use Query Auth. Do not place the bearer value in workflow JSON, a Code
 node, an expression, a trace, an audit row, a prompt, or a repository file.
@@ -147,7 +148,7 @@ records without the appropriate public LinkedIn URL.
 
 Crustdata documents `GET /account/credits` and `GET /account/endpoints` as
 authenticated account endpoints. Use them manually when diagnosing balance or
-permissions, with the same Header Auth credential and API-version header. Do
+permissions, with the same Bearer Auth credential and API-version header. Do
 not expose their full payloads to the agent; the permissions response can be
 large. Check `/person/search` and `/company/search` specifically.
 

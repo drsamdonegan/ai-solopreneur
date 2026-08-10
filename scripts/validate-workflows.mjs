@@ -727,9 +727,9 @@ if (researchWorkflow) {
       request?.typeVersion === 4.4 &&
       request?.parameters?.method === "POST" &&
       request?.parameters?.authentication === "genericCredentialType" &&
-      request?.parameters?.genericAuthType === "httpHeaderAuth" &&
-      request?.credentials?.httpHeaderAuth?.name === "CRUSTDATA_API_KEY",
-    "Research HTTP node must use the CRUSTDATA_API_KEY Header Auth credential",
+      request?.parameters?.genericAuthType === "httpBearerAuth" &&
+      request?.credentials?.httpBearerAuth?.name === "CRUSTDATA_API_KEY",
+    "Research HTTP node must use the CRUSTDATA_API_KEY Bearer Auth credential",
   );
   check(
     requestHeaders.length === 1 &&
@@ -738,7 +738,7 @@ if (researchWorkflow) {
       !requestHeaders.some((header) =>
         /^authorization$/i.test(String(header?.name ?? "")),
       ),
-    "Research workflow must keep Authorization in the credential and pin the API version header",
+    "Research workflow must let Bearer Auth supply Authorization and pin the API version header",
   );
   check(
     request?.parameters?.url === "={{ $json.endpoint }}" &&

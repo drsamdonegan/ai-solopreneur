@@ -10,7 +10,7 @@ versioning for local workshop releases.
 - An optional Crustdata-backed people/company research workflow with an exact
   current-user credit-approval gate, public LinkedIn URL cleanup, bounded
   output, and no personal contact enrichment.
-- Header Auth setup and free/local test guidance for the optional LinkedIn
+- Bearer Auth setup and free/local test guidance for the optional LinkedIn
   Prospect Search skill.
 - Durable plaintext SQLite chat history stored in the Git-ignored local data
   folder.

@@ -17,7 +17,7 @@ This directory contains portable workflow exports for the local AI agent.
 | `workflows/40-confirm-task-write.json` | Enforces exact session binding, expiry, supersession, and single-use before a write |
 | `workflows/90-debug-agent-health.json` | Exposes a safe local health response without secrets |
 
-The workflow exports contain credential references named `Anthropic account` and `CRUSTDATA_API_KEY`, but no secret values. After import, create or select the real credentials inside n8n. Crustdata must use Header Auth with Name `Authorization`, Value `Bearer <key>`, and allowed domain `api.crustdata.com`; Query Auth will not work.
+The workflow exports contain credential references named `Anthropic account` and `CRUSTDATA_API_KEY`, but no secret values. After import, create or select the real credentials inside n8n. Crustdata must use Bearer Auth with the raw API key as the token and allowed domain `api.crustdata.com`; n8n adds the `Authorization: Bearer` prefix automatically. Header Auth and Query Auth are not used by this workflow.
 
 Use the repository import script rather than editing JSON by hand:
 

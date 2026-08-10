@@ -13,28 +13,27 @@ It can work in two ways:
   URLs. It does not request personal emails, phone numbers, or other contact
   enrichment.
 
-## Correct the n8n credential
+## Configure the n8n credential
 
-The credential shown in the screenshot is stored as **Query Auth**. Crustdata
-does not accept its current API key in a query parameter, so that credential
-will not authenticate this workflow.
+Crustdata requires bearer-token authentication. Use n8n's **Bearer Auth**
+credential so the saved secret contains only the raw API key and n8n adds the
+`Authorization: Bearer` prefix when it sends each request.
 
-n8n cannot reveal the masked value to convert it. Create a new **Header Auth**
-credential (or recreate the existing one after retrieving the key from your
-Crustdata account) with:
+n8n cannot reveal or migrate a masked value between credential types. Create a
+new **Bearer Auth** credential after retrieving the key from your Crustdata
+account:
 
 | n8n field | Value |
 | --- | --- |
 | Credential display name | `CRUSTDATA_API_KEY` |
-| Name | `Authorization` |
-| Value | `Bearer YOUR_ACTUAL_CRUSTDATA_KEY` |
+| Bearer Token | `YOUR_RAW_CRUSTDATA_KEY` (starts with `cd_`; do not add `Bearer`) |
 | Allowed HTTP Request Domains | `api.crustdata.com` |
 
 Do not paste the key into chat, a Code node, an environment file, or Git. The
 workflow supplies the non-secret `x-api-version: 2025-11-01` header itself.
 
 After importing the branch workflows, open
-`23 - TOOL - search_linkedin_prospects`, select the recreated
+`23 - TOOL - search_linkedin_prospects`, select the new
 `CRUSTDATA_API_KEY` credential on **Crustdata Indexed Search**, and save.
 
 ## Install only this skill

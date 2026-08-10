@@ -137,7 +137,8 @@ All are ignored where they may contain private or machine-specific data.
 
 - Add a provider-neutral `search_linkedin_prospects` agent tool with separate
   `people` and `companies` modes.
-- Keep the Crustdata API key only in an encrypted n8n Header Auth credential;
+- Keep the raw Crustdata API key only in an encrypted n8n Bearer Auth
+  credential so n8n adds the `Authorization: Bearer` scheme at request time;
   never put it in source, prompts, traces, audit rows, or tool output.
 - Use indexed Person Search and Company Search for bounded discovery. Apply
   industry, location, role, and headcount as explicit filters; use semantic
