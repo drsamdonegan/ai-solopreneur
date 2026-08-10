@@ -10,7 +10,7 @@ The supplied Python uses this existing helper:
 Helper("linkedin_people_search_crustdata").call(**search_params)
 ```
 
-That helper must already exist in the agent platform and must have its own Crustdata credential or managed connection. The local n8n agent does not define `params` or `Helper`, so the original snippet cannot run there unchanged. This branch instead includes `n8n/workflows/61-tool-lookup-linkedin-profile.json`, which implements the same bounded search and candidate-ranking contract with native n8n nodes and a saved Bearer Auth credential.
+That helper must already exist in the agent platform and must have its own Crustdata credential or managed connection. The local n8n agent does not define `params` or `Helper`, so the original snippet cannot run there unchanged. This repository instead includes `n8n/workflows/61-tool-lookup-linkedin-profile.json`, which implements the same bounded search and candidate-ranking contract with native n8n nodes and a saved Bearer Auth credential.
 
 Crustdata's current API documentation describes separate endpoints for person search and profile enrichment. A production connection therefore normally needs:
 
@@ -45,7 +45,7 @@ Expose these optional strings, requiring at least `full_name` or `email_address`
 
 Prefer a full name plus at least one corroborating field. The bundled matcher intentionally refuses to perform a name-search from an email alone because the provided people-search helper has no email parameter. Email-only matching needs a separately approved reverse-email lookup endpoint.
 
-The native n8n workflow reduces a loose industry phrase to at most four meaningful terms, then adds a nested `or` filter across Crustdata's searchable current-company industry, current-title, and headline fields. For example, `Consulting and business` becomes the useful term `consulting`, which can match the indexed value `Business Consulting and Services` instead of spending the result limit on unrelated people with the same name.
+The native n8n workflow reduces a loose industry phrase to at most four meaningful ranking terms, but deliberately does not make those terms hard provider filters. Provider taxonomies are narrower than ordinary user language and can otherwise remove the correct person before ranking. The provider search uses a contains match for the core name and a broad location scope. For Australian state capitals, it accepts the city or its state (for example, Melbourne or Victoria), so a metropolitan profile labelled `Armadale, Victoria` is not incorrectly excluded. The local matcher then scores professional titles such as `Dr`, exact core-name agreement, location, and industry or role context.
 
 ## Tool output
 

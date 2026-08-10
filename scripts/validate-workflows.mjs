@@ -746,9 +746,11 @@ if (linkedinLookupWorkflow) {
     /PAID_LOOKUP_APPROVAL_REQUIRED/.test(lookupValidation) &&
       /paid_lookup_confirmed/.test(lookupValidation) &&
       /maxCredits: 0\.30/.test(lookupValidation) &&
-      /industryFields/.test(lookupValidation) &&
-      /current\.company_industries/.test(lookupValidation),
-    "LinkedIn lookup must require fresh approval and apply supplied industry filters",
+      /basic_profile\.name', type: '\(\.\)'/.test(lookupValidation) &&
+      /australianCapitalRegions/.test(lookupValidation) &&
+      /inferredRegion/.test(lookupValidation) &&
+      !/industryFields|industryConditions/.test(lookupValidation),
+    "LinkedIn lookup must require fresh approval and keep discovery filters broad",
   );
   const providerCall = nodeByName(
     linkedinLookupWorkflow,
@@ -771,6 +773,8 @@ if (linkedinLookupWorkflow) {
       /host !== 'linkedin\.com'/.test(rankingCode) &&
       /structuredLocation/.test(rankingCode) &&
       /professionalText/.test(rankingCode) &&
+      /requested professional title/.test(rankingCode) &&
+      /industry or professional context/.test(rankingCode) &&
       !/return \/\^https:/.test(rankingCode),
     "LinkedIn lookup must use JSON-safe URL validation and evidence-rich ranking",
   );

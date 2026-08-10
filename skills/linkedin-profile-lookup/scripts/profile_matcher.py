@@ -42,7 +42,7 @@ FREE_EMAIL_DOMAINS = {
 }
 
 NAME_PREFIXES = {"dr", "doctor", "mr", "mrs", "ms", "miss", "prof", "professor"}
-NAME_SUFFIXES = {"do", "dds", "dmd", "esq", "jd", "md", "phd"}
+NAME_SUFFIXES = {"cem", "do", "dds", "dmd", "esq", "fgia", "jd", "md", "phd"}
 INDUSTRY_STOP = {
     "and",
     "business",
@@ -52,6 +52,24 @@ INDUSTRY_STOP = {
     "sector",
     "service",
     "services",
+}
+
+AUSTRALIAN_CAPITAL_REGIONS = {
+    "adelaide": "South Australia",
+    "brisbane": "Queensland",
+    "canberra": "Australian Capital Territory",
+    "darwin": "Northern Territory",
+    "hobart": "Tasmania",
+    "melbourne": "Victoria",
+    "perth": "Western Australia",
+    "sydney": "New South Wales",
+}
+
+HONORIFIC_ALIASES = {
+    "doctor": "dr",
+    "dr": "dr",
+    "prof": "prof",
+    "professor": "prof",
 }
 
 
@@ -72,6 +90,19 @@ def _normalise_name(value: Any) -> str:
     while tokens and tokens[-1] in NAME_SUFFIXES:
         tokens.pop()
     return " ".join(tokens)
+
+
+def _requested_honorific(value: Any) -> str:
+    tokens = _normalise(value).split()
+    return HONORIFIC_ALIASES.get(tokens[0], "") if tokens else ""
+
+
+def _inferred_region(parsed: Mapping[str, str]) -> str:
+    if "australia" not in _normalise(parsed.get("country_region")):
+        return ""
+    return AUSTRALIAN_CAPITAL_REGIONS.get(
+        _normalise(parsed.get("city_location")), ""
+    )
 
 
 def _industry_terms(value: Any) -> list[str]:
@@ -132,6 +163,10 @@ def build_search_params(parsed: Mapping[str, str]) -> dict[str, Any]:
         )
 
     name_parts = full_name.split()
+    while name_parts and _normalise(name_parts[0]) in NAME_PREFIXES:
+        name_parts.pop(0)
+    if len(name_parts) < 2:
+        raise ValueError("Provide the person's first and last name.")
     search_params: dict[str, Any] = {
         "search_type": "Performance optimized",
         "LIMIT": 10,
@@ -143,15 +178,16 @@ def build_search_params(parsed: Mapping[str, str]) -> dict[str, Any]:
     regions = [
         _text(parsed.get("city_location")),
         _text(parsed.get("state_province")),
+        _inferred_region(parsed),
         _text(parsed.get("country_region")),
     ]
     regions = list(dict.fromkeys(value for value in regions if value))
     if regions:
         search_params["REGION"] = regions
 
-    industry = _text(parsed.get("industry"))
-    if industry:
-        search_params["INDUSTRY"] = _industry_terms(industry) or [industry]
+    # Keep industry as ranking evidence. Provider-side industry taxonomies are
+    # often narrower than a user's wording and can exclude the correct person
+    # before the matcher gets a chance to compare candidates.
     return search_params
 
 
@@ -184,23 +220,36 @@ def score_profile(profile: Mapping[str, Any], parsed: Mapping[str, str]) -> dict
     contradictions: list[str] = []
 
     expected_name = _normalise_name(parsed.get("full_name"))
-    actual_name = _normalise_name(_field(profile, "name"))
+    raw_actual_name = _field(profile, "name")
+    actual_name = _normalise_name(raw_actual_name)
     if expected_name and actual_name:
         if expected_name == actual_name:
-            score += 60
-            evidence.append("exact name")
+            score += 54
+            evidence.append("exact core name")
         elif set(expected_name.split()) == set(actual_name.split()):
-            score += 55
+            score += 50
             evidence.append("same name tokens")
         elif set(expected_name.split()).issubset(set(actual_name.split())):
-            score += 42
+            score += 40
             evidence.append("partial name")
         else:
             contradictions.append("name differs")
 
+    requested_honorific = _requested_honorific(parsed.get("full_name"))
+    actual_name_tokens = set(_normalise(raw_actual_name).split())
+    if requested_honorific and (
+        requested_honorific in actual_name_tokens
+        or (requested_honorific == "dr" and "doctor" in actual_name_tokens)
+        or (requested_honorific == "prof" and "professor" in actual_name_tokens)
+    ):
+        score += 36
+        evidence.append("requested professional title")
+
     location = _candidate_text(profile, "location")
+    inferred_region = _normalise(_inferred_region(parsed))
+    city_matches_metro_region = bool(inferred_region and inferred_region in location)
     for field, points, mismatch_penalty, label in (
-        ("city_location", 12, 12, "city"),
+        ("city_location", 10, 12, "city"),
         ("state_province", 8, 8, "state or province"),
         ("country_region", 6, 10, "country or region"),
     ):
@@ -209,18 +258,26 @@ def score_profile(profile: Mapping[str, Any], parsed: Mapping[str, str]) -> dict
             if expected in location:
                 score += points
                 evidence.append(label)
-            else:
+            elif field != "city_location" or not city_matches_metro_region:
                 score -= mismatch_penalty
                 contradictions.append(f"{label} differs")
+    if not _text(parsed.get("state_province")) and city_matches_metro_region:
+        score += 8
+        evidence.append("metropolitan region")
 
     industry_terms = _industry_terms(parsed.get("industry"))
     industry_text = _candidate_text(
-        profile, "industry", "headline", "current_company", "current_title"
+        profile,
+        "industry",
+        "headline",
+        "current_company",
+        "current_title",
+        "summary",
     )
     if industry_terms and industry_text:
         matched_industries = [term for term in industry_terms if term in industry_text]
         if matched_industries:
-            score += 12
+            score += 10
             evidence.append("industry or professional context")
         else:
             score -= 6
@@ -431,7 +488,7 @@ def _self_test() -> None:
         },
     )
     assert honorific_match["match_status"] == "matched"
-    assert honorific_match["confidence"] == "high"
+    assert honorific_match["confidence"] == "medium"
     assert honorific_match["profile"]["linkedin_url"].endswith("/correct")
 
     consulting_params = parse_input(
@@ -442,22 +499,26 @@ def _self_test() -> None:
             "industry": "Consulting and business",
         }
     )
-    assert build_search_params(consulting_params)["INDUSTRY"] == ["consulting"]
+    consulting_search = build_search_params(consulting_params)
+    assert "INDUSTRY" not in consulting_search
+    assert consulting_search["FIRST_NAME"] == "Mark"
+    assert consulting_search["LAST_NAME"] == "Sinclair"
+    assert "Victoria" in consulting_search["REGION"]
     consulting_ranked = rank_profiles(
         [
             {
-                "name": "Mark Sinclair",
+                "name": "Dr. Mark Sinclair FGIA CEM",
                 "linkedin_url": "https://www.linkedin.com/in/consulting-match",
-                "headline": "Advisor in business consulting and services",
-                "location": "Melbourne, Victoria, Australia",
-                "industry": "Business Consulting and Services",
+                "headline": "Strategy, AI and technology transformation",
+                "location": "Armadale, Victoria, Australia",
+                "industry": "Education Management",
             },
             {
                 "name": "Mark Sinclair",
                 "linkedin_url": "https://www.linkedin.com/in/unrelated-match",
-                "headline": "Financial Controller",
+                "headline": "Advisor in business consulting and services",
                 "location": "Melbourne, Victoria, Australia",
-                "industry": "Construction",
+                "industry": "Business Consulting and Services",
             },
         ],
         consulting_params,
