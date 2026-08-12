@@ -1,9 +1,16 @@
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { chmodSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import type {
+  ArticleBriefData,
+  ArticleBriefRecord,
+  ArticleBriefStatus,
+  ArticleBusinessContext,
+  ArticleOpportunity,
+} from "./article-brief.js";
 
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 5;
 const DEFAULT_TITLE = "New conversation";
 const MAX_TITLE_LENGTH = 80;
 const MAX_SEARCH_LENGTH = 200;
@@ -169,6 +176,64 @@ export interface SeoSnapshotSummary {
   warningCount: number;
 }
 
+export type SeoArticleJobStatus =
+  | "queued"
+  | "running"
+  | "completed"
+  | "partial"
+  | "failed"
+  | "interrupted";
+
+export interface SeoArticleJobInput {
+  sessionId: string;
+  requestId: string;
+  domain: string;
+  briefId: string;
+  primaryKeyword: string;
+  supportingKeywords: string[];
+  input: Record<string, unknown>;
+}
+
+export interface SeoArticleJobRecord extends SeoArticleJobInput {
+  jobId: string;
+  status: SeoArticleJobStatus;
+  stage: string;
+  errorCode?: string;
+  errorMessage?: string;
+  latestVersionId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SeoArticleVersionInput {
+  status: "completed" | "partial";
+  domain: string;
+  primaryKeyword: string;
+  supportingKeywords: string[];
+  context: Record<string, unknown>;
+  plan: Record<string, unknown>;
+  markdown: string;
+  structuredData: Record<string, unknown>;
+  metadata: Record<string, unknown>;
+  answerBlocks: Array<Record<string, unknown>>;
+  faq: unknown[];
+  sources: unknown[];
+  claimLedger: unknown[];
+  qualityReport: Record<string, unknown>;
+  warnings: string[];
+  reviewStatus: "ready_for_review";
+  model: string;
+}
+
+export interface SeoArticleVersionRecord extends SeoArticleVersionInput {
+  versionId: string;
+  jobId: string;
+  versionNumber: number;
+  parentVersionId?: string;
+  downloadToken: string;
+  createdAt: string;
+}
+
 export interface BusinessMemorySummary {
   jobId: string;
   status: "completed" | "partial";
@@ -293,6 +358,61 @@ interface SeoSnapshotRow {
   updated_at: string;
 }
 
+interface SeoArticleJobRow {
+  job_id: string;
+  session_id: string;
+  request_id: string;
+  domain: string;
+  brief_id: string | null;
+  primary_keyword: string;
+  supporting_keywords_json: string;
+  input_json: string;
+  status: SeoArticleJobStatus;
+  stage: string;
+  error_code: string | null;
+  error_message: string | null;
+  latest_version_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface ArticleBriefRow {
+  brief_id: string;
+  session_id: string;
+  domain: string;
+  research_key: string;
+  status: ArticleBriefStatus;
+  brief_json: string;
+  created_at: string;
+  updated_at: string;
+}
+
+interface SeoArticleVersionRow {
+  version_id: string;
+  job_id: string;
+  version_number: number;
+  parent_version_id: string | null;
+  status: "completed" | "partial";
+  domain: string;
+  primary_keyword: string;
+  supporting_keywords_json: string;
+  context_json: string;
+  plan_json: string;
+  markdown: string;
+  structured_data_json: string;
+  metadata_json: string;
+  answer_blocks_json: string;
+  faq_json: string;
+  sources_json: string;
+  claim_ledger_json: string;
+  quality_report_json: string;
+  warnings_json: string;
+  review_status: "ready_for_review";
+  model: string;
+  download_token: string;
+  created_at: string;
+}
+
 function nowIso(): string {
   return new Date().toISOString();
 }
@@ -380,6 +500,68 @@ function seoSnapshotFromRow(row: SeoSnapshotRow): SeoSnapshotRecord {
     result.expiresAt = row.expires_at;
   }
   return result;
+}
+
+function seoArticleJobFromRow(row: SeoArticleJobRow): SeoArticleJobRecord {
+  return {
+    jobId: row.job_id,
+    sessionId: row.session_id,
+    requestId: row.request_id,
+    domain: row.domain,
+    briefId: row.brief_id ?? "",
+    primaryKeyword: row.primary_keyword,
+    supportingKeywords: JSON.parse(row.supporting_keywords_json) as string[],
+    input: JSON.parse(row.input_json) as Record<string, unknown>,
+    status: row.status,
+    stage: row.stage,
+    ...(row.error_code === null ? {} : { errorCode: row.error_code }),
+    ...(row.error_message === null ? {} : { errorMessage: row.error_message }),
+    ...(row.latest_version_id === null ? {} : { latestVersionId: row.latest_version_id }),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function articleBriefFromRow(row: ArticleBriefRow): ArticleBriefRecord {
+  const data = JSON.parse(row.brief_json) as ArticleBriefData;
+  return {
+    ...data,
+    briefId: row.brief_id,
+    sessionId: row.session_id,
+    domain: row.domain,
+    researchKey: row.research_key,
+    status: row.status,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function seoArticleVersionFromRow(row: SeoArticleVersionRow): SeoArticleVersionRecord {
+  return {
+    versionId: row.version_id,
+    jobId: row.job_id,
+    versionNumber: Number(row.version_number),
+    ...(row.parent_version_id === null ? {} : { parentVersionId: row.parent_version_id }),
+    status: row.status,
+    domain: row.domain,
+    primaryKeyword: row.primary_keyword,
+    supportingKeywords: JSON.parse(row.supporting_keywords_json) as string[],
+    context: JSON.parse(row.context_json) as Record<string, unknown>,
+    plan: JSON.parse(row.plan_json) as Record<string, unknown>,
+    markdown: row.markdown,
+    structuredData: JSON.parse(row.structured_data_json) as Record<string, unknown>,
+    metadata: JSON.parse(row.metadata_json) as Record<string, unknown>,
+    answerBlocks: JSON.parse(row.answer_blocks_json) as Array<Record<string, unknown>>,
+    faq: JSON.parse(row.faq_json) as unknown[],
+    sources: JSON.parse(row.sources_json) as unknown[],
+    claimLedger: JSON.parse(row.claim_ledger_json) as unknown[],
+    qualityReport: JSON.parse(row.quality_report_json) as Record<string, unknown>,
+    warnings: JSON.parse(row.warnings_json) as string[],
+    reviewStatus: row.review_status,
+    model: row.model,
+    downloadToken: row.download_token,
+    createdAt: row.created_at,
+  };
 }
 
 function encodeCursor(updatedAt: string, id: string): string {
@@ -617,10 +799,101 @@ export class ChatStore {
         `);
       });
     }
+    if (version < 4) {
+      this.transaction(() => {
+        this.database.exec(`
+          CREATE TABLE seo_article_jobs (
+            job_id TEXT PRIMARY KEY,
+            session_id TEXT NOT NULL,
+            request_id TEXT NOT NULL,
+            domain TEXT NOT NULL,
+            primary_keyword TEXT NOT NULL,
+            supporting_keywords_json TEXT NOT NULL,
+            input_json TEXT NOT NULL,
+            status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'completed', 'partial', 'failed', 'interrupted')),
+            stage TEXT NOT NULL,
+            error_code TEXT,
+            error_message TEXT,
+            latest_version_id TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            UNIQUE(session_id, request_id)
+          ) STRICT;
+
+          CREATE INDEX seo_article_jobs_session_updated
+          ON seo_article_jobs(session_id, updated_at DESC);
+
+          CREATE INDEX seo_article_jobs_domain_updated
+          ON seo_article_jobs(session_id, domain, updated_at DESC);
+
+          CREATE TABLE seo_article_versions (
+            version_id TEXT PRIMARY KEY,
+            job_id TEXT NOT NULL REFERENCES seo_article_jobs(job_id) ON DELETE CASCADE,
+            version_number INTEGER NOT NULL CHECK (version_number > 0),
+            parent_version_id TEXT,
+            status TEXT NOT NULL CHECK (status IN ('completed', 'partial')),
+            domain TEXT NOT NULL,
+            primary_keyword TEXT NOT NULL,
+            supporting_keywords_json TEXT NOT NULL,
+            context_json TEXT NOT NULL,
+            plan_json TEXT NOT NULL,
+            markdown TEXT NOT NULL,
+            structured_data_json TEXT NOT NULL,
+            metadata_json TEXT NOT NULL,
+            answer_blocks_json TEXT NOT NULL,
+            faq_json TEXT NOT NULL,
+            sources_json TEXT NOT NULL,
+            claim_ledger_json TEXT NOT NULL,
+            quality_report_json TEXT NOT NULL,
+            warnings_json TEXT NOT NULL,
+            review_status TEXT NOT NULL CHECK (review_status = 'ready_for_review'),
+            model TEXT NOT NULL,
+            download_token TEXT NOT NULL UNIQUE,
+            created_at TEXT NOT NULL,
+            UNIQUE(job_id, version_number)
+          ) STRICT;
+
+          CREATE INDEX seo_article_versions_job_created
+          ON seo_article_versions(job_id, created_at DESC);
+
+          PRAGMA user_version = 4;
+        `);
+      });
+    }
+    if (version < 5) {
+      this.transaction(() => {
+        this.database.exec(`
+          CREATE TABLE seo_article_briefs (
+            brief_id TEXT PRIMARY KEY,
+            session_id TEXT NOT NULL,
+            domain TEXT NOT NULL,
+            research_key TEXT NOT NULL,
+            status TEXT NOT NULL CHECK (status IN ('choosing', 'needs_details', 'writing', 'complete', 'failed')),
+            brief_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            UNIQUE(session_id, domain, research_key)
+          ) STRICT;
+
+          CREATE INDEX seo_article_briefs_session_updated
+          ON seo_article_briefs(session_id, updated_at DESC);
+
+          ALTER TABLE seo_article_jobs ADD COLUMN brief_id TEXT;
+
+          CREATE INDEX seo_article_jobs_brief
+          ON seo_article_jobs(brief_id, updated_at DESC);
+
+          PRAGMA user_version = 5;
+        `);
+      });
+    }
     this.database.prepare("SELECT rowid FROM message_search LIMIT 1").all();
     this.database.prepare("SELECT domain FROM business_memory LIMIT 1").all();
     this.database.prepare("SELECT job_id FROM domain_research_jobs LIMIT 1").all();
     this.database.prepare("SELECT snapshot_id FROM seo_snapshots LIMIT 1").all();
+    this.database.prepare("SELECT job_id FROM seo_article_jobs LIMIT 1").all();
+    this.database.prepare("SELECT version_id FROM seo_article_versions LIMIT 1").all();
+    this.database.prepare("SELECT brief_id FROM seo_article_briefs LIMIT 1").all();
   }
 
   private transaction<T>(operation: () => T): T {
@@ -1413,15 +1686,415 @@ export class ChatStore {
     });
   }
 
-  markPendingInterrupted(): number {
+  prepareArticleBrief(
+    sessionId: string,
+    domain: string,
+    researchKey: string,
+    data: ArticleBriefData,
+  ): ArticleBriefRecord {
+    return this.transaction(() => {
+      const existing = this.database
+        .prepare(
+          `SELECT * FROM seo_article_briefs
+           WHERE session_id = ? AND domain = ? AND research_key = ?`,
+        )
+        .get(sessionId, domain, researchKey) as ArticleBriefRow | undefined;
+      if (existing !== undefined && !["complete", "failed"].includes(existing.status)) {
+        return articleBriefFromRow(existing);
+      }
+      const timestamp = nowIso();
+      const briefId = existing?.brief_id ?? `brief-${randomUUID()}`;
+      const createdAt = existing?.created_at ?? timestamp;
+      this.database
+        .prepare(
+          `INSERT INTO seo_article_briefs(
+             brief_id, session_id, domain, research_key, status,
+             brief_json, created_at, updated_at
+           ) VALUES (?, ?, ?, ?, 'choosing', ?, ?, ?)
+           ON CONFLICT(session_id, domain, research_key) DO UPDATE SET
+             status = 'choosing', brief_json = excluded.brief_json,
+             updated_at = excluded.updated_at`,
+        )
+        .run(
+          briefId,
+          sessionId,
+          domain,
+          researchKey,
+          JSON.stringify(data),
+          createdAt,
+          timestamp,
+        );
+      const stored = this.getArticleBrief(sessionId, briefId);
+      if (stored === undefined) throw new Error("Stored article brief could not be read");
+      return stored;
+    });
+  }
+
+  getArticleBrief(sessionId: string, briefId: string): ArticleBriefRecord | undefined {
+    const row = this.database
+      .prepare("SELECT * FROM seo_article_briefs WHERE brief_id = ? AND session_id = ?")
+      .get(briefId, sessionId) as ArticleBriefRow | undefined;
+    return row === undefined ? undefined : articleBriefFromRow(row);
+  }
+
+  getLatestArticleBrief(
+    sessionId: string,
+    domain?: string,
+  ): ArticleBriefRecord | undefined {
+    const row = (domain === undefined
+      ? this.database
+          .prepare(
+            `SELECT * FROM seo_article_briefs
+             WHERE session_id = ? ORDER BY updated_at DESC LIMIT 1`,
+          )
+          .get(sessionId)
+      : this.database
+          .prepare(
+            `SELECT * FROM seo_article_briefs
+             WHERE session_id = ? AND domain = ? ORDER BY updated_at DESC LIMIT 1`,
+          )
+          .get(sessionId, domain)) as ArticleBriefRow | undefined;
+    return row === undefined ? undefined : articleBriefFromRow(row);
+  }
+
+  updateArticleBrief(
+    sessionId: string,
+    briefId: string,
+    update: {
+      status: ArticleBriefStatus;
+      selection?: ArticleOpportunity;
+      context?: ArticleBusinessContext;
+      missingFields?: string[];
+      linkedJobId?: string;
+    },
+  ): ArticleBriefRecord {
+    return this.transaction(() => {
+      const current = this.getArticleBrief(sessionId, briefId);
+      if (current === undefined) {
+        throw new Error("Article brief is not registered to this conversation");
+      }
+      const selection = update.selection ?? current.selection;
+      const linkedJobId = update.linkedJobId ?? current.linkedJobId;
+      const data: ArticleBriefData = {
+        schemaVersion: 1,
+        research: current.research,
+        opportunities: current.opportunities,
+        context: update.context ?? current.context,
+        missingFields: update.missingFields ?? current.missingFields,
+        ...(selection === undefined ? {} : { selection }),
+        ...(linkedJobId === undefined ? {} : { linkedJobId }),
+      };
+      this.database
+        .prepare(
+          `UPDATE seo_article_briefs
+           SET status = ?, brief_json = ?, updated_at = ?
+           WHERE brief_id = ? AND session_id = ?`,
+        )
+        .run(update.status, JSON.stringify(data), nowIso(), briefId, sessionId);
+      const stored = this.getArticleBrief(sessionId, briefId);
+      if (stored === undefined) throw new Error("Updated article brief could not be read");
+      return stored;
+    });
+  }
+
+  registerSeoArticleJob(input: SeoArticleJobInput): {
+    job: SeoArticleJobRecord;
+    created: boolean;
+  } {
+    return this.transaction(() => {
+      const existing = this.database
+        .prepare("SELECT * FROM seo_article_jobs WHERE session_id = ? AND request_id = ?")
+        .get(input.sessionId, input.requestId) as SeoArticleJobRow | undefined;
+      if (existing !== undefined) {
+        if (
+          existing.domain !== input.domain ||
+          (existing.brief_id ?? "") !== input.briefId ||
+          existing.primary_keyword !== input.primaryKeyword ||
+          existing.supporting_keywords_json !== JSON.stringify(input.supportingKeywords)
+        ) {
+          throw new Error("The article request ID is already used for different inputs");
+        }
+        if (input.briefId) {
+          const brief = this.getArticleBrief(input.sessionId, input.briefId);
+          if (brief !== undefined) {
+            const data: ArticleBriefData = {
+              schemaVersion: 1,
+              research: brief.research,
+              opportunities: brief.opportunities,
+              context: brief.context,
+              missingFields: [],
+              ...(brief.selection === undefined ? {} : { selection: brief.selection }),
+              linkedJobId: existing.job_id,
+            };
+            this.database
+              .prepare(
+                `UPDATE seo_article_briefs
+                 SET status = 'writing', brief_json = ?, updated_at = ?
+                 WHERE brief_id = ? AND session_id = ?`,
+              )
+              .run(
+                JSON.stringify(data),
+                nowIso(),
+                input.briefId,
+                input.sessionId,
+              );
+          }
+        }
+        return { job: seoArticleJobFromRow(existing), created: false };
+      }
+      const timestamp = nowIso();
+      const jobId = `article-${randomUUID()}`;
+      this.database
+        .prepare(
+          `INSERT INTO seo_article_jobs(
+             job_id, session_id, request_id, domain, brief_id, primary_keyword,
+             supporting_keywords_json, input_json, status, stage,
+             created_at, updated_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'queued', 'queued', ?, ?)`,
+        )
+        .run(
+          jobId,
+          input.sessionId,
+          input.requestId,
+          input.domain,
+          input.briefId || null,
+          input.primaryKeyword,
+          JSON.stringify(input.supportingKeywords),
+          JSON.stringify(input.input),
+          timestamp,
+          timestamp,
+        );
+      if (input.briefId) {
+        const brief = this.getArticleBrief(input.sessionId, input.briefId);
+        if (brief === undefined || brief.domain !== input.domain) {
+          throw new Error("Article brief is not registered to this conversation");
+        }
+        const data: ArticleBriefData = {
+          schemaVersion: 1,
+          research: brief.research,
+          opportunities: brief.opportunities,
+          context: brief.context,
+          missingFields: [],
+          ...(brief.selection === undefined ? {} : { selection: brief.selection }),
+          linkedJobId: jobId,
+        };
+        this.database
+          .prepare(
+            `UPDATE seo_article_briefs
+             SET status = 'writing', brief_json = ?, updated_at = ?
+             WHERE brief_id = ? AND session_id = ?`,
+          )
+          .run(JSON.stringify(data), timestamp, input.briefId, input.sessionId);
+      }
+      const stored = this.getSeoArticleJob(input.sessionId, jobId);
+      if (stored === undefined) throw new Error("Stored article job could not be read");
+      return { job: stored, created: true };
+    });
+  }
+
+  updateSeoArticleJob(
+    sessionId: string,
+    jobId: string,
+    update: {
+      status: SeoArticleJobStatus;
+      stage: string;
+      errorCode?: string;
+      errorMessage?: string;
+    },
+  ): SeoArticleJobRecord {
     const result = this.database
       .prepare(
-        `UPDATE messages
-         SET status = 'interrupted', error_code = 'REQUEST_INTERRUPTED'
-         WHERE status = 'pending'`,
+        `UPDATE seo_article_jobs
+         SET status = ?, stage = ?, error_code = ?, error_message = ?, updated_at = ?
+         WHERE job_id = ? AND session_id = ?`,
       )
-      .run();
-    return Number(result.changes);
+      .run(
+        update.status,
+        update.stage,
+        update.errorCode ?? null,
+        update.errorMessage ?? null,
+        nowIso(),
+        jobId,
+        sessionId,
+      );
+    if (Number(result.changes) !== 1) throw new Error("Article job is not registered to this conversation");
+    const stored = this.getSeoArticleJob(sessionId, jobId);
+    if (stored === undefined) throw new Error("Updated article job could not be read");
+    if (
+      stored.briefId &&
+      (update.status === "failed" || update.status === "interrupted")
+    ) {
+      this.updateArticleBrief(sessionId, stored.briefId, { status: "failed" });
+    }
+    return stored;
+  }
+
+  getSeoArticleJob(sessionId: string, jobId: string): SeoArticleJobRecord | undefined {
+    const row = this.database
+      .prepare("SELECT * FROM seo_article_jobs WHERE job_id = ? AND session_id = ?")
+      .get(jobId, sessionId) as SeoArticleJobRow | undefined;
+    return row === undefined ? undefined : seoArticleJobFromRow(row);
+  }
+
+  getLatestSeoArticleJob(sessionId: string, domain: string): SeoArticleJobRecord | undefined {
+    const row = this.database
+      .prepare(
+        `SELECT * FROM seo_article_jobs
+         WHERE session_id = ? AND domain = ?
+         ORDER BY updated_at DESC LIMIT 1`,
+      )
+      .get(sessionId, domain) as SeoArticleJobRow | undefined;
+    return row === undefined ? undefined : seoArticleJobFromRow(row);
+  }
+
+  saveSeoArticleVersion(
+    sessionId: string,
+    jobId: string,
+    input: SeoArticleVersionInput,
+  ): { job: SeoArticleJobRecord; version: SeoArticleVersionRecord } {
+    return this.transaction(() => {
+      const job = this.database
+        .prepare("SELECT * FROM seo_article_jobs WHERE job_id = ? AND session_id = ?")
+        .get(jobId, sessionId) as SeoArticleJobRow | undefined;
+      if (job === undefined) throw new Error("Article job is not registered to this conversation");
+      if (job.domain !== input.domain || job.primary_keyword !== input.primaryKeyword) {
+        throw new Error("Article result does not match the registered request");
+      }
+      const numberRow = this.database
+        .prepare("SELECT COALESCE(MAX(version_number), 0) + 1 AS next_number FROM seo_article_versions WHERE job_id = ?")
+        .get(jobId) as { next_number: number };
+      const versionId = randomUUID();
+      const timestamp = nowIso();
+      const downloadToken = randomBytes(32).toString("base64url");
+      this.database
+        .prepare(
+          `INSERT INTO seo_article_versions(
+             version_id, job_id, version_number, parent_version_id, status,
+             domain, primary_keyword, supporting_keywords_json, context_json,
+             plan_json, markdown, structured_data_json, metadata_json,
+             answer_blocks_json, faq_json, sources_json, claim_ledger_json,
+             quality_report_json, warnings_json, review_status, model,
+             download_token, created_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run(
+          versionId,
+          jobId,
+          Number(numberRow.next_number),
+          job.latest_version_id,
+          input.status,
+          input.domain,
+          input.primaryKeyword,
+          JSON.stringify(input.supportingKeywords),
+          JSON.stringify(input.context),
+          JSON.stringify(input.plan),
+          input.markdown,
+          JSON.stringify(input.structuredData),
+          JSON.stringify(input.metadata),
+          JSON.stringify(input.answerBlocks),
+          JSON.stringify(input.faq),
+          JSON.stringify(input.sources),
+          JSON.stringify(input.claimLedger),
+          JSON.stringify(input.qualityReport),
+          JSON.stringify(input.warnings),
+          input.reviewStatus,
+          input.model,
+          downloadToken,
+          timestamp,
+        );
+      this.database
+        .prepare(
+          `UPDATE seo_article_jobs
+           SET status = ?, stage = 'ready_for_review', error_code = NULL,
+               error_message = NULL, latest_version_id = ?, updated_at = ?
+           WHERE job_id = ? AND session_id = ?`,
+        )
+        .run(input.status, versionId, timestamp, jobId, sessionId);
+      if (job.brief_id !== null) {
+        this.database
+          .prepare(
+            `UPDATE seo_article_briefs
+             SET status = 'complete', updated_at = ?
+             WHERE brief_id = ? AND session_id = ?`,
+          )
+          .run(timestamp, job.brief_id, sessionId);
+      }
+      const storedJob = this.getSeoArticleJob(sessionId, jobId);
+      const version = this.getSeoArticleVersionForJob(sessionId, jobId, versionId);
+      if (storedJob === undefined || version === undefined) {
+        throw new Error("Stored article version could not be read");
+      }
+      return { job: storedJob, version };
+    });
+  }
+
+  getSeoArticleVersionForJob(
+    sessionId: string,
+    jobId: string,
+    versionId?: string,
+  ): SeoArticleVersionRecord | undefined {
+    const row = this.database
+      .prepare(
+        `SELECT v.* FROM seo_article_versions v
+         JOIN seo_article_jobs j ON j.job_id = v.job_id
+         WHERE j.session_id = ? AND v.job_id = ?
+           AND (? IS NULL OR v.version_id = ?)
+         ORDER BY v.version_number DESC LIMIT 1`,
+      )
+      .get(sessionId, jobId, versionId ?? null, versionId ?? null) as SeoArticleVersionRow | undefined;
+    return row === undefined ? undefined : seoArticleVersionFromRow(row);
+  }
+
+  getSeoArticleVersionByDownloadToken(token: string): SeoArticleVersionRecord | undefined {
+    const row = this.database
+      .prepare("SELECT * FROM seo_article_versions WHERE download_token = ?")
+      .get(token) as SeoArticleVersionRow | undefined;
+    return row === undefined ? undefined : seoArticleVersionFromRow(row);
+  }
+
+  getLatestSuccessfulSeoArticleVersion(
+    sessionId: string,
+    domain: string,
+  ): SeoArticleVersionRecord | undefined {
+    const row = this.database
+      .prepare(
+        `SELECT v.* FROM seo_article_versions v
+         JOIN seo_article_jobs j ON j.job_id = v.job_id
+         WHERE j.session_id = ? AND v.domain = ?
+         ORDER BY v.created_at DESC LIMIT 1`,
+      )
+      .get(sessionId, domain) as SeoArticleVersionRow | undefined;
+    return row === undefined ? undefined : seoArticleVersionFromRow(row);
+  }
+
+  markPendingInterrupted(): number {
+    return this.transaction(() => {
+      const messages = this.database
+        .prepare(
+          `UPDATE messages
+           SET status = 'interrupted', error_code = 'REQUEST_INTERRUPTED'
+           WHERE status = 'pending'`,
+        )
+        .run();
+      this.database
+        .prepare(
+          `UPDATE seo_article_jobs
+           SET status = 'interrupted', stage = 'interrupted',
+               error_code = 'WORKER_INTERRUPTED',
+               error_message = 'The article worker stopped before it finished.',
+               updated_at = ?
+           WHERE status IN ('queued', 'running')`,
+        )
+        .run(nowIso());
+      this.database
+        .prepare(
+          `UPDATE seo_article_briefs
+           SET status = 'failed', updated_at = ?
+           WHERE status = 'writing'`,
+        )
+        .run(nowIso());
+      return Number(messages.changes);
+    });
   }
 
   health(): { schemaVersion: number; quickCheck: string } {

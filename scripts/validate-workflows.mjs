@@ -24,6 +24,9 @@ const expectedFiles = [
   "53-tool-start-paid-domain-research.json",
   "54-tool-complete-paid-domain-research.json",
   "55-tool-get-paid-domain-research.json",
+  "56-tool-start-seo-article.json",
+  "57-internal-write-seo-article.json",
+  "58-tool-get-seo-article.json",
   "60-tool-find-signals.json",
   "61-tool-lookup-linkedin-profile.json",
   "90-debug-agent-health.json",
@@ -199,7 +202,7 @@ if (agentWorkflow) {
   );
   check(
     agentWorkflow.nodes.filter((node) => node.type !== "n8n-nodes-base.stickyNote")
-      .length <= 24,
+      .length <= 26,
     "Agent workflow must keep confirmation routing and tool wiring explainable",
   );
   check(
@@ -362,6 +365,8 @@ if (agentWorkflow) {
         "get_paid_domain_research",
         "find_signals",
         "lookup_linkedin_profile",
+        "start_seo_article",
+        "get_seo_article",
       ]),
     "Agent: only the reviewed task, domain-research, and signal-research tools may be connected",
   );
@@ -476,6 +481,21 @@ if (agentWorkflow) {
         linkedInLookupTool?.parameters?.description ?? "",
       ),
     "Agent: lookup_linkedin_profile must require per-search credit approval and exclude contact data",
+  );
+  const startSeoArticleTool = nodeByName(agentWorkflow, "start_seo_article");
+  check(
+    startSeoArticleTool?.parameters?.workflowId?.value === "phase13StartSeoArticle" &&
+      /background/i.test(startSeoArticleTool?.parameters?.description ?? "") &&
+      /no new DataForSEO purchase/i.test(startSeoArticleTool?.parameters?.description ?? "") &&
+      /never publishes/i.test(startSeoArticleTool?.parameters?.description ?? ""),
+    "Agent: start_seo_article must queue the reviewed no-publish, no-new-paid-search workflow",
+  );
+  const getSeoArticleTool = nodeByName(agentWorkflow, "get_seo_article");
+  check(
+    getSeoArticleTool?.parameters?.workflowId?.value === "phase13GetSeoArticle" &&
+      /Read-only source of truth/i.test(getSeoArticleTool?.parameters?.description ?? "") &&
+      /this conversation/i.test(getSeoArticleTool?.parameters?.description ?? ""),
+    "Agent: get_seo_article must remain conversation-bound and read-only",
   );
 
   const routeConfirmation = nodeByName(agentWorkflow, "Route Confirmation");
@@ -1416,7 +1436,8 @@ if (startPaidResearchWorkflow) {
   check(
     /jobId:null/.test(cacheShaping) &&
       /sourceJobId:s\.jobId/.test(cacheShaping) &&
-      /get_paid_domain_research/.test(cacheShaping),
+      /articleBrief/.test(cacheShaping) &&
+      /no DataForSEO charge was made/.test(cacheShaping),
     "cache hits must not masquerade as a new conversation-bound job",
   );
   check(
@@ -1449,6 +1470,96 @@ for (const file of [
       ) &&
       Object.keys(requests[0].credentials ?? {}).length === 0,
     `${workflow.name}: must remain a local read with no paid call`,
+  );
+}
+
+const startSeoArticleWorkflow = workflows.get("56-tool-start-seo-article.json");
+if (startSeoArticleWorkflow) {
+  const requests = startSeoArticleWorkflow.nodes.filter(
+    (node) => node.type === "n8n-nodes-base.httpRequest",
+  );
+  const queue = nodeByName(startSeoArticleWorkflow, "Queue Background Writer");
+  check(
+    startSeoArticleWorkflow.id === "phase13StartSeoArticle" &&
+      startSeoArticleWorkflow.meta?.toolRisk === "bounded_local_write" &&
+      startSeoArticleWorkflow.meta?.paidCalls === "none" &&
+      requests.every((node) =>
+        /^=?http:\/\/127\.0\.0\.1:3000\//.test(String(node.parameters?.url ?? "")),
+      ),
+    "start_seo_article must use only reviewed local storage and research reads",
+  );
+  check(
+    queue?.parameters?.workflowId?.value === "phase13WriteSeoArticle" &&
+      queue?.parameters?.options?.waitForSubWorkflow === false &&
+      startSeoArticleWorkflow.settings?.executionTimeout <= 30,
+    "start_seo_article must queue the background writer without waiting",
+  );
+  const registrationBody =
+    nodeByName(startSeoArticleWorkflow, "Register Article Job")?.parameters?.jsonBody ?? "";
+  const registrationCheck =
+    nodeByName(startSeoArticleWorkflow, "Check Job Registration")?.parameters?.jsCode ?? "";
+  check(
+    /selectionNumber/.test(registrationBody) &&
+      /chooseStrongestKeyword/.test(registrationBody) &&
+      /targetAudience/.test(registrationBody) &&
+      /offer/.test(registrationBody) &&
+      /price/.test(registrationBody) &&
+      /boundaries/.test(registrationBody) &&
+      /voice/.test(registrationBody) &&
+      /needs_selection/.test(registrationCheck) &&
+      /needs_details/.test(registrationCheck),
+    "start_seo_article must use the saved brief and ask only for missing essentials",
+  );
+}
+
+const writeSeoArticleWorkflow = workflows.get("57-internal-write-seo-article.json");
+if (writeSeoArticleWorkflow) {
+  const requests = writeSeoArticleWorkflow.nodes.filter(
+    (node) => node.type === "n8n-nodes-base.httpRequest",
+  );
+  const destinations = requests.map((node) => String(node.parameters?.url ?? ""));
+  check(
+    writeSeoArticleWorkflow.id === "phase13WriteSeoArticle" &&
+      writeSeoArticleWorkflow.meta?.modelCallable === false &&
+      writeSeoArticleWorkflow.meta?.paidCalls === "none" &&
+      writeSeoArticleWorkflow.settings?.executionTimeout === 1800 &&
+      destinations.every(
+        (url) =>
+          /^=?http:\/\/127\.0\.0\.1:3000\//.test(url) ||
+          url === "https://api.anthropic.com/v1/messages",
+      ),
+    "write_seo_article must remain an internal bounded compiler with reviewed destinations",
+  );
+  check(
+    destinations.filter((url) => url === "https://api.anthropic.com/v1/messages").length === 2 &&
+      /pages\.length<4/.test(
+        nodeByName(writeSeoArticleWorkflow, "Prepare Grounded Draft")?.parameters?.jsCode ?? "",
+      ) &&
+      /UNTRUSTED DATA/.test(
+        nodeByName(writeSeoArticleWorkflow, "Prepare Grounded Draft")?.parameters?.jsCode ?? "",
+      ) &&
+      /unsupported/.test(
+        nodeByName(writeSeoArticleWorkflow, "Inspect Repaired Draft")?.parameters?.jsCode ?? "",
+      ),
+    "write_seo_article must require four sources, resist prompt injection, and allow one repair only",
+  );
+}
+
+const getSeoArticleWorkflow = workflows.get("58-tool-get-seo-article.json");
+if (getSeoArticleWorkflow) {
+  const requests = getSeoArticleWorkflow.nodes.filter(
+    (node) => node.type === "n8n-nodes-base.httpRequest",
+  );
+  check(
+    getSeoArticleWorkflow.id === "phase13GetSeoArticle" &&
+      getSeoArticleWorkflow.meta?.toolRisk === "read" &&
+      getSeoArticleWorkflow.meta?.paidCalls === "none" &&
+      requests.length === 1 &&
+      /127\.0\.0\.1:3000\/api\/seo-article\/jobs/.test(
+        String(requests[0]?.parameters?.url ?? ""),
+      ) &&
+      Object.keys(requests[0]?.credentials ?? {}).length === 0,
+    "get_seo_article must remain one conversation-bound local read",
   );
 }
 
@@ -1655,6 +1766,7 @@ const REVIEWED_SKILL_IDS = [
   "weekly-status",
   "domain-research",
   "paid-domain-research",
+  "seo-article-writer",
 ];
 // Skills that ship switched off. A learner may enable any of them, so the
 // check below guarantees the reviewed set is still present and that nothing
@@ -1714,8 +1826,15 @@ check(
         ],
         ["complete_paid_domain_research", "read", "explicit_request_required"],
         ["get_paid_domain_research", "read", "automatic"],
+        ["start_seo_article", "bounded_local_write", "explicit_request_required"],
+        [
+          "write_seo_article",
+          "bounded_external_read_and_local_write",
+          "internal_background_only",
+        ],
+        ["get_seo_article", "read", "automatic"],
       ]),
-  "Tool policy must classify the reviewed task, free research, and paid research tools",
+  "Tool policy must classify the reviewed task, research, and article tools",
 );
 check(
   toolPolicy.tools

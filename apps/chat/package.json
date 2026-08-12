@@ -8,6 +8,7 @@
   },
   "scripts": {
     "build": "tsc --project tsconfig.json",
+    "test:seo-article": "npm run build && node ../../scripts/test-seo-article.mjs",
     "start": "node dist/server.js"
   },
   "dependencies": {

@@ -46,7 +46,10 @@
         "52-tool-get-business-memory.json",
         "53-tool-start-paid-domain-research.json",
         "54-tool-complete-paid-domain-research.json",
-        "55-tool-get-paid-domain-research.json"
+        "55-tool-get-paid-domain-research.json",
+        "56-tool-start-seo-article.json",
+        "57-internal-write-seo-article.json",
+        "58-tool-get-seo-article.json"
       ]
     },
     {
