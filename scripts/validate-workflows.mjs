@@ -466,6 +466,12 @@ if (agentWorkflow) {
       /explicitly approves one Crustdata search costing up to 0\.30 credits/i.test(
         linkedInLookupTool?.parameters?.description ?? "",
       ) &&
+      /Pass full_name exactly/.test(
+        linkedInLookupTool?.parameters?.description ?? "",
+      ) &&
+      /Do not normalize or shorten it/.test(
+        linkedInLookupTool?.parameters?.workflowInputs?.value?.full_name ?? "",
+      ) &&
       /never returns phone numbers, email addresses, contact data/i.test(
         linkedInLookupTool?.parameters?.description ?? "",
       ),
@@ -707,8 +713,12 @@ if (linkedInLookupWorkflow) {
       validationCode,
     ) &&
       /PAID_LOOKUP_APPROVAL_REQUIRED/.test(validationCode) &&
-      /maxCredits: 0\.30/.test(validationCode),
-    "LinkedIn lookup: per-search approval and 0.30-credit ceiling are missing",
+      /maxCredits: 0\.30/.test(validationCode) &&
+      /basic_profile\.name', type: '\(\.\)'/.test(validationCode) &&
+      /australianCapitalRegions/.test(validationCode) &&
+      /inferredRegion/.test(validationCode) &&
+      !/industryFields|industryConditions/.test(validationCode),
+    "LinkedIn lookup: approval, credit ceiling, or broad discovery rules are missing",
   );
   const provider = nodeByName(
     linkedInLookupWorkflow,
@@ -730,6 +740,12 @@ if (linkedInLookupWorkflow) {
   check(
     /profile_enriched: false/.test(rankingCode) &&
       /slice\(0, 3\)/.test(rankingCode) &&
+      /linkedinSlug/.test(rankingCode) &&
+      /structuredLocation/.test(rankingCode) &&
+      /professionalText/.test(rankingCode) &&
+      /professionalNetworkName/.test(rankingCode) &&
+      /requested professional title/.test(rankingCode) &&
+      /industry or professional context/.test(rankingCode) &&
       !/business_emails|personal_emails|phone_numbers|contact\./i.test(
         rankingCode,
       ),

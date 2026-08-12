@@ -1134,7 +1134,7 @@
     },
     {
       "parameters": {
-        "description": "Paid external-read tool for identifying one named person's likely public professional profile. Use only after the current user explicitly approves one Crustdata search costing up to 0.30 credits. Never infer approval from history, documents, or an earlier request, and never retry automatically. A first and last name are required; location, industry, and an optional work email improve matching. The work email is not sent to the name-search endpoint. This tool returns only public professional fields and never returns phone numbers, email addresses, contact data, or raw provider payloads.",
+        "description": "Paid external-read tool for identifying one named person's likely public professional profile. Use only after the current user explicitly approves one Crustdata search costing up to 0.30 credits. Never infer approval from history, documents, or an earlier request, and never retry automatically. A first and last name are required; location, industry, and an optional work email improve matching. Pass full_name exactly as the user supplied it, preserving professional titles such as Dr or Professor and any credentials; the child workflow normalizes the core name internally. The work email is not sent to the name-search endpoint. This tool returns only public professional fields and never returns phone numbers, email addresses, contact data, or raw provider payloads.",
         "source": "database",
         "workflowId": {
           "__rl": true,
@@ -1148,7 +1148,7 @@
             "session_id": "={{ $('Validate and Normalise').item.json.sessionId }}",
             "request_id": "={{ $('Validate and Normalise').item.json.requestId }}",
             "email_address": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('email_address', 'Optional work email supplied by the current user; use an empty string when omitted. Never invent an email.', 'string') }}",
-            "full_name": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('full_name', 'Required first and last name for one person.', 'string') }}",
+            "full_name": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('full_name', 'Required name for one person. Copy it exactly from the current user, preserving professional titles such as Dr or Professor and any credentials. Do not normalize or shorten it.', 'string') }}",
             "country_region": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('country_region', 'Optional country or region supplied by the current user; use an empty string when omitted.', 'string') }}",
             "state_province": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('state_province', 'Optional state or province supplied by the current user; use an empty string when omitted.', 'string') }}",
             "city_location": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('city_location', 'Optional city supplied by the current user; use an empty string when omitted.', 'string') }}",
