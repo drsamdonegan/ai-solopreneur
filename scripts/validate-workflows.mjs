@@ -16,6 +16,7 @@ const expectedFiles = [
   "30-tool-propose-create-task.json",
   "31-tool-propose-update-task-status.json",
   "40-confirm-task-write.json",
+  "61-tool-lookup-linkedin-profile.json",
   "90-debug-agent-health.json",
 ];
 const failures = [];
@@ -150,7 +151,7 @@ if (agentWorkflow) {
   );
   check(
     agentWorkflow.nodes.filter((node) => node.type !== "n8n-nodes-base.stickyNote")
-      .length <= 17,
+      .length <= 18,
     "Agent workflow must keep confirmation routing and tool wiring explainable",
   );
   check(
@@ -301,8 +302,13 @@ if (agentWorkflow) {
     .map(([name]) => name);
   check(
     JSON.stringify(connectedToolNames) ===
-      JSON.stringify(["list_tasks", "create_task", "update_task_status"]),
-    "Agent: only the reviewed read and proposal-only task tools may be connected",
+      JSON.stringify([
+        "list_tasks",
+        "create_task",
+        "update_task_status",
+        "lookup_linkedin_profile",
+      ]),
+    "Agent: only the reviewed task tools and paid LinkedIn lookup may be connected",
   );
 
   const createTool = nodeByName(agentWorkflow, "create_task");
@@ -316,6 +322,18 @@ if (agentWorkflow) {
     updateTool?.parameters?.workflowId?.value === "phase5ProposeTaskStatus" &&
       /proposal-only/i.test(updateTool?.parameters?.description ?? ""),
     "Agent: update_task_status must call only the proposal workflow",
+  );
+  const linkedinTool = nodeByName(agentWorkflow, "lookup_linkedin_profile");
+  check(
+    linkedinTool?.parameters?.workflowId?.value ===
+      "phase12LookupLinkedInProfile" &&
+      /0\.30 credits/.test(linkedinTool?.parameters?.description ?? "") &&
+      /explicitly approves/.test(linkedinTool?.parameters?.description ?? "") &&
+      /Pass full_name exactly/.test(linkedinTool?.parameters?.description ?? "") &&
+      /Do not normalize or shorten it/.test(
+        linkedinTool?.parameters?.workflowInputs?.value?.full_name ?? "",
+      ),
+    "Agent: paid LinkedIn lookup must retain its explicit credit approval boundary",
   );
 
   const routeConfirmation = nodeByName(agentWorkflow, "Route Confirmation");
@@ -490,7 +508,7 @@ if (skillSyncWorkflow) {
   check(
     /schemaVersion/.test(bundleValidation) &&
       /enabledSkills/.test(bundleValidation) &&
-      /combinedInstructions\.length > 24000/.test(bundleValidation) &&
+      /combinedInstructions\.length > 200000/.test(bundleValidation) &&
       /\[a-f0-9\]\{64\}/.test(bundleValidation),
     "Skill sync: bundle metadata, size, and source hash must be validated",
   );
@@ -694,6 +712,86 @@ if (updateWorkflow) {
   check(
     /INVALID_TASK_ID/.test(validation) && /INVALID_STATUS/.test(validation),
     "update_task_status must validate task ID and status",
+  );
+}
+
+const linkedinLookupWorkflow = workflows.get(
+  "61-tool-lookup-linkedin-profile.json",
+);
+if (linkedinLookupWorkflow) {
+  check(
+    linkedinLookupWorkflow.id === "phase12LookupLinkedInProfile" &&
+      linkedinLookupWorkflow.meta?.toolRisk === "paid_external_read" &&
+      linkedinLookupWorkflow.meta?.maximumCreditsPerRun === 0.3,
+    "LinkedIn lookup must retain its paid external-read metadata and credit ceiling",
+  );
+  const lookupInputs =
+    nodeByName(linkedinLookupWorkflow, "Tool Input")?.parameters?.workflowInputs
+      ?.values?.map((input) => input.name) ?? [];
+  check(
+    JSON.stringify(lookupInputs) ===
+      JSON.stringify([
+        "session_id",
+        "request_id",
+        "email_address",
+        "full_name",
+        "country_region",
+        "state_province",
+        "city_location",
+        "industry",
+        "paid_lookup_confirmed",
+      ]),
+    "LinkedIn lookup input schema changed unexpectedly",
+  );
+  const lookupValidation =
+    nodeByName(linkedinLookupWorkflow, "Validate Lookup Input")?.parameters
+      ?.jsCode ?? "";
+  check(
+    /PAID_LOOKUP_APPROVAL_REQUIRED/.test(lookupValidation) &&
+      /paid_lookup_confirmed/.test(lookupValidation) &&
+      /maxCredits: 0\.30/.test(lookupValidation) &&
+      /basic_profile\.name', type: '\(\.\)'/.test(lookupValidation) &&
+      /australianCapitalRegions/.test(lookupValidation) &&
+      /inferredRegion/.test(lookupValidation) &&
+      !/industryFields|industryConditions/.test(lookupValidation),
+    "LinkedIn lookup must require fresh approval and keep discovery filters broad",
+  );
+  const providerCall = nodeByName(
+    linkedinLookupWorkflow,
+    "Search Crustdata People",
+  );
+  check(
+    providerCall?.type === "n8n-nodes-base.httpRequest" &&
+      providerCall?.parameters?.method === "POST" &&
+      providerCall?.parameters?.url ===
+        "https://api.crustdata.com/person/search" &&
+      providerCall?.parameters?.genericAuthType === "httpBearerAuth" &&
+      providerCall?.credentials?.httpBearerAuth?.name === "CRUSTDATA_API_KEY",
+    "LinkedIn lookup must use the reviewed Crustdata endpoint and saved Bearer credential",
+  );
+  const rankingCode =
+    nodeByName(linkedinLookupWorkflow, "Rank Safe Candidates")?.parameters
+      ?.jsCode ?? "";
+  check(
+    /linkedinSlug/.test(rankingCode) &&
+      /host !== 'linkedin\.com'/.test(rankingCode) &&
+      /structuredLocation/.test(rankingCode) &&
+      /professionalText/.test(rankingCode) &&
+      /professionalNetworkName/.test(rankingCode) &&
+      /requested professional title/.test(rankingCode) &&
+      /industry or professional context/.test(rankingCode) &&
+      !/return \/\^https:/.test(rankingCode),
+    "LinkedIn lookup must use JSON-safe URL validation and evidence-rich ranking",
+  );
+  check(
+    linkedinLookupWorkflow.nodes
+      .filter((node) => node.type === "n8n-nodes-base.dataTable")
+      .every(
+        (node) =>
+          node.parameters?.dataTableId?.value === "tool_audit" &&
+          node.parameters?.operation === "insert",
+      ),
+    "LinkedIn lookup may write only one local tool-audit record",
   );
 }
 
@@ -908,6 +1006,7 @@ const OPTIONAL_SKILL_IDS = [
   "prospect-research",
   "deal-desk",
   "customer-support",
+  "linkedin-profile-lookup",
 ];
 
 const skillBundle = await compileSkills(join(projectRoot, "skills"));
@@ -923,7 +1022,7 @@ check(
   "Enabled skill list must contain only reviewed or shipped optional skills",
 );
 check(
-  skillBundle.combinedInstructions.length <= 24_000 &&
+  skillBundle.combinedInstructions.length <= 200_000 &&
     /^[a-f0-9]{64}$/.test(skillBundle.sourceHash),
   "Compiled skill bundle must remain bounded and content-addressed",
 );
@@ -941,8 +1040,13 @@ check(
         ["list_tasks", "read", "automatic"],
         ["create_task", "write", "confirmation_required"],
         ["update_task_status", "write", "confirmation_required"],
+        [
+          "lookup_linkedin_profile",
+          "paid_external_read",
+          "explicit_user_credit_approval_required",
+        ],
       ]),
-  "Tool policy must classify the reviewed read and write tools",
+  "Tool policy must classify the reviewed task tools and paid LinkedIn lookup",
 );
 check(
   toolPolicy.tools

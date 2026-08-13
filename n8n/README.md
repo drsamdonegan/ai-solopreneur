@@ -18,6 +18,8 @@ This directory contains portable workflow exports for the local AI agent.
 
 The workflow exports contain a credential reference named `Anthropic account`, but no API key. After import, create or select a real Anthropic credential inside n8n.
 
+The paid LinkedIn profile branch also includes optional workflow **61 - TOOL - lookup_linkedin_profile**. It uses an n8n Bearer Auth credential named `CRUSTDATA_API_KEY`; save only the raw `cd_...` value because n8n supplies `Bearer` in the HTTP header. The workflow refuses to call Crustdata unless the current user explicitly approves one lookup costing at most 0.30 credits.
+
 Use the repository import script rather than editing JSON by hand:
 
 ```bash

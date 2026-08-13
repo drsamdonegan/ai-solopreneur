@@ -1,0 +1,4 @@
+id: linkedin-profile-lookup
+name: LinkedIn Profile Lookup
+version: 1.0.0
+description: Match one person to a likely public professional profile using a separately connected, approved lookup provider, with confidence and ambiguity checks.

@@ -1,0 +1,386 @@
+{
+  "name": "61 - TOOL - lookup_linkedin_profile",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## LinkedIn profile lookup\n\nThis paid, read-only tool searches Crustdata's indexed professional-person dataset for one named person. It requires explicit approval for a maximum 0.30-credit search, ranks the returned candidates, and exposes only public professional fields. It never returns email addresses, phone numbers, contact records, or the raw provider payload.",
+        "height": 260,
+        "width": 620,
+        "color": 5
+      },
+      "id": "b6100000-0000-4000-8000-000000000000",
+      "name": "Lookup explanation",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1120,
+        -300
+      ]
+    },
+    {
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "session_id",
+              "type": "string"
+            },
+            {
+              "name": "request_id",
+              "type": "string"
+            },
+            {
+              "name": "email_address",
+              "type": "string"
+            },
+            {
+              "name": "full_name",
+              "type": "string"
+            },
+            {
+              "name": "country_region",
+              "type": "string"
+            },
+            {
+              "name": "state_province",
+              "type": "string"
+            },
+            {
+              "name": "city_location",
+              "type": "string"
+            },
+            {
+              "name": "industry",
+              "type": "string"
+            },
+            {
+              "name": "paid_lookup_confirmed",
+              "type": "boolean"
+            }
+          ]
+        }
+      },
+      "id": "b6100000-0000-4000-8000-000000000001",
+      "name": "Tool Input",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -1120,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const clean = (value, limit = 200) => typeof value === 'string' ? value.trim().slice(0, limit) : '';\nconst sessionId = clean($json.session_id, 100);\nconst requestId = clean($json.request_id, 100) || 'linkedin-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);\nconst emailAddress = clean($json.email_address, 254);\nconst fullName = clean($json.full_name, 160);\nconst countryRegion = clean($json.country_region, 100);\nconst stateProvince = clean($json.state_province, 100);\nconst cityLocation = clean($json.city_location, 100);\nconst industry = clean($json.industry, 180);\nconst normalise = (value) => String(value ?? '').normalize('NFKD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();\nconst industryStop = new Set(['and','business','services','service','company','industry','sector','professional']);\nconst industryTerms = industry\n  .toLowerCase()\n  .replace(/\\band\\b/g, ',')\n  .replaceAll(';', ',')\n  .replaceAll('/', ',')\n  .replaceAll('|', ',')\n  .split(',')\n  .map(normalise)\n  .filter((term) => term.length >= 3 && !industryStop.has(term))\n  .slice(0, 4);\nconst paidLookupConfirmed = $json.paid_lookup_confirmed === true;\nconst emailOk = !emailAddress || /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(emailAddress);\nconst nameTokens = normalise(fullName).split(' ').filter(Boolean);\nconst honorificAliases = { dr: 'dr', doctor: 'dr', prof: 'prof', professor: 'prof' };\nconst requestedHonorific = honorificAliases[nameTokens[0]] ?? '';\nconst searchName = fullName\n  .replace(/^(dr|doctor|mr|mrs|ms|miss|prof|professor)\\.?\\s+/i, '')\n  .replace(/\\s+(phd|md|mba|jd|esq)\\.?$/i, '')\n  .trim();\nconst australianCapitalRegions = {\n  adelaide: 'South Australia', brisbane: 'Queensland', canberra: 'Australian Capital Territory',\n  darwin: 'Northern Territory', hobart: 'Tasmania', melbourne: 'Victoria', perth: 'Western Australia',\n  sydney: 'New South Wales'\n};\nconst inferredRegion = normalise(countryRegion).includes('australia')\n  ? (australianCapitalRegions[normalise(cityLocation)] ?? '')\n  : '';\nlet errorCode = '';\nlet errorMessage = '';\nif (!searchName || searchName.split(/\\s+/).length < 2) {\n  errorCode = 'FULL_NAME_REQUIRED';\n  errorMessage = 'Provide the person\\'s first and last name before searching.';\n} else if (!emailOk) {\n  errorCode = 'INVALID_EMAIL';\n  errorMessage = 'The optional work email is not valid.';\n} else if (!paidLookupConfirmed) {\n  errorCode = 'PAID_LOOKUP_APPROVAL_REQUIRED';\n  errorMessage = 'Before searching, explicitly approve one Crustdata person search costing up to 0.30 credits.';\n}\nconst conditions = [{ field: 'basic_profile.name', type: '(.)', value: searchName }];\n// Location is never a provider filter. Crustdata returns HTTP 200 with\n// total_count 0 for basic_profile.location.full_location and for\n// basic_profile.location.country with either '(.)' or '=', so any location\n// condition silently empties the result set. City, state, country and\n// industry are scored locally in Rank Safe Candidates instead.\nconst searchScope = 'name only';\nconst searchBody = {\n  filters: conditions.length === 1 ? conditions[0] : { op: 'and', conditions },\n  fields: [\n    'metadata.updated_at',\n    'basic_profile',\n    'experience.employment_details.current',\n    'social_handles.professional_network_identifier.profile_url'\n  ],\n  limit: 10\n};\nconst maskedEmail = emailAddress && emailAddress.includes('@')\n  ? emailAddress[0] + '***@' + emailAddress.split('@').pop()\n  : '';\nreturn { json: {\n  valid: errorCode === '', errorCode, errorMessage, sessionId, requestId,\n  emailAddress, maskedEmail, fullName, searchName, requestedHonorific,\n  countryRegion, stateProvince, cityLocation, inferredRegion,\n  industry, industryTerms, paidLookupConfirmed, searchBody, searchScope, maxCredits: 0.30\n} };"
+      },
+      "id": "b6100000-0000-4000-8000-000000000002",
+      "name": "Validate Lookup Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -880,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "b6100000-0000-4000-8000-000000000003c",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b6100000-0000-4000-8000-000000000003",
+      "name": "Input Is Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -640,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.crustdata.com/person/search",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-version",
+              "value": "2025-11-01"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.searchBody) }}",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "b6100000-0000-4000-8000-000000000004",
+      "name": "Search Crustdata People",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -400,
+        -100
+      ],
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "phase12Crustdata",
+          "name": "CRUSTDATA_API_KEY"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const input = $('Validate Lookup Input').first().json;\nconst statusCode = Number($json.statusCode ?? 200);\nconst body = $json.body && typeof $json.body === 'object' ? $json.body : $json;\nconst headers = $json.headers && typeof $json.headers === 'object' ? $json.headers : {};\nconst creditsUsed = Number(headers['x-credits-used'] ?? headers['X-Credits-Used'] ?? 0) || 0;\nif (statusCode < 200 || statusCode >= 300) {\n  return { json: { response: { ok: false, match_status: 'unavailable', confidence: 'none', score: 0, evidence: [], profile: null, candidates: [], profile_enriched: false, credits_used: creditsUsed, message: 'The professional-data provider was unavailable (HTTP ' + statusCode + '). No automatic retry was made.' } } };\n}\nconst profiles = Array.isArray(body.profiles) ? body.profiles : [];\nconst normalise = (value) => String(value ?? '').normalize('NFKD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();\nconst ignoredNameTokens = new Set(['dr','doctor','mr','mrs','ms','miss','prof','professor','phd','md','mba','jd','esq','fgia','cem']);\nconst normaliseName = (value) => normalise(value).split(' ').filter((token) => !ignoredNameTokens.has(token)).join(' ');\nconst wantedName = normaliseName(input.fullName);\nconst wantedLocation = {\n  country: normalise(input.countryRegion),\n  state: normalise(input.stateProvince || input.inferredRegion),\n  city: normalise(input.cityLocation)\n};\nconst stop = new Set(['and','business','services','service','company','industry','sector','professional']);\nconst industryTerms = Array.isArray(input.industryTerms)\n  ? input.industryTerms.map(normalise).filter((term) => term.length >= 3 && !stop.has(term)).slice(0, 4)\n  : String(input.industry ?? '')\n      .toLowerCase()\n      .replace(/\\band\\b/g, ',')\n      .replaceAll(';', ',')\n      .replaceAll('/', ',')\n      .replaceAll('|', ',')\n      .split(',')\n      .map(normalise)\n      .filter((term) => term.length >= 3 && !stop.has(term))\n      .slice(0, 4);\nconst linkedinSlug = (value) => {\n  const url = String(value ?? '').trim();\n  const lower = url.toLowerCase();\n  const prefix = 'https://';\n  if (!lower.startsWith(prefix)) return '';\n  const afterScheme = lower.slice(prefix.length);\n  const firstSlash = afterScheme.indexOf('/');\n  if (firstSlash <= 0) return '';\n  const host = afterScheme.slice(0, firstSlash);\n  if (host !== 'linkedin.com' && !host.endsWith('.linkedin.com')) return '';\n  const pathAndSuffix = afterScheme.slice(firstSlash);\n  if (!pathAndSuffix.startsWith('/in/')) return '';\n  const slugAndSuffix = pathAndSuffix.slice(4);\n  let stopAt = slugAndSuffix.length;\n  for (const separator of ['/', '?', '#']) {\n    const position = slugAndSuffix.indexOf(separator);\n    if (position >= 0 && position < stopAt) stopAt = position;\n  }\n  const slug = slugAndSuffix.slice(0, stopAt);\n  const allowed = 'abcdefghijklmnopqrstuvwxyz0123456789%_.-';\n  return slug && [...slug].every((character) => allowed.includes(character)) ? slug : '';\n};\nconst safeUrl = (value) => linkedinSlug(value) ? String(value ?? '').trim() : '';\nconst requestedHonorific = String(input.requestedHonorific ?? '');\nconst honorificMatches = (name) => {\n  const tokens = normalise(name).split(' ');\n  if (requestedHonorific === 'dr') return tokens.includes('dr') || tokens.includes('doctor');\n  if (requestedHonorific === 'prof') return tokens.includes('prof') || tokens.includes('professor');\n  return false;\n};\nconst rows = profiles.map((raw) => {\n  const basic = raw.basic_profile && typeof raw.basic_profile === 'object' ? raw.basic_profile : {};\n  const location = basic.location && typeof basic.location === 'object' ? basic.location : {};\n  const current = raw.experience?.employment_details?.current;\n  const jobs = Array.isArray(current) ? current : [];\n  const primary = jobs.find((job) => job?.is_default === true) ?? jobs[0] ?? {};\n  const name = String(basic.name ?? '').trim();\n  const professionalNetworkName = String(basic.professional_network_name ?? '').trim();\n  const profileUrl = safeUrl(raw.social_handles?.professional_network_identifier?.profile_url);\n  const currentCompany = String(primary.name ?? primary.company_name ?? '').trim();\n  const currentTitle = String(basic.current_title ?? primary.title ?? '').trim();\n  const fullLocation = String(location.full_location ?? location.raw ?? '').trim();\n  const structuredLocation = [location.city, location.state, location.country].map((value) => String(value ?? '').trim()).filter(Boolean).join(', ');\n  const displayLocation = fullLocation || structuredLocation;\n  const industries = [...new Set(jobs.flatMap((job) => [\n    ...(Array.isArray(job?.company_industries) ? job.company_industries : []),\n    job?.company_professional_network_industry\n  ]).map((value) => String(value ?? '').trim()).filter(Boolean))];\n  let score = 0;\n  const evidence = [];\n  const actualName = normaliseName(professionalNetworkName || name);\n  if (wantedName && actualName === wantedName) { score += 54; evidence.push('exact core name'); }\n  else if (wantedName && actualName && wantedName.split(' ').every((token) => actualName.split(' ').includes(token))) { score += 40; evidence.push('partial name'); }\n  if (requestedHonorific && honorificMatches([professionalNetworkName, name].filter(Boolean).join(' '))) { score += 36; evidence.push('requested professional title'); }\n  const normalLocation = normalise([fullLocation, structuredLocation].filter(Boolean).join(' '));\n  for (const [field, points, label] of [['city',10,'city'],['state',8,input.stateProvince ? 'state or province' : 'metropolitan region'],['country',6,'country or region']]) {\n    if (wantedLocation[field] && normalLocation.includes(wantedLocation[field])) { score += points; evidence.push(label); }\n  }\n  const professionalText = normalise([\n    industries.join(' '),\n    basic.headline,\n    basic.summary,\n    currentTitle,\n    currentCompany,\n    ...jobs.flatMap((job) => [job?.title, job?.name, job?.company_name, job?.function_category, job?.description])\n  ].join(' '));\n  if (industryTerms.length && industryTerms.some((term) => professionalText.includes(term))) { score += 10; evidence.push('industry or professional context'); }\n  const profile = { name: professionalNetworkName || name || null, linkedin_url: profileUrl || null, headline: String(basic.headline ?? '').trim() || null, current_company: currentCompany || null, current_title: currentTitle || null, location: displayLocation || null, industry: industries.join(', ') || null, public_identifier: profileUrl ? linkedinSlug(profileUrl) : null };\n  return { score: Math.max(0, Math.min(100, score)), evidence, profile };\n}).filter((row) => row.profile.linkedin_url).sort((a, b) => b.score - a.score);\nif (rows.length === 0) {\n  return { json: { response: { ok: true, match_status: 'not_found', confidence: 'none', score: 0, evidence: [], profile: null, candidates: [], profile_enriched: false, credits_used: creditsUsed, total_matches: Number(body.total_count ?? 0), message: 'The provider returned no profile for this ' + String(input.searchScope || 'name') + ' search. Widen or correct a detail before approving another paid search.' } } };\n}\nconst top = rows[0];\nconst gap = top.score - (rows[1]?.score ?? 0);\nconst matched = top.score >= 76 && gap >= 10;\nconst confidence = matched ? (top.score >= 84 ? 'high' : 'medium') : (top.score >= 60 ? 'low' : 'none');\nreturn { json: { response: { ok: true, match_status: matched ? 'matched' : 'ambiguous', confidence, score: top.score, evidence: top.evidence, profile: matched ? top.profile : null, candidates: matched ? [] : rows.slice(0, 3), profile_enriched: false, credits_used: creditsUsed, total_matches: Number(body.total_count ?? rows.length), returned_matches: profiles.length, message: matched ? 'One likely public professional profile was identified. Verify it before relying on the match.' : 'Several people may match. No profile was selected; add a current employer, role, or more specific location before another paid search.' } } };"
+      },
+      "id": "b6100000-0000-4000-8000-000000000005",
+      "name": "Rank Safe Candidates",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -160,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const input = $('Validate Lookup Input').first().json;\nreturn { json: { response: { ok: false, match_status: 'unavailable', confidence: 'none', score: 0, evidence: [], profile: null, candidates: [], profile_enriched: false, credits_used: 0, error: { code: input.errorCode || 'INVALID_INPUT', message: input.errorMessage || 'The lookup input could not be read.' }, message: input.errorMessage || 'The lookup input could not be read.' } } };"
+      },
+      "id": "b6100000-0000-4000-8000-000000000006",
+      "name": "Shape Invalid Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -400,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const response = $json.response;\nconst input = $('Validate Lookup Input').first().json;\nconst error = response?.ok === false ? String(response.error?.message ?? response.message ?? 'Tool failed') : '';\nreturn { json: { occurredAt: new Date().toISOString(), sessionId: input.sessionId, requestId: input.requestId, toolName: 'lookup_linkedin_profile', proposedInput: JSON.stringify({ full_name: input.fullName, email_masked: input.maskedEmail, country_region: input.countryRegion, state_province: input.stateProvince, city_location: input.cityLocation, industry: input.industry, maximum_credits: input.maxCredits }), result: error ? 'error' : String(response.match_status ?? 'ok'), error, response } };"
+      },
+      "id": "b6100000-0000-4000-8000-000000000007",
+      "name": "Prepare Audit",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        80,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "value": "tool_audit",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "occurredAt": "={{ $json.occurredAt }}",
+            "sessionId": "={{ $json.sessionId }}",
+            "requestId": "={{ $json.requestId }}",
+            "toolName": "={{ $json.toolName }}",
+            "proposedInput": "={{ $json.proposedInput }}",
+            "result": "={{ $json.result }}",
+            "error": "={{ $json.error }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "b6100000-0000-4000-8000-000000000008",
+      "name": "Write Tool Audit",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        320,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const prepared = $('Prepare Audit').item.json;\nconst response = { ...prepared.response };\nif (!Number.isInteger($json.id)) response.auditWarning = 'The lookup result could not be written to the local tool audit.';\nreturn { json: response };"
+      },
+      "id": "b6100000-0000-4000-8000-000000000009",
+      "name": "Return Tool Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        560,
+        0
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Tool Input": {
+      "main": [
+        [
+          {
+            "node": "Validate Lookup Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Lookup Input": {
+      "main": [
+        [
+          {
+            "node": "Input Is Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Input Is Valid?": {
+      "main": [
+        [
+          {
+            "node": "Search Crustdata People",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Shape Invalid Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Crustdata People": {
+      "main": [
+        [
+          {
+            "node": "Rank Safe Candidates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rank Safe Candidates": {
+      "main": [
+        [
+          {
+            "node": "Prepare Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shape Invalid Input": {
+      "main": [
+        [
+          {
+            "node": "Prepare Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Audit": {
+      "main": [
+        [
+          {
+            "node": "Write Tool Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Tool Audit": {
+      "main": [
+        [
+          {
+            "node": "Return Tool Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "executionTimeout": 45,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true
+  },
+  "versionId": "b6100000-0000-4000-8000-000000000100",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "phase": 12,
+    "testedWithN8n": "2.30.5",
+    "toolRisk": "paid_external_read",
+    "authorization": "explicit-current-user-credit-approval",
+    "maximumCreditsPerRun": 0.3,
+    "externalWrite": "none",
+    "personalContactData": "not-requested-not-returned"
+  },
+  "tags": [
+    {
+      "id": "tagAgentCanDo",
+      "name": "What your agent can do"
+    }
+  ],
+  "id": "phase12LookupLinkedInProfile"
+}

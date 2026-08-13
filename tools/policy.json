@@ -28,6 +28,15 @@
       "executionWorkflowId": "phase4UpdateTaskStatus"
     },
     {
+      "id": "lookup_linkedin_profile",
+      "risk": "paid_external_read",
+      "available": true,
+      "modelCallable": true,
+      "mode": "explicit_user_credit_approval_required",
+      "workflowId": "phase12LookupLinkedInProfile",
+      "maximumCreditsPerRun": 0.3
+    },
+    {
       "id": "delete_task",
       "risk": "destructive",
       "available": false,
