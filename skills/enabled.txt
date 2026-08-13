@@ -3,13 +3,3 @@ project-assistant
 meeting-analysis
 task-capture
 weekly-status
-my-business
-lead-conversion
-prospect-research
-deal-desk
-customer-support
-domain-research
-paid-domain-research
-seo-article-writer
-signal-research
-linkedin-profile-lookup

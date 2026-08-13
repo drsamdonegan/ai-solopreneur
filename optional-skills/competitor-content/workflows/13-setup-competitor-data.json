@@ -1,0 +1,107 @@
+{
+  "id": "phase11CompetitorSetup",
+  "name": "13 - SETUP - Competitor Data",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "c1000000-0000-4000-8000-000000000001",
+      "name": "Run Setup Once",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [-360, 0]
+    },
+    {
+      "parameters": {
+        "resource": "table",
+        "operation": "create",
+        "tableName": "competitor_posts",
+        "columns": {
+          "column": [
+            { "name": "capturedAt", "type": "date" },
+            { "name": "sessionId", "type": "string" },
+            { "name": "competitor", "type": "string" },
+            { "name": "platform", "type": "string" },
+            { "name": "postedAt", "type": "string" },
+            { "name": "title", "type": "string" },
+            { "name": "excerpt", "type": "string" },
+            { "name": "url", "type": "string" },
+            { "name": "views", "type": "string" },
+            { "name": "likes", "type": "string" },
+            { "name": "comments", "type": "string" },
+            { "name": "shares", "type": "string" },
+            { "name": "vsMedian", "type": "string" },
+            { "name": "source", "type": "string" }
+          ]
+        },
+        "options": { "createIfNotExists": true }
+      },
+      "id": "c1000000-0000-4000-8000-000000000002",
+      "name": "Create Competitor Posts Table",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [-140, 0]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "return [{ json: { ok: true, message: 'The competitor_posts table is ready. You can now use the read_competitor_posts tool.' } }];"
+      },
+      "id": "c1000000-0000-4000-8000-000000000003",
+      "name": "Confirm Setup",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [80, 0]
+    },
+    {
+      "parameters": {
+        "content": "## Run this once\n\nSelect **Execute workflow** below. It creates one local table called `competitor_posts`, where everything the agent reads about a competitor is stored.\n\nNothing leaves your computer. The table starts empty.\n\nYou only need to do this once. Running it again is safe and changes nothing.",
+        "height": 260,
+        "width": 380,
+        "color": 4
+      },
+      "id": "c1000000-0000-4000-8000-000000000004",
+      "name": "Sticky Start Here",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-380, -320]
+    },
+    {
+      "parameters": {
+        "content": "## Before the tool will work\n\nTo read a competitor's YouTube channel you also need a **YouTube API Key** credential. See `docs/COMPETITOR_CONTENT.md` for the ten-minute setup.\n\nWithout it the tool still works: it reads their blog and whatever you paste in yourself.\n\nYour key is typed into n8n only. Never put it in a file, a chat message, or a screenshot.",
+        "height": 260,
+        "width": 380,
+        "color": 3
+      },
+      "id": "c1000000-0000-4000-8000-000000000005",
+      "name": "Sticky Key Reminder",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [40, -320]
+    }
+  ],
+  "connections": {
+    "Run Setup Once": {
+      "main": [[{ "node": "Create Competitor Posts Table", "type": "main", "index": 0 }]]
+    },
+    "Create Competitor Posts Table": {
+      "main": [[{ "node": "Confirm Setup", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "executionTimeout": 30,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true
+  },
+  "pinData": {},
+  "active": false,
+  "versionId": "95000000-0000-4000-8000-000000000301",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "phase": 11,
+    "testedWithN8n": "2.30.5"
+  },
+  "tags": [{ "id": "tagSetupOnce", "name": "Set up once" }]
+}

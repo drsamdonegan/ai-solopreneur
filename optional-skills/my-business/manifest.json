@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "id": "my-business",
+  "name": "My Business",
+  "requires": [],
+  "agentTools": [],
+  "policyEntries": [],
+  "policyRules": [],
+  "unavailableCapabilities": []
+}

@@ -17,6 +17,7 @@
     "preflight": "node scripts/local.mjs preflight",
     "import-workflows": "node scripts/local.mjs import-workflows",
     "sync-skills": "node scripts/local.mjs sync-skills",
+    "add-skill": "node optional-skills/_installer/add-skill.mjs",
     "export-workflows": "node scripts/local.mjs export-workflows",
     "backup": "node scripts/local.mjs backup",
     "inspect-chats": "node scripts/inspect-chat-history.mjs",

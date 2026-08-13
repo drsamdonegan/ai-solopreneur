@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "id": "lead-conversion",
+  "name": "Lead Conversion",
+  "requires": [
+    "my-business"
+  ],
+  "agentTools": [],
+  "policyEntries": [],
+  "policyRules": [],
+  "unavailableCapabilities": []
+}

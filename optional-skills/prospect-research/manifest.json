@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "id": "prospect-research",
+  "name": "Prospect Research",
+  "requires": [
+    "my-business"
+  ],
+  "agentTools": [],
+  "policyEntries": [],
+  "policyRules": [],
+  "unavailableCapabilities": []
+}

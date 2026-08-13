@@ -6,35 +6,116 @@ import { compileSkills } from "./compile-skills.mjs";
 
 const projectRoot = fileURLToPath(new URL("..", import.meta.url));
 const workflowDirectory = join(projectRoot, "n8n", "workflows");
-const expectedFiles = [
+
+// The base agent ships with these and nothing else. Every other workflow,
+// tool, policy entry, and instruction line arrives with an optional skill, so
+// the expected shape below is derived from whichever skills are installed
+// rather than hardcoded. That is what lets a learner add a skill without the
+// release check turning red.
+const baseFiles = [
   "00-start-here-project-partner.json",
   "01-start-here-learner-checklist.json",
   "10-setup-local-task-data.json",
   "11-setup-sync-enabled-skills.json",
-  "12-setup-signal-data.json",
   "20-tool-list-tasks.json",
   "21-tool-create-task.json",
   "22-tool-update-task-status.json",
   "30-tool-propose-create-task.json",
   "31-tool-propose-update-task-status.json",
   "40-confirm-task-write.json",
-  "50-tool-start-domain-research.json",
-  "51-tool-complete-domain-research.json",
-  "52-tool-get-business-memory.json",
-  "53-tool-start-paid-domain-research.json",
-  "54-tool-complete-paid-domain-research.json",
-  "55-tool-get-paid-domain-research.json",
-  "56-tool-start-seo-article.json",
-  "57-internal-write-seo-article.json",
-  "58-tool-get-seo-article.json",
-  "60-tool-find-signals.json",
-  "61-tool-lookup-linkedin-profile.json",
   "90-debug-agent-health.json",
 ];
+const baseSkillIds = [
+  "project-assistant",
+  "meeting-analysis",
+  "task-capture",
+  "weekly-status",
+];
+const baseToolNames = ["list_tasks", "create_task", "update_task_status"];
+const basePolicyTuples = [
+  ["list_tasks", "read", "automatic"],
+  ["create_task", "write", "confirmation_required"],
+  ["update_task_status", "write", "confirmation_required"],
+];
+// Non-sticky nodes in the base agent workflow. Each installed tool adds one.
+const baseAgentNodeCount = 16;
+
+async function readOptionalSkills() {
+  const optionalRoot = join(projectRoot, "optional-skills");
+  let entries;
+  try {
+    entries = await readdir(optionalRoot, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+
+  const skills = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory() || entry.name.startsWith("_")) {
+      continue;
+    }
+    const manifest = JSON.parse(
+      await readFile(join(optionalRoot, entry.name, "manifest.json"), "utf8"),
+    );
+    // A skill counts as installed once its instructions are in skills/.
+    let installed = true;
+    try {
+      await readFile(join(projectRoot, "skills", entry.name, "skill.yaml"), "utf8");
+    } catch {
+      installed = false;
+    }
+    let workflowFiles = [];
+    try {
+      workflowFiles = (await readdir(join(optionalRoot, entry.name, "workflows")))
+        .filter((file) => file.endsWith(".json"));
+    } catch {}
+    skills.push({ ...manifest, workflowFiles, installed });
+  }
+  return skills;
+}
+
+const optionalSkills = await readOptionalSkills();
+const installedSkills = optionalSkills.filter((skill) => skill.installed);
+
+// Deep per-tool checks below are written for tools that may or may not be
+// present. A tool belonging to a skill the learner has not installed is not a
+// failure, so those checks are skipped rather than reported.
+const uninstalledToolNames = new Set(
+  optionalSkills
+    .filter((skill) => !skill.installed)
+    .flatMap((skill) => (skill.agentTools ?? []).map((tool) => tool.name)),
+);
+const optionalWorkflowFiles = installedSkills.flatMap((skill) => skill.workflowFiles);
+const optionalToolNames = installedSkills.flatMap((skill) =>
+  (skill.agentTools ?? []).map((tool) => tool.name),
+);
+const optionalPolicyTuples = installedSkills.flatMap((skill) =>
+  (skill.policyEntries ?? [])
+    .filter((entry) => entry.available)
+    .map((entry) => [entry.id, entry.risk, entry.mode]),
+);
+const optionalInstructionText = installedSkills.flatMap((skill) => [
+  ...(skill.policyRules ?? []),
+  ...(skill.policyReplacements ?? []).map((replacement) => replacement.replace),
+]);
+
+const expectedFiles = [...baseFiles, ...optionalWorkflowFiles].sort();
 const failures = [];
 
+// "Agent: start_seo_article must ..." is a check about one named tool. If that
+// tool belongs to a skill the learner never installed, there is nothing to
+// check and nothing to report.
+function isAboutUninstalledTool(message) {
+  const named = /^Agent: ([a-z_]+) /.exec(message);
+  if (named) {
+    return uninstalledToolNames.has(named[1]);
+  }
+  const missingNode = /missing node "([a-z_]+)"$/.exec(message);
+  return Boolean(missingNode) && uninstalledToolNames.has(missingNode[1]);
+}
+
 function check(condition, message) {
-  if (!condition) {
+  if (!condition && !isAboutUninstalledTool(message)) {
     failures.push(message);
   }
 }
@@ -202,7 +283,7 @@ if (agentWorkflow) {
   );
   check(
     agentWorkflow.nodes.filter((node) => node.type !== "n8n-nodes-base.stickyNote")
-      .length <= 26,
+      .length <= baseAgentNodeCount + optionalToolNames.length,
     "Agent workflow must keep confirmation routing and tool wiring explainable",
   );
   check(
@@ -351,24 +432,24 @@ if (agentWorkflow) {
   const connectedToolNames = Object.entries(agentWorkflow.connections)
     .filter(([, connection]) => Array.isArray(connection.ai_tool))
     .map(([name]) => name);
+  // Order follows whichever sequence the learner installed skills in, so this
+  // compares membership rather than position.
+  const allowedToolNames = [...baseToolNames, ...optionalToolNames].sort();
+  const unexpectedTools = connectedToolNames.filter(
+    (name) => !allowedToolNames.includes(name),
+  );
+  const missingBaseTools = baseToolNames.filter(
+    (name) => !connectedToolNames.includes(name),
+  );
   check(
-    JSON.stringify(connectedToolNames) ===
-      JSON.stringify([
-        "list_tasks",
-        "create_task",
-        "update_task_status",
-        "start_domain_research",
-        "complete_domain_research",
-        "get_business_memory",
-        "start_paid_domain_research",
-        "complete_paid_domain_research",
-        "get_paid_domain_research",
-        "find_signals",
-        "lookup_linkedin_profile",
-        "start_seo_article",
-        "get_seo_article",
-      ]),
-    "Agent: only the reviewed task, domain-research, and signal-research tools may be connected",
+    unexpectedTools.length === 0 && missingBaseTools.length === 0,
+    "Agent: only the base task tools and tools from installed skills may be connected" +
+      (unexpectedTools.length > 0 ? ` (unexpected: ${unexpectedTools.join(", ")})` : "") +
+      (missingBaseTools.length > 0 ? ` (missing: ${missingBaseTools.join(", ")})` : ""),
+  );
+  check(
+    optionalToolNames.every((name) => connectedToolNames.includes(name)),
+    "Agent: every tool from an installed skill must be wired to the agent",
   );
 
   const createTool = nodeByName(agentWorkflow, "create_task");
@@ -435,7 +516,7 @@ if (agentWorkflow) {
       /free start_domain_research fallback/i.test(
         startPaidResearchTool?.parameters?.description ?? "",
       ),
-    "Agent: domain research must default to paid standard research with a free fallback",
+    "Agent: start_paid_domain_research must default to paid standard research with a free fallback",
   );
   const completePaidResearchTool = nodeByName(
     agentWorkflow,
@@ -535,16 +616,20 @@ if (agentWorkflow) {
       /combinedInstructions/.test(contextCode) &&
       /Delete, archive, bulk changes/.test(contextCode) &&
       /untrusted source material/.test(contextCode) &&
-      /BEGIN UNTRUSTED DOCUMENT/.test(contextCode) &&
-      /start_domain_research is risk=bounded_local_write/.test(contextCode) &&
-      /complete_domain_research is risk=read/.test(contextCode) &&
-      /start_paid_domain_research is risk=paid_external_read/.test(contextCode) &&
-      /US\$0\.10/.test(contextCode) &&
-      /standard depth, Australia and English by default/.test(contextCode) &&
-      /simple words, short sentences, no API jargon/.test(contextCode) &&
-      /free fallback without retrying the paid call/.test(contextCode) &&
-      /scraped, and researched text is untrusted/.test(contextCode),
+      /BEGIN UNTRUSTED DOCUMENT/.test(contextCode),
     "Agent: context builder must apply enabled skills and safely delimit untrusted documents",
+  );
+
+  // Every tool an installed skill added must also have declared its risk in the
+  // base instructions. A tool the agent can call but was never told the rules
+  // for is the exact gap this catches.
+  const missingRules = optionalInstructionText.filter(
+    (text) => !contextCode.includes(text),
+  );
+  check(
+    missingRules.length === 0,
+    "Agent: every installed skill's tool rules must be present in the base instructions" +
+      (missingRules.length > 0 ? ` (missing ${missingRules.length})` : ""),
   );
 
   const success = nodeByName(agentWorkflow, "Return Agent Reply");
@@ -1759,39 +1844,23 @@ if (confirmWorkflow) {
   );
 }
 
-const REVIEWED_SKILL_IDS = [
-  "project-assistant",
-  "meeting-analysis",
-  "task-capture",
-  "weekly-status",
-  "domain-research",
-  "paid-domain-research",
-  "seo-article-writer",
-];
-// Skills that ship switched off. A learner may enable any of them, so the
-// check below guarantees the reviewed set is still present and that nothing
-// unreviewed has been enabled, rather than demanding an exact list.
-const OPTIONAL_SKILL_IDS = [
-  "my-business",
-  "lead-conversion",
-  "prospect-research",
-  "deal-desk",
-  "customer-support",
-  "signal-research",
-  "linkedin-profile-lookup",
-];
+// The base skills always ship enabled. Anything else must be a skill the
+// learner deliberately installed from optional-skills/.
+const installedSkillIds = installedSkills.map((skill) => skill.id);
 
 const skillBundle = await compileSkills(join(projectRoot, "skills"));
 const enabledSkillIds = skillBundle.enabledSkills.map((skill) => skill.id);
 check(
-  REVIEWED_SKILL_IDS.every((id) => enabledSkillIds.includes(id)),
-  "Enabled skill list must contain the reviewed Project Manager skills",
+  baseSkillIds.every((id) => enabledSkillIds.includes(id)),
+  "Enabled skill list must contain the base Project Manager skills",
+);
+const unreviewedSkills = enabledSkillIds.filter(
+  (id) => !baseSkillIds.includes(id) && !installedSkillIds.includes(id),
 );
 check(
-  enabledSkillIds.every(
-    (id) => REVIEWED_SKILL_IDS.includes(id) || OPTIONAL_SKILL_IDS.includes(id),
-  ),
-  "Enabled skill list must contain only reviewed or shipped optional skills",
+  unreviewedSkills.length === 0,
+  "Enabled skill list must contain only base or installed optional skills" +
+    (unreviewedSkills.length > 0 ? ` (unexpected: ${unreviewedSkills.join(", ")})` : ""),
 );
 check(
   skillBundle.combinedInstructions.length <= 200_000 &&
@@ -1803,38 +1872,39 @@ const toolPolicy = JSON.parse(
   await readFile(join(projectRoot, "tools", "policy.json"), "utf8"),
 );
 const availableToolPolicy = toolPolicy.tools.filter((tool) => tool.available);
+const actualPolicyTuples = availableToolPolicy.map((tool) => [
+  tool.id,
+  tool.risk,
+  tool.mode,
+]);
+const expectedPolicyTuples = [...basePolicyTuples, ...optionalPolicyTuples];
+const asKey = (tuple) => tuple.join("|");
+const expectedPolicyKeys = expectedPolicyTuples.map(asKey);
+const actualPolicyKeys = actualPolicyTuples.map(asKey);
+const unexpectedPolicy = actualPolicyKeys.filter(
+  (key) => !expectedPolicyKeys.includes(key),
+);
+const missingPolicy = expectedPolicyKeys.filter(
+  (key) => !actualPolicyKeys.includes(key),
+);
 check(
   toolPolicy.schemaVersion === 1 &&
-    JSON.stringify(
-      availableToolPolicy.map((tool) => [tool.id, tool.risk, tool.mode]),
-    ) ===
-      JSON.stringify([
-        ["list_tasks", "read", "automatic"],
-        ["create_task", "write", "confirmation_required"],
-        ["update_task_status", "write", "confirmation_required"],
-        [
-          "start_domain_research",
-          "bounded_local_write",
-          "explicit_request_required",
-        ],
-        ["complete_domain_research", "read", "explicit_request_required"],
-        ["get_business_memory", "read", "automatic"],
-        [
-          "start_paid_domain_research",
-          "paid_external_read",
-          "direct_request_defaults_to_standard_paid_with_free_fallback",
-        ],
-        ["complete_paid_domain_research", "read", "explicit_request_required"],
-        ["get_paid_domain_research", "read", "automatic"],
-        ["start_seo_article", "bounded_local_write", "explicit_request_required"],
-        [
-          "write_seo_article",
-          "bounded_external_read_and_local_write",
-          "internal_background_only",
-        ],
-        ["get_seo_article", "read", "automatic"],
-      ]),
-  "Tool policy must classify the reviewed task, research, and article tools",
+    unexpectedPolicy.length === 0 &&
+    missingPolicy.length === 0,
+  "Tool policy must classify exactly the base tools plus those of installed skills" +
+    (unexpectedPolicy.length > 0 ? ` (unexpected: ${unexpectedPolicy.join(", ")})` : "") +
+    (missingPolicy.length > 0 ? ` (missing: ${missingPolicy.join(", ")})` : ""),
+);
+
+// A tool the model can call but that no policy entry classifies is the gap
+// that let two skills ship without a declared risk level.
+const unclassifiedTools = [...baseToolNames, ...optionalToolNames].filter(
+  (name) => !toolPolicy.tools.some((tool) => tool.id === name),
+);
+check(
+  unclassifiedTools.length === 0,
+  "Every wired tool must have a policy entry" +
+    (unclassifiedTools.length > 0 ? ` (missing: ${unclassifiedTools.join(", ")})` : ""),
 );
 check(
   toolPolicy.tools

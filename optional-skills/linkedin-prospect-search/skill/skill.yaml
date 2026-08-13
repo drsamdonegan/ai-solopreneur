@@ -1,0 +1,4 @@
+id: linkedin-prospect-search
+name: LinkedIn Prospect Search
+version: 1.1.0
+description: Build bounded LinkedIn company and person URL shortlists from publicly indexed web results with no paid prospect-data API key.

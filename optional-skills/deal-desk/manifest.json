@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "id": "deal-desk",
+  "name": "Deal Desk",
+  "requires": [
+    "my-business"
+  ],
+  "agentTools": [],
+  "policyEntries": [],
+  "policyRules": [],
+  "unavailableCapabilities": []
+}

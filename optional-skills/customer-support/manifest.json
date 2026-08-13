@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "id": "customer-support",
+  "name": "Customer Support",
+  "requires": [
+    "my-business"
+  ],
+  "agentTools": [],
+  "policyEntries": [],
+  "policyRules": [],
+  "unavailableCapabilities": []
+}

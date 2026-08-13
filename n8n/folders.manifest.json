@@ -37,38 +37,12 @@
       ]
     },
     {
-      "id": "skill-your-business",
-      "name": "3. Your business",
-      "description": "Researching a website you own and recalling what the agent already learned about the business.",
-      "workflows": [
-        "50-tool-start-domain-research.json",
-        "51-tool-complete-domain-research.json",
-        "52-tool-get-business-memory.json",
-        "53-tool-start-paid-domain-research.json",
-        "54-tool-complete-paid-domain-research.json",
-        "55-tool-get-paid-domain-research.json",
-        "56-tool-start-seo-article.json",
-        "57-internal-write-seo-article.json",
-        "58-tool-get-seo-article.json"
-      ]
-    },
-    {
-      "id": "skill-finding-customers",
-      "name": "4. Finding customers",
-      "description": "Searching public comments for people describing a problem you solve, and matching one named person to a likely public professional profile.",
-      "workflows": [
-        "60-tool-find-signals.json",
-        "61-tool-lookup-linkedin-profile.json"
-      ]
-    },
-    {
       "id": "skill-setup-and-health",
       "name": "5. Setup and health",
       "description": "Run-once plumbing and the health check. A learner rarely opens these, but they should be able to find them.",
       "workflows": [
         "10-setup-local-task-data.json",
         "11-setup-sync-enabled-skills.json",
-        "12-setup-signal-data.json",
         "90-debug-agent-health.json"
       ]
     }

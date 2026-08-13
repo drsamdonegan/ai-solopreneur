@@ -1,0 +1,285 @@
+{
+  "schemaVersion": 1,
+  "id": "seo-article-writer",
+  "name": "SEO Article Writer",
+  "requires": [
+    "paid-domain-research"
+  ],
+  "agentTools": [
+    {
+      "parameters": {
+        "description": "Prepare or start one grounded SEO article in the background. Use when the current user chooses article 1, 2 or 3, asks you to choose the best saved idea, supplies another topic, or directly asks for a blog article. It uses the saved research plan, makes no new DataForSEO purchase, asks only for missing essentials, and never publishes. If research is missing, run the default paid domain research first and use the free fallback if needed. Never ask about ownership. Pass the selected number exactly; a topic supplied by the user wins. If the tool returns needs_details, ask for all listed details in one short, plain-language question. Never call it twice for one request.",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "phase13StartSeoArticle",
+          "mode": "list",
+          "cachedResultName": "56 - TOOL - start_seo_article"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "sessionId": "={{ $('Validate and Normalise').item.json.sessionId }}",
+            "requestId": "={{ $('Validate and Normalise').item.json.requestId }}",
+            "domain": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('domain', 'Bare saved business domain for the requested article.', 'string') }}",
+            "primaryKeyword": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('primaryKeyword', 'Main topic stated by the user. Use an empty string when they chose a numbered idea or asked you to choose.', 'string') }}",
+            "selectionNumber": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('selectionNumber', 'The exact article number 1, 2 or 3 chosen by the user. Use 0 when no numbered choice was made.', 'number') }}",
+            "chooseStrongestKeyword": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('chooseStrongestKeyword', 'True only when the current user asks you to choose the strongest saved keyword opportunity.', 'boolean') }}",
+            "supportingKeywords": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('supportingKeywords', 'Optional comma-separated supporting keywords from the user; otherwise an empty string.', 'string') }}",
+            "targetAudience": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('targetAudience', 'Who the article is for, only when the user supplies or corrects it now; otherwise an empty string.', 'string') }}",
+            "offer": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('offer', 'What the business sells, only when the user supplies or corrects it now; otherwise an empty string.', 'string') }}",
+            "price": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('price', 'Pricing guidance supplied now, including do not mention price; otherwise an empty string.', 'string') }}",
+            "boundaries": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('boundaries', 'What the article must not promise or recommend, including no special limits when the user says so; otherwise an empty string.', 'string') }}",
+            "voice": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('voice', 'Writing style supplied or corrected now; otherwise an empty string.', 'string') }}",
+            "goal": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('goal', 'Optional article goal supplied by the user; otherwise an empty string.', 'string') }}",
+            "sourceUrls": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('sourceUrls', 'Optional whitespace-separated public HTTPS source URLs supplied by the user; otherwise an empty string.', 'string') }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "sessionId",
+              "displayName": "sessionId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "requestId",
+              "displayName": "requestId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "domain",
+              "displayName": "domain",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "primaryKeyword",
+              "displayName": "primaryKeyword",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "selectionNumber",
+              "displayName": "selectionNumber",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "number"
+            },
+            {
+              "id": "chooseStrongestKeyword",
+              "displayName": "chooseStrongestKeyword",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "boolean"
+            },
+            {
+              "id": "supportingKeywords",
+              "displayName": "supportingKeywords",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "targetAudience",
+              "displayName": "targetAudience",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "offer",
+              "displayName": "offer",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "price",
+              "displayName": "price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "boundaries",
+              "displayName": "boundaries",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "voice",
+              "displayName": "voice",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "goal",
+              "displayName": "goal",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "sourceUrls",
+              "displayName": "sourceUrls",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "id": "b5600000-0000-4000-8000-000000000201",
+      "name": "start_seo_article"
+    },
+    {
+      "parameters": {
+        "description": "Read-only source of truth for an SEO article job in this conversation. Use when the user asks whether the background article is ready, asks for the latest draft for a domain, or wants its download link. Pass the exact job ID when available; otherwise pass the saved business domain. It makes no model call, no paid call, and never changes or publishes an article.",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "phase13GetSeoArticle",
+          "mode": "list",
+          "cachedResultName": "58 - TOOL - get_seo_article"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "sessionId": "={{ $('Validate and Normalise').item.json.sessionId }}",
+            "requestId": "={{ $('Validate and Normalise').item.json.requestId }}",
+            "jobId": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('jobId', 'Exact article job ID from this conversation, or an empty string.', 'string') }}",
+            "domain": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('domain', 'Saved business domain when the exact job ID is unavailable, or an empty string.', 'string') }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "sessionId",
+              "displayName": "sessionId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "requestId",
+              "displayName": "requestId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "jobId",
+              "displayName": "jobId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "domain",
+              "displayName": "domain",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "id": "b5800000-0000-4000-8000-000000000201",
+      "name": "get_seo_article"
+    }
+  ],
+  "policyEntries": [
+    {
+      "id": "start_seo_article",
+      "risk": "bounded_local_write",
+      "available": true,
+      "modelCallable": true,
+      "mode": "explicit_request_required",
+      "workflowId": "phase13StartSeoArticle"
+    },
+    {
+      "id": "get_seo_article",
+      "risk": "read",
+      "available": true,
+      "modelCallable": true,
+      "mode": "automatic",
+      "workflowId": "phase13GetSeoArticle"
+    },
+    {
+      "id": "write_seo_article",
+      "risk": "bounded_external_read_and_local_write",
+      "available": true,
+      "modelCallable": false,
+      "mode": "internal_background_only",
+      "workflowId": "phase13WriteSeoArticle"
+    }
+  ],
+  "policyRules": [
+    "- start_seo_article is risk=bounded_local_write. Use it only when the current user explicitly asks to draft an article. It starts a local writing job and saves the draft to this conversation; it never publishes anything anywhere.",
+    "- get_seo_article is risk=read and is the source of truth for a draft started in this conversation. It reports a saved draft; it never writes one."
+  ],
+  "unavailableCapabilities": [],
+  "folders": [
+    {
+      "id": "skill-your-business",
+      "name": "3. Your business",
+      "description": "Researching a website you own and recalling what the agent already learned about the business.",
+      "workflows": [
+        "56-tool-start-seo-article.json",
+        "57-internal-write-seo-article.json",
+        "58-tool-get-seo-article.json"
+      ]
+    }
+  ]
+}

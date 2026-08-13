@@ -1,0 +1,117 @@
+{
+  "schemaVersion": 1,
+  "id": "competitor-content",
+  "name": "Competitor Content",
+  "requires": [],
+  "agentTools": [
+    {
+      "parameters": {
+        "description": "Read-only competitor research. Use only when the user explicitly asks to look at what a named competitor is posting. It reads that competitor's public YouTube channel and blog feed, scores every post against that same account's own typical post, and saves what it read locally. It never reads LinkedIn, Instagram, X or TikTok: for those, ask the user to paste the posts with their like and comment counts, and pass them through pastedPosts unchanged. It never posts, messages, or contacts anyone.",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "phase11ReadCompetitorPosts",
+          "mode": "list",
+          "cachedResultName": "62 - TOOL - read_competitor_posts"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "sessionId": "={{ $('Validate and Normalise').item.json.sessionId }}",
+            "competitor": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('competitor', `The competitor's business name as the user said it. Use an empty string if they only gave a web address.`, 'string') }}",
+            "siteUrl": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('siteUrl', `The competitor's public website as a bare domain such as example.com. Required.`, 'string') }}",
+            "youtubeUrl": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('youtubeUrl', `The competitor's YouTube channel link or @handle. Use an empty string when they did not give one.`, 'string') }}",
+            "pastedPosts": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('pastedPosts', `Posts the user pasted, copied through exactly as blocks separated by a line of three dashes, each with platform, date, likes, comments, shares, url and text fields. Use an empty string when they pasted nothing.`, 'string') }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "sessionId",
+              "displayName": "sessionId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "competitor",
+              "displayName": "competitor",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "siteUrl",
+              "displayName": "siteUrl",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "youtubeUrl",
+              "displayName": "youtubeUrl",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "pastedPosts",
+              "displayName": "pastedPosts",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "id": "55000000-0000-4000-8000-00000000000b",
+      "name": "read_competitor_posts"
+    }
+  ],
+  "policyEntries": [
+    {
+      "id": "read_competitor_posts",
+      "risk": "bounded_local_write",
+      "available": true,
+      "modelCallable": true,
+      "mode": "explicit_request_required",
+      "workflowId": "phase11ReadCompetitorPosts"
+    }
+  ],
+  "policyRules": [
+    "- read_competitor_posts is risk=bounded_external_read_and_local_write. Use it only when the current user explicitly names a competitor to look at. It reads that competitor's public YouTube channel and blog feed and saves what it read locally. It never reads LinkedIn, Instagram, X, or TikTok, and it never posts, messages, or contacts anyone."
+  ],
+  "unavailableCapabilities": [],
+  "setup": "Run the '13 - SETUP - competitor data' workflow once in n8n to create the local store.",
+  "folders": [
+    {
+      "id": "skill-finding-customers",
+      "name": "4. Finding customers",
+      "description": "Searching public comments for people describing a problem you solve, and matching one named person to a likely public professional profile.",
+      "workflows": [
+        "62-tool-read-competitor-posts.json"
+      ]
+    },
+    {
+      "id": "skill-setup-and-health",
+      "name": "5. Setup and health",
+      "description": "Run-once plumbing and the health check. A learner rarely opens these, but they should be able to find them.",
+      "workflows": [
+        "13-setup-competitor-data.json"
+      ]
+    }
+  ]
+}

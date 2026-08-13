@@ -176,10 +176,31 @@ check(
   ".gitignore must exclude generated instructor packs",
 );
 
+// The base agent ships exactly these. Optional skills add their own workflows
+// on the learner's machine, so this asserts the base is intact rather than
+// pinning a total that every new skill would have to come back and edit.
+const baseWorkflows = [
+  "00-start-here-project-partner.json",
+  "01-start-here-learner-checklist.json",
+  "10-setup-local-task-data.json",
+  "11-setup-sync-enabled-skills.json",
+  "20-tool-list-tasks.json",
+  "21-tool-create-task.json",
+  "22-tool-update-task-status.json",
+  "30-tool-propose-create-task.json",
+  "31-tool-propose-update-task-status.json",
+  "40-confirm-task-write.json",
+  "90-debug-agent-health.json",
+];
 const workflows = (
   await readdir(join(projectRoot, "n8n/workflows"), { withFileTypes: true })
 ).filter((entry) => entry.isFile() && entry.name.endsWith(".json"));
-check(workflows.length === 23, `Release must contain 23 workflows, found ${workflows.length}`);
+const workflowNames = workflows.map((entry) => entry.name);
+const missingBase = baseWorkflows.filter((name) => !workflowNames.includes(name));
+check(
+  missingBase.length === 0,
+  `Release must contain the ${baseWorkflows.length} base workflows, missing ${missingBase.join(", ")}`,
+);
 
 if (failures.length > 0) {
   for (const failure of failures) {
