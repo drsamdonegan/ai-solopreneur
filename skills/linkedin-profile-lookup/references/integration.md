@@ -1,8 +1,19 @@
 # Integration contract
 
+## Two modes
+
+| Mode | Trigger | Cost | Source |
+| --- | --- | --- | --- |
+| Paid | `lookup_linkedin_profile` is connected and a provider key is configured | up to 0.30 credits per search | Provider record |
+| Free | No provider tool available | none | Publicly indexed search results |
+
+Free mode is not a degraded error state; it is the supported no-key path, built on `build_public_queries` and `lookup_public` in `scripts/profile_matcher.py`. Both modes rank with the same scorer, so evidence is judged identically. Free mode returns `mode: "public_search"` and `credits_used: 0`, caps confidence at `medium` because a search snippet is weaker evidence than a provider record, and drops the snippet before presenting a profile so it is never shown as a structured location field. An answer must always say which mode produced it.
+
+Neither mode logs into LinkedIn, automates a logged-in session, or scrapes profile pages.
+
 ## Required connection
 
-The skill is instructions, not a network connector. To perform a live lookup, expose a read-only agent tool named `lookup_linkedin_profile` backed by an approved professional-data provider.
+The skill is instructions, not a network connector. To perform a live paid lookup, expose a read-only agent tool named `lookup_linkedin_profile` backed by an approved professional-data provider.
 
 The supplied Python uses this existing helper:
 
@@ -45,7 +56,7 @@ Expose these optional strings, requiring at least `full_name` or `email_address`
 
 Prefer a full name plus at least one corroborating field. The bundled matcher intentionally refuses to perform a name-search from an email alone because the provided people-search helper has no email parameter. Email-only matching needs a separately approved reverse-email lookup endpoint.
 
-The native n8n workflow reduces a loose industry phrase to at most four meaningful ranking terms, but deliberately does not make those terms hard provider filters. Provider taxonomies are narrower than ordinary user language and can otherwise remove the correct person before ranking. The agent must pass the name exactly as supplied, retaining titles such as `Dr`; the workflow removes them only from its core-name search while retaining them as ranking evidence. The provider search uses a contains match for the core name and a broad location scope. For Australian state capitals, it accepts the city or its state (for example, Melbourne or Victoria), so a metropolitan profile labelled `Armadale, Victoria` is not incorrectly excluded. The local matcher compares both `basic_profile.name` and `basic_profile.professional_network_name`, then scores the preserved professional title, core-name agreement, location, and industry or role context.
+The native n8n workflow reduces a loose industry phrase to at most four meaningful ranking terms, but deliberately does not make those terms hard provider filters. Provider taxonomies are narrower than ordinary user language and can otherwise remove the correct person before ranking. The agent must pass the name exactly as supplied, retaining titles such as `Dr`; the workflow removes them only from its core-name search while retaining them as ranking evidence. The provider search filters on two fields only: a contains match for the core name (`basic_profile.name`) and, when supplied, a contains match for the country (`basic_profile.location.country`). City and state are never sent as provider filters. Crustdata exposes `full_location` in its *responses* but not as a searchable field, and an unrecognised filter field is not rejected — the request returns HTTP 200 with `total_count: 0`, so a bad field name is indistinguishable from a genuine no-match. Restrict provider filters to documented searchable fields (`basic_profile.location.raw`, `.city`, `.state`, `.country`, `.continent`) and let the local matcher do the rest. City, state, and the inferred Australian metropolitan region stay as ranking evidence: for Australian state capitals the matcher accepts the city or its state (for example, Melbourne or Victoria), so a metropolitan profile labelled `Armadale, Victoria` still scores as a location match. The local matcher compares both `basic_profile.name` and `basic_profile.professional_network_name`, then scores the preserved professional title, core-name agreement, location, and industry or role context.
 
 ## Tool output
 

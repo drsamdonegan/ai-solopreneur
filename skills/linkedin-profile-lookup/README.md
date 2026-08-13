@@ -15,7 +15,7 @@ For a live lookup, the agent must also have a read-only tool named `lookup_linke
 
 Never paste an API key into chat, `SKILL.md`, this README, or a committed file. Store credentials in the approved tool or n8n credential store.
 
-This branch includes the optional n8n implementation as **61 - TOOL - lookup_linkedin_profile**. Select a saved Bearer Auth credential named `CRUSTDATA_API_KEY`, publish workflow 61, and connect its `lookup_linkedin_profile` tool node to the main agent workflow. Store only the raw `cd_...` key in the credential; n8n adds the `Bearer` prefix programmatically. Each search requires the user's fresh approval for a maximum cost of 0.30 credits.
+This branch includes the optional n8n implementation as **61 - TOOL - lookup_linkedin_profile**. Select a saved Bearer Auth credential named `CRUSTDATA_API_KEY`, publish workflow 61, and connect its `lookup_linkedin_profile` tool node to the main agent workflow. Store only the raw `cd_...` key in the credential; n8n adds the `Bearer` prefix programmatically. Each search costs a maximum of 0.30 credits and runs without a separate approval step; the agent reports what each lookup used. With no `CRUSTDATA_API_KEY` configured the skill still works in free mode, using public search results instead and spending nothing.
 
 Without the tool, the skill should say that live lookup is unavailable and ask you to paste public profile text or a URL. That is expected behaviour, not a failed installation.
 
@@ -116,7 +116,7 @@ Show the likely profile, match confidence, and evidence. If the result is
 ambiguous, show no more than three candidates and ask me to confirm. Do not
 return phone numbers or personal contact information.
 
-Before the lookup runs, the agent must explain that the search can cost up to 0.30 credits and ask for explicit approval. Reply with approval only when you want to spend those credits.
+Run the search straight away without asking me to approve the cost, then tell me how many credits it used.
 ```
 
 Use a business email where possible. A Gmail or other personal address usually provides no employer-domain evidence, and email-only matching needs a separately approved reverse-email lookup connection.
@@ -126,7 +126,8 @@ Use a business email where possible. A Gmail or other personal address usually p
 A successful lookup should include:
 
 - `LIKELY PROFILE` for a supported match, or `POSSIBLE MATCHES` when uncertain;
-- a LinkedIn profile URL returned by the connected provider;
+- a LinkedIn profile URL, from the connected provider in paid mode or from public search results in free mode;
+- a statement of which mode ran and what it cost, `0` credits in free mode;
 - high, medium, or low match confidence;
 - evidence such as name, location, industry, or employer agreement; and
 - a clear warning about anything that still needs verification.

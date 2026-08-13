@@ -411,6 +411,153 @@ def lookup_with_helper(
     return result
 
 
+def _core_name(full_name: Any) -> str:
+    parts = _text(full_name).split()
+    while parts and _normalise(parts[0]) in NAME_PREFIXES:
+        parts.pop(0)
+    while parts and _normalise(parts[-1]).strip(".") in NAME_SUFFIXES:
+        parts.pop()
+    return " ".join(parts)
+
+
+def _quote(value: str) -> str:
+    return '"' + value.replace('"', "") + '"'
+
+
+def build_public_queries(parsed: Mapping[str, str]) -> list[dict[str, str]]:
+    """Key-free public-search queries for one person, narrow to broad.
+
+    Used when no provider tool is connected. Only the person's core name and one
+    location component ever constrain a query. Industry wording and honorifics
+    stay ranking evidence: quoting them would ask a search engine for an exact
+    string no page contains, and the empty result would look like an absence.
+    """
+    core_name = _core_name(parsed.get("full_name"))
+    if not core_name:
+        return []
+    name = _quote(core_name)
+    places = [
+        _text(parsed.get(key))
+        for key in ("city_location", "state_province", "country_region")
+    ]
+    place = next((value for value in places if value), "")
+    domain = _email_domain(_text(parsed.get("email_address")))
+    domain_stem = domain.split(".", 1)[0] if domain not in FREE_EMAIL_DOMAINS else ""
+
+    plan: list[dict[str, str]] = []
+    if place:
+        plan.append(
+            {
+                "scope": "name and place",
+                "query": f"site:linkedin.com/in/ {name} {_quote(place)}",
+            }
+        )
+    if len(domain_stem) >= 3:
+        plan.append(
+            {
+                "scope": "name and employer",
+                "query": f"site:linkedin.com/in/ {name} {_quote(domain_stem)}",
+            }
+        )
+    plan.append({"scope": "name only", "query": f"site:linkedin.com/in/ {name}"})
+    plan.append(
+        {
+            "scope": "off-site fallback",
+            "query": f"{name} LinkedIn {_quote(place) if place else ''}".strip(),
+        }
+    )
+    return plan
+
+
+def _result_as_profile(candidate: Mapping[str, Any]) -> dict[str, Any]:
+    """Shape a public search result like a provider profile for scoring."""
+    title = _text(candidate.get("title"))
+    snippet = _text(candidate.get("snippet"))
+    name = re.split(r"\s*[|–-]\s*LinkedIn", title, maxsplit=1)[0].strip()
+    name = re.split(r"\s+[-–|]\s+", name, maxsplit=1)[0].strip()
+    return {
+        "name": name,
+        "linkedin_url": _text(candidate.get("url")),
+        "headline": title,
+        "summary": snippet,
+        "location": snippet,
+    }
+
+
+def _present_public_profile(profile: Any) -> None:
+    """Strip scoring scaffolding from a profile built out of a search snippet."""
+    if not isinstance(profile, dict):
+        return
+    headline = profile.get("headline")
+    if isinstance(headline, str):
+        cleaned = re.split(r"\s*[|–-]\s*LinkedIn\s*$", headline, maxsplit=1)[0].strip()
+        profile["headline"] = cleaned or None
+    # `location` carried the whole snippet so the scorer could see place names.
+    # A snippet is not a location field, so it is not presented as one.
+    profile.pop("location", None)
+
+
+def lookup_public(
+    params: Mapping[str, Any], candidates: Sequence[Mapping[str, Any]] = ()
+) -> dict[str, Any]:
+    """Free, no-key lookup from public search results.
+
+    Returns the same stable shape as the paid path, with `mode` set so an answer
+    can never present public-search evidence as provider data.
+    """
+    parsed = parse_input(params)
+    queries = build_public_queries(parsed)
+    masked_email = _mask_email(parsed["email_address"])
+    if not queries:
+        return {
+            "ok": False,
+            "mode": "public_search",
+            "match_status": "unavailable",
+            "confidence": "none",
+            "score": 0,
+            "evidence": [],
+            "profile": None,
+            "candidates": [],
+            "profile_enriched": False,
+            "credits_used": 0,
+            "email": masked_email or None,
+            "queries": [],
+            "message": "Provide the person's first and last name to build a public search.",
+        }
+
+    usable = [item for item in candidates if isinstance(item, Mapping)]
+    ranked = rank_profiles([_result_as_profile(item) for item in usable], parsed)
+    for item in ranked:
+        _present_public_profile(item.get("profile"))
+    result = choose_match(ranked)
+    _present_public_profile(result.get("profile"))
+    for item in result.get("candidates", []):
+        _present_public_profile(item.get("profile"))
+    # Public snippets are weaker evidence than a provider record, so the free
+    # path never claims high confidence however well a snippet happens to score.
+    if result.get("confidence") == "high":
+        result["confidence"] = "medium"
+    result["ok"] = True
+    result["mode"] = "public_search"
+    result["credits_used"] = 0
+    result["email"] = masked_email or None
+    result["queries"] = [step["query"] for step in queries]
+    result["query_plan"] = queries
+    if not usable:
+        result["message"] = (
+            "No provider tool is connected, so no paid lookup ran and no credits "
+            "were used. Run these public searches and pass the results back in. "
+            "An empty result is not evidence that the person has no profile."
+        )
+    else:
+        result["message"] = (
+            "Identified from publicly indexed search results, not a provider "
+            "record. No credits were used. Treat it as a lead to verify, and "
+            "never describe it as a LinkedIn scrape or a confirmed profile."
+        )
+    return result
+
+
 def _self_test() -> None:
     params = {
         "email_address": "alex@riverhealth.example",
@@ -535,6 +682,69 @@ def _self_test() -> None:
     assert consulting_ranked[0]["score"] - consulting_ranked[1]["score"] >= 10
 
 
+def _self_test_public() -> None:
+    params = {
+        "full_name": "Dr Sam Donegan",
+        "email_address": "sam@mlai.au",
+        "country_region": "Australia",
+        "industry": "IT",
+    }
+
+    plan = build_public_queries(parse_input(params))
+    scopes = [step["scope"] for step in plan]
+    assert scopes == [
+        "name and place",
+        "name and employer",
+        "name only",
+        "off-site fallback",
+    ]
+    for step in plan:
+        # The honorific and the industry wording must never constrain a query.
+        assert '"Dr Sam Donegan"' not in step["query"]
+        assert '"IT"' not in step["query"]
+    assert plan[0]["query"] == 'site:linkedin.com/in/ "Sam Donegan" "Australia"'
+    assert plan[1]["query"] == 'site:linkedin.com/in/ "Sam Donegan" "mlai"'
+
+    # A free email must not be mistaken for an employer domain.
+    free = build_public_queries(
+        parse_input({"full_name": "Sam Donegan", "email_address": "sam@gmail.com"})
+    )
+    assert all("employer" not in step["scope"] for step in free)
+
+    # With no candidates the free path spends nothing and claims nothing.
+    empty = lookup_public(params)
+    assert empty["mode"] == "public_search"
+    assert empty["credits_used"] == 0
+    assert empty["match_status"] == "not_found"
+    assert "not evidence that the person has no profile" in empty["message"]
+
+    ranked = lookup_public(
+        params,
+        [
+            {
+                "url": "https://www.linkedin.com/in/samdonegan",
+                "title": "Dr Sam Donegan - MLAI | LinkedIn",
+                "snippet": "Melbourne, Australia. Founder at MLAI, an AI community.",
+            },
+            {
+                "url": "https://www.linkedin.com/in/sam-donegan-uk",
+                "title": "Sam Donegan | LinkedIn",
+                "snippet": "Manchester, United Kingdom. Retail manager.",
+            },
+        ],
+    )
+    assert ranked["match_status"] == "matched"
+    assert ranked["profile"]["linkedin_url"] == "https://www.linkedin.com/in/samdonegan"
+    assert "requested professional title" in ranked["evidence"]
+    assert "business email domain resembles employer" in ranked["evidence"]
+    # Snippet evidence never earns high confidence, and the snippet is never
+    # presented as a structured location field.
+    assert ranked["confidence"] == "medium"
+    assert "location" not in ranked["profile"]
+    assert ranked["profile"]["headline"] == "Dr Sam Donegan - MLAI"
+    assert ranked["credits_used"] == 0
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--self-test", action="store_true")
@@ -542,7 +752,8 @@ def main() -> None:
     if not args.self_test:
         parser.error("This module needs a configured helper; use --self-test for local validation.")
     _self_test()
-    print(json.dumps({"ok": True, "tests": 6}))
+    _self_test_public()
+    print(json.dumps({"ok": True, "tests": 10}))
 
 
 if __name__ == "__main__":
