@@ -1,0 +1,4 @@
+interface:
+  display_name: "LinkedIn Prospect Search"
+  short_description: "Find LinkedIn company URLs via public search"
+  default_prompt: "Use $linkedin-prospect-search to find publicly indexed LinkedIn company URLs matching my industry, location, role, and company-size criteria without a paid data provider."
