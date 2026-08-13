@@ -4,23 +4,26 @@ This skill helps the agent find publicly indexed LinkedIn company URLs using ind
 
 The result is a researched shortlist, not a complete copy of LinkedIn. Search engines may show incomplete or stale snippets, and employee count is often not visible. The agent labels those gaps instead of guessing.
 
-## Install only this skill
+## Turn it on
 
-From the root of your `ai-solopreneur` project:
+Ask Claude Code, in plain English:
 
-```bash
-git fetch https://github.com/drsamdonegan/ai-solopreneur.git skill/linkedin-prospect-search
-git checkout FETCH_HEAD -- skills/linkedin-prospect-search
+```text
+Add the linkedin-prospect-search optional skill to my agent.
 ```
 
-This copies only the skill folder. It does not merge or switch branches. If you have already customized this folder, stop before the second command because it would replace that folder.
+Or run it yourself from the top of your project folder:
 
-## Enable it
+```bash
+npm run add-skill -- linkedin-prospect-search
+```
 
-1. Add `linkedin-prospect-search` on its own line in `skills/enabled.txt`.
-2. Preserve every existing skill ID and do not add this one twice.
-3. Run `sync-skills.command` on macOS or `sync-skills-windows.cmd` on Windows.
-4. Start a new agent conversation.
+Then make your running agent notice:
+
+- macOS: double-click `sync-skills.command`, then `start.command`
+- Windows: double-click `sync-skills-windows.cmd`, then `start-windows.cmd`
+
+Open the chat and select **New conversation**.
 
 ## Test the local logic
 

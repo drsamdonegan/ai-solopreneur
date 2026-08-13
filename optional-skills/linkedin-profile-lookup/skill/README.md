@@ -19,68 +19,26 @@ This course project now includes the optional n8n implementation as **61 - TOOL 
 
 Without the tool, the skill should say that live lookup is unavailable and ask you to paste public profile text or a URL. That is expected behaviour, not a failed installation.
 
-## Install only this skill
+## Turn it on
 
-Run these commands from the root of your copy of `ai-solopreneur`:
-
-```bash
-git fetch https://github.com/drsamdonegan/ai-solopreneur.git skill/linkedin-profile-lookup
-git checkout FETCH_HEAD -- skills/linkedin-profile-lookup
-```
-
-These commands copy only `skills/linkedin-profile-lookup`. They do not merge the branch, switch branches, add a remote, or overwrite your other skills.
-
-If you have already customised this skill, stop before running the second command because it will overwrite that folder.
-
-### Install with your coding agent
-
-You can instead paste this into a coding agent opened at the project root:
+Ask Claude Code, in plain English:
 
 ```text
-Add only the LinkedIn Profile Lookup skill to this copy of the AI Solopreneur
-agent from this public branch:
-https://github.com/drsamdonegan/ai-solopreneur/tree/skill/linkedin-profile-lookup
-
-Do not merge, pull, switch branches, add a Git remote, or modify another skill.
-
-1. If skills/linkedin-profile-lookup already exists, stop and tell me before
-   overwriting anything.
-2. Run:
-   git fetch https://github.com/drsamdonegan/ai-solopreneur.git skill/linkedin-profile-lookup
-3. Run:
-   git checkout FETCH_HEAD -- skills/linkedin-profile-lookup
-4. Read skills/linkedin-profile-lookup/README.md, SKILL.md, and
-   references/integration.md completely.
-5. Add linkedin-profile-lookup to skills/enabled.txt exactly once, preserving
-   every existing line.
-6. Run:
-   python3 skills/linkedin-profile-lookup/scripts/profile_matcher.py --self-test
-7. Run:
-   node scripts/compile-skills.mjs
-8. Check whether a read-only tool named lookup_linkedin_profile is actually
-   connected. Do not invent a tool, add a credential, or ask me to paste a key
-   into chat. If it is missing, explain that the skill is installed but live
-   lookup needs the separately approved provider connection.
-9. If the local agent is running, run the normal skill sync helper. Otherwise,
-   tell me the exact sync command for this operating system.
-10. Report which files changed, the validation results, whether live lookup is
-    available, and the test prompt from the README. Then stop.
+Add the linkedin-profile-lookup optional skill to my agent.
 ```
 
-## Add it to the agent
+Or run it yourself from the top of your project folder:
 
-1. Add this ID on its own line in `skills/enabled.txt`:
+```bash
+npm run add-skill -- linkedin-profile-lookup
+```
 
-   ```text
-   linkedin-profile-lookup
-   ```
+Then make your running agent notice:
 
-2. Preserve every skill ID already in the file and do not add the same ID twice.
-3. Run the project's skill sync helper:
-   - macOS: `sync-skills.command`
-   - Windows: `sync-skills-windows.cmd`
-4. Wait for **Enabled skills synced successfully**.
-5. Start a new conversation so it receives the updated skill instructions.
+- macOS: double-click `sync-skills.command`, then `start.command`
+- Windows: double-click `sync-skills-windows.cmd`, then `start-windows.cmd`
+
+Open the chat and select **New conversation**.
 
 ## Test that it loaded
 

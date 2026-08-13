@@ -22,18 +22,24 @@ You are reading a page you are allowed to read, which is why this works without 
 
 ## Turn it on
 
-1. Open `skills/enabled.txt` and add this line at the end:
+Ask Claude Code, in plain English:
 
-   ```text
-   prospect-research
-   ```
+```text
+Add the prospect-research optional skill to my agent.
+```
 
-2. Save the file. Do not change any other line in it.
-3. Make sure the local app is running, then sync:
-   - macOS: double-click `sync-skills.command`
-   - Windows: double-click `sync-skills-windows.cmd`
-4. Wait for **Enabled skills synced successfully**. This takes up to three minutes on an older laptop, because n8n restarts twice. A long quiet pause is normal.
-5. Open the chat and select **New conversation**.
+Or run it yourself from the top of your project folder:
+
+```bash
+npm run add-skill -- prospect-research
+```
+
+Then make your running agent notice:
+
+- macOS: double-click `sync-skills.command`, then `start.command`
+- Windows: double-click `sync-skills-windows.cmd`, then `start-windows.cmd`
+
+Open the chat and select **New conversation**.
 
 ## Try it
 

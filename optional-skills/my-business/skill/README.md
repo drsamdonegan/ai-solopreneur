@@ -6,19 +6,24 @@ Your own prices, hours, and terms, written once, so the agent stops guessing the
 
 ## Turn it on
 
-1. Open `SKILL.md` in this folder and replace each `[NOT FILLED IN]` with your own facts. Leave any line you do not want to answer exactly as it is.
-2. Open `skills/enabled.txt` and add this line at the end:
+Ask Claude Code, in plain English:
 
-   ```text
-   my-business
-   ```
+```text
+Add the my-business optional skill to my agent.
+```
 
-3. Save both files. Do not change any other line in `enabled.txt`.
-4. Make sure the local app is running, then sync:
-   - macOS: double-click `sync-skills.command`
-   - Windows: double-click `sync-skills-windows.cmd`
-5. Wait for **Enabled skills synced successfully**. This takes up to three minutes on an older laptop, because n8n restarts twice. A long quiet pause is normal.
-6. Open the chat and select **New conversation**.
+Or run it yourself from the top of your project folder:
+
+```bash
+npm run add-skill -- my-business
+```
+
+Then make your running agent notice:
+
+- macOS: double-click `sync-skills.command`, then `start.command`
+- Windows: double-click `sync-skills-windows.cmd`, then `start-windows.cmd`
+
+Open the chat and select **New conversation**.
 
 ## Check it worked
 

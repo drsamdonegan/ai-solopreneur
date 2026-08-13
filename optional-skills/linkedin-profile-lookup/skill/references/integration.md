@@ -101,11 +101,14 @@ The search helper appears to return only summary fields. It does not, by itself,
 
 ## Repository installation
 
-Once this branch is pushed, a student can fetch only the skill folder without merging the branch:
+The skill installs with everything it needs, including the `lookup_linkedin_profile`
+tool and its workflow:
 
-```text
-git fetch https://github.com/drsamdonegan/ai-solopreneur.git skill/linkedin-profile-lookup
-git checkout FETCH_HEAD -- skills/linkedin-profile-lookup
+```bash
+npm run add-skill -- linkedin-profile-lookup
 ```
 
-Adding the folder does not add the external tool. Connect and review `lookup_linkedin_profile` separately, then add `linkedin-profile-lookup` to `skills/enabled.txt` and run the project's skill sync helper.
+The installer wires the tool into the agent, records its risk in
+`tools/policy.json`, and enables the skill. You still have to create the
+`CRUSTDATA_API_KEY` credential in n8n yourself, and review the tool before you
+spend credit on it.
