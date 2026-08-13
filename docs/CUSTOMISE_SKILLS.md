@@ -55,7 +55,7 @@ At least one skill must remain enabled.
 
 ## Optional extra skills
 
-Twelve further skills ship with the project, all switched **off**. They live in [`optional-skills/`](../optional-skills/), one folder each, and none of them exists in your agent until you add it.
+Eight further skills ship with the project, all switched **off**. They live in [`optional-skills/`](../optional-skills/), one folder each, and none of them exists in your agent until you add it.
 
 Open [`optional-skills/README.md`](../optional-skills/README.md) for the full list, what each one costs, and what it needs.
 
@@ -64,13 +64,13 @@ Open [`optional-skills/README.md`](../optional-skills/README.md) for the full li
 Ask Claude Code, in plain English:
 
 ```text
-Add the deal-desk optional skill to my agent.
+Add the signal-research optional skill to my agent.
 ```
 
 Or run it yourself from the top of your project folder:
 
 ```bash
-npm run add-skill -- deal-desk
+npm run add-skill -- signal-research
 ```
 
 Then sync the skills and restart the services, exactly as you would after editing a skill by hand.
@@ -79,14 +79,13 @@ The installer copies the skill's files in, wires up any workflows it needs, and 
 
 ### Two rules make these work well
 
-- **Add `my-business` first.** Four of the others take every price, lead time, and term from it. Without it they leave a bracket such as `[YOU FILL IN: day rate]` for you to complete by hand.
 - **Add one at a time.** Every enabled skill sits in the prompt for every message, so three competing reply formats make the agent answer an ordinary project question as though it were a sales enquiry.
 
 Remove a skill's line from `skills/enabled.txt` to switch it off again without deleting anything.
 
 ### What they can and cannot do
 
-The five writing skills — `my-business`, `lead-conversion`, `prospect-research`, `deal-desk`, `customer-support` — have no internet access at all. They work only from what you type, paste, or upload, and they say `Not stated` rather than inventing a fact.
+`prospect-research` has no internet access at all. It works only from what you type, paste, or upload, and says `Not stated` rather than inventing a fact.
 
 `prospect-research` is the clearest example of that boundary. It cannot find anyone for you. You open the profile or company page yourself, copy the part that matters, and paste it in; the skill then does the research thinking and the writing. Given nothing to work from, it writes `No hook found` instead of inventing a detail.
 

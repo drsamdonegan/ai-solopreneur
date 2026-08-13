@@ -2,9 +2,7 @@
   "schemaVersion": 1,
   "id": "prospect-research",
   "name": "Prospect Research",
-  "requires": [
-    "my-business"
-  ],
+  "requires": [],
   "agentTools": [],
   "policyEntries": [],
   "policyRules": [],

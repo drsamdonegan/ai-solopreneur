@@ -6,7 +6,7 @@ Best for: the person you met at a conference, the clinic you would like to work 
 
 ## Before you start
 
-Turn on the **My Business Facts** skill first and fill it in. This skill draws its one line of proof from your own facts, so without it every draft says `[YOU FILL IN: nearest client example]`.
+This skill draws its one line of proof from facts about your own business. There is no skill holding those any more, so every draft leaves `[YOU FILL IN: nearest client example]` for you to complete by hand. Paste your own proof point into the chat alongside the prospect's details and it will use that instead.
 
 ## How to get the information to paste
 
@@ -84,7 +84,7 @@ The skill will remind you once. It is a drafting tool, not advice about your obl
 
 ## If it starts answering everything like a cold email
 
-Seven skills are always loaded at once, so they compete. Run one optional skill at a time: remove `lead-conversion` and `deal-desk` from `enabled.txt` while you are using this one.
+Every enabled skill sits in the prompt for every message, so they compete. Run one optional skill at a time: remove the others from `enabled.txt` while you are using this one.
 
 ## Turn it off
 

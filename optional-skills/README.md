@@ -6,15 +6,9 @@ Each skill is self-contained. Adding one **never** changes the chat app, never t
 
 ## The skills
 
-Start with **My Business**. Four of the others read your prices, hours, and terms from it, and without it they leave gaps like `[YOU FILL IN: day rate]` for you to complete by hand.
-
 | Skill | What it does | Needs |
 | --- | --- | --- |
-| [`my-business`](my-business/) | Holds your prices, hours, and terms so the agent stops guessing them | — |
-| [`lead-conversion`](lead-conversion/) | Turns a new enquiry or DM into a first reply you can send | `my-business` |
-| [`prospect-research`](prospect-research/) | Turns a name and some pasted text into a cold email you send yourself | `my-business` |
-| [`deal-desk`](deal-desk/) | Turns sales-call notes into a recap email and a proposal skeleton | `my-business` |
-| [`customer-support`](customer-support/) | Turns a complaint into a calm reply that promises nothing you have not decided | `my-business` |
+| [`prospect-research`](prospect-research/) | Turns a name and some pasted text into a cold email you send yourself | — |
 | [`domain-research`](domain-research/) | Reads a company's own website and tells you what the business says about itself | — |
 | [`competitor-content`](competitor-content/) | Reads a competitor's public YouTube and blog, and finds their posts that beat their own average | — |
 | [`signal-research`](signal-research/) | Finds people describing your problem in public, in their own words | A free Google API key |

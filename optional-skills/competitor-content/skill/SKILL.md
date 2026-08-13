@@ -56,7 +56,7 @@ Blog posts come back with no engagement data at all. Use them for what the compe
 
 This is the deliverable. Build it from the **format**, never the words.
 
-First establish the user's own side. Use their business facts when the my-business skill is enabled, and ask for whatever is missing: what they sell, who to, the outcome they deliver, and a real story or result of their own to put in the post. Never fill that gap with the competitor's material.
+First establish the user's own side. Ask for whatever you do not have: what they sell, who to, the outcome they deliver, and a real story or result of their own to put in the post. Never fill that gap with the competitor's material.
 
 Then, under YOUR REMIX PROMPT, write a single prompt the user can paste into any writing tool, containing:
 
