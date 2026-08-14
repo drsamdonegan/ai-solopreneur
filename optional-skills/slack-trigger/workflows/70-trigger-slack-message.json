@@ -1,0 +1,250 @@
+{
+  "name": "70 - TRIGGER - Slack message",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Slack talks to your agent\n\nThis is an **entry point**, not a tool. Your agent cannot call it; Slack calls it.\n\nThe address Slack needs is the **Production URL** on the *Slack Events* node below. Publish this workflow first, then create your Slack app — Slack checks the address the moment you create the app, and a workflow that is not published will fail that check.\n\nIt answers Slack in well under a second and does the slow thinking afterwards, because Slack gives up after three seconds and starts retrying.\n\nMessages from bots are ignored on purpose. Without that, your agent's own replies would come straight back in and it would talk to itself until your Claude credit ran out.",
+        "height": 420,
+        "width": 460
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-1080, -220],
+      "id": "70000000-0000-4000-8000-000000000001",
+      "name": "Read this first"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "slack-events",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [-560, 60],
+      "id": "70000000-0000-4000-8000-000000000002",
+      "name": "Slack Events",
+      "webhookId": "30000000-0000-4000-8000-000000000170"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Slack sends three quite different things to this one address, and telling\n// them apart is the whole job of this node.\n//\n//  1. A one-off 'url_verification' challenge, when the app is created.\n//  2. A real message someone typed.\n//  3. Noise: the agent's own replies, edits, joins, and anything without text.\n\nconst body = $json.body && typeof $json.body === 'object' && !Array.isArray($json.body)\n  ? $json.body\n  : {};\n\nif (body.type === 'url_verification') {\n  return [{ json: { kind: 'challenge', challenge: String(body.challenge ?? '') } }];\n}\n\nconst event = body.event && typeof body.event === 'object' ? body.event : {};\nconst text = typeof event.text === 'string' ? event.text.trim() : '';\n\n// A message with a bot_id is something a bot said, including this agent. Letting\n// those through is how an agent ends up in a conversation with itself.\nconst fromABot = Boolean(event.bot_id) || event.subtype === 'bot_message';\nconst isMessage = event.type === 'message' || event.type === 'app_mention';\n\nif (!isMessage || fromABot || text.length === 0) {\n  return [{ json: { kind: 'ignore' } }];\n}\n\n// The agent requires real UUIDs, and it uses the session to remember a\n// conversation. Deriving them by hand keeps one Slack thread on one session,\n// so the agent follows a thread instead of meeting a stranger every message.\n// Node's crypto is not available inside this sandbox, so this is a plain\n// FNV-1a hash spread over the four rounds a UUID needs.\nconst uuidFrom = (seed) => {\n  let hex = '';\n  for (let round = 0; round < 4; round += 1) {\n    let hash = 0x811c9dc5;\n    const salted = `${round}:${seed}`;\n    for (let index = 0; index < salted.length; index += 1) {\n      hash ^= salted.charCodeAt(index);\n      hash = Math.imul(hash, 0x01000193) >>> 0;\n    }\n    hex += hash.toString(16).padStart(8, '0');\n  }\n  return [\n    hex.slice(0, 8),\n    hex.slice(8, 12),\n    `4${hex.slice(13, 16)}`,\n    `8${hex.slice(17, 20)}`,\n    hex.slice(20, 32)\n  ].join('-');\n};\n\nconst channel = String(event.channel ?? 'unknown');\n// Replies in a thread share the parent's timestamp, so a thread stays one\n// conversation. A message in the channel is its own.\nconst thread = String(event.thread_ts ?? event.ts ?? '');\nconst teamId = String(body.team_id ?? '');\n\nreturn [{\n  json: {\n    kind: 'message',\n    sessionId: uuidFrom(`slack-session:${teamId}:${channel}:${thread}`),\n    // Derived from the event id, so a Slack retry produces the same request id\n    // rather than a second answer.\n    requestId: uuidFrom(`slack-request:${String(body.event_id ?? event.ts ?? '')}`),\n    message: text.slice(0, 8000),\n    channel,\n    threadTs: thread\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-340, 60],
+      "id": "70000000-0000-4000-8000-000000000003",
+      "name": "Read Slack Event"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "70000000-0000-4000-8000-000000000101",
+              "leftValue": "={{ $json.kind }}",
+              "rightValue": "challenge",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [-120, 60],
+      "id": "70000000-0000-4000-8000-000000000004",
+      "name": "Is Slack Checking The Address?"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.challenge }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "text/plain; charset=utf-8"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [140, -60],
+      "id": "70000000-0000-4000-8000-000000000005",
+      "name": "Answer Slack's Check"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "70000000-0000-4000-8000-000000000102",
+              "leftValue": "={{ $json.kind }}",
+              "rightValue": "message",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [140, 180],
+      "id": "70000000-0000-4000-8000-000000000006",
+      "name": "Is There Something To Answer?"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "ok",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [380, 60],
+      "id": "70000000-0000-4000-8000-000000000007",
+      "name": "Tell Slack We Have It"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "ok",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [380, 300],
+      "id": "70000000-0000-4000-8000-000000000008",
+      "name": "Nothing To Answer"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:5678/webhook/chat",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ schemaVersion: 3, requestId: $('Read Slack Event').item.json.requestId, sessionId: $('Read Slack Event').item.json.sessionId, agentId: 'project-manager', message: $('Read Slack Event').item.json.message, history: [], documents: [] }) }}",
+        "options": {
+          "timeout": 180000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [620, 60],
+      "id": "70000000-0000-4000-8000-000000000009",
+      "name": "Ask The Agent"
+    },
+    {
+      "parameters": {
+        "jsCode": "// The agent answers in Markdown. Slack understands a dialect of its own, and\n// the two differ in exactly one way that matters in practice: bold.\nconst reply = String($json.reply ?? $json.errorMessage ?? '').trim();\n\nconst text = reply.length === 0\n  ? 'Your agent did not have an answer for that one.'\n  : reply.replace(/\\*\\*(.+?)\\*\\*/g, '*$1*').slice(0, 3000);\n\nreturn [{\n  json: {\n    channel: $('Read Slack Event').item.json.channel,\n    thread_ts: $('Read Slack Event').item.json.threadTs,\n    text\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [860, 60],
+      "id": "70000000-0000-4000-8000-000000000010",
+      "name": "Shape The Reply"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel: $json.channel, thread_ts: $json.thread_ts, text: $json.text }) }}",
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1100, 60],
+      "id": "70000000-0000-4000-8000-000000000011",
+      "name": "Post Back To Slack"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Slack Events": {
+      "main": [[{ "node": "Read Slack Event", "type": "main", "index": 0 }]]
+    },
+    "Read Slack Event": {
+      "main": [
+        [{ "node": "Is Slack Checking The Address?", "type": "main", "index": 0 }]
+      ]
+    },
+    "Is Slack Checking The Address?": {
+      "main": [
+        [{ "node": "Answer Slack's Check", "type": "main", "index": 0 }],
+        [{ "node": "Is There Something To Answer?", "type": "main", "index": 0 }]
+      ]
+    },
+    "Is There Something To Answer?": {
+      "main": [
+        [{ "node": "Tell Slack We Have It", "type": "main", "index": 0 }],
+        [{ "node": "Nothing To Answer", "type": "main", "index": 0 }]
+      ]
+    },
+    "Tell Slack We Have It": {
+      "main": [[{ "node": "Ask The Agent", "type": "main", "index": 0 }]]
+    },
+    "Ask The Agent": {
+      "main": [[{ "node": "Shape The Reply", "type": "main", "index": 0 }]]
+    },
+    "Shape The Reply": {
+      "main": [[{ "node": "Post Back To Slack", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "executionTimeout": 300,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true
+  },
+  "versionId": "70000000-0000-4000-8000-0000000000f0",
+  "meta": {
+    "phase": 14,
+    "testedWithN8n": "2.30.5",
+    "toolRisk": "trigger"
+  },
+  "id": "phase14SlackTrigger",
+  "tags": []
+}
