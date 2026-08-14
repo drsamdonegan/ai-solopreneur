@@ -1,6 +1,10 @@
 # The prompt for putting your agent in the cloud
 
-Open Claude Code in your agent's folder and paste the block below.
+Before you start, make yourself a [Railway](https://railway.com) account and a
+[GitHub](https://github.com) account if you do not have them. Those two are
+yours to make. Nothing else here needs an account.
+
+Then open Claude Code in your agent's folder and paste the block below.
 
 It does the fiddly parts: installing the tool, making the project, adding the
 storage, making the two web addresses, and setting them up correctly. Three
@@ -11,22 +15,30 @@ and choosing your passphrase.
 
 ```
 I want to put my AI agent on the internet, so it keeps working when my laptop
-is closed.
+is closed. I have just made a Railway account and nothing else is set up yet.
 
 Work through these steps in order. If a step fails, stop and show me the actual
-error. Do not work around it and do not carry on to the next step.
+error, word for word. Do not work around it and do not carry on to the next
+step.
 
 1. Check my agent works here first. Run `./status.command` on a Mac, or
    `status-windows.cmd` on Windows. If it is not set up yet, stop and tell me.
 
-2. Make sure everything I have built is committed and pushed to my own
-   repository on GitHub, on the main branch. Show me the list of files before
-   you commit anything, and tell me if anything looks like it should not be
-   committed.
+2. Get everything I have built onto my own GitHub account, on the main branch.
+   The cloud reads my code from GitHub, so this has to happen before anything
+   else works.
+   - First check whether this folder already pushes to a repository of mine.
+   - If it does not, ask me before creating one, and make it private unless I
+     say otherwise.
+   - Show me the list of files before you commit anything. Tell me if anything
+     in it should not be committed: my own name, email or accounts in places
+     they do not belong, anything that looks like a key or a password, or
+     anything personal I may not have meant to publish.
+   - Then commit and push.
 
 3. Install the Railway command line, if it is not already installed:
    - On a Mac: brew install railway
-   - On Windows: npm i -g @railway/cli
+   - On a Mac with no Homebrew, or on Windows: npm i -g @railway/cli
    Check it worked with `railway --version`.
 
 4. Tell me to run the cloud connector myself, and wait for me:
@@ -53,10 +65,15 @@ error. Do not work around it and do not carry on to the next step.
 
 Rules for all of this:
 - Never type a password, passcode or passphrase for me, and never write one
-  into a file or a note.
+  into a file or a note. Do not choose one for me or suggest one, and do not
+  repeat one back to me afterwards.
 - Do not create any accounts for me.
 - Do not put any of my API keys anywhere. They travel inside the file from
   step 5, already encrypted, and I never retype them.
+- Do not upload the file from step 5 for me.
+- If Railway says something about a plan or a limit, show me its exact words
+  and stop. That is about my account, not about my computer, and reinstalling
+  things will not fix it.
 ```
 
 ---
@@ -64,7 +81,10 @@ Rules for all of this:
 ## What it will ask you for
 
 **Signing in to Railway.** A browser window opens. That is you signing in to
-your own account, and nobody should do it for you.
+your own account, and nobody should do it for you. A brand-new Railway account
+sometimes has to confirm an email address or add a card before it will run
+anything; if it asks, that is Railway's rule and not something the scripts can
+work around.
 
 **A passcode**, at least 8 characters. This is what stops anyone who finds your
 web address from opening your agent, reading your conversations and spending
