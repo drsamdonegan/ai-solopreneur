@@ -1781,6 +1781,21 @@ async function commandPack() {
   return result.status ?? 1;
 }
 
+/**
+ * Connects the agent to the cloud. A child process for the same reasons as
+ * packing: the Railway sign-in and the passcode prompt both need the real
+ * terminal, not a captured one.
+ */
+async function commandConnectCloud() {
+  const connector = join(projectRoot, "scripts", "connect-cloud.mjs");
+  const result = spawnSync(process.execPath, [connector], { stdio: "inherit" });
+  if (result.error) {
+    printError(`Could not run the cloud connector: ${result.error.message}`);
+    return 1;
+  }
+  return result.status ?? 1;
+}
+
 async function commandBackup() {
   requireLocalInstall();
   if (!existsSync(paths.n8nDataDir)) {
@@ -2247,6 +2262,13 @@ Everyday commands (also available as double-click files in the project folder):
   status             Show whether each service is running and healthy.
   diagnose           Friendly readiness checks. Never calls Claude.
 
+Putting the agent online:
+  connect-cloud      Set up a cloud project so the agent keeps running with
+                     this computer closed. Signing in and choosing a passcode
+                     stay yours to do.
+  pack               Make one encrypted file holding your keys and settings,
+                     to upload to the agent once it is online.
+
 Maintenance commands:
   import-workflows   Re-import the reviewed workflows, sample data, and skills.
   sync-skills        Validate and load the enabled Markdown skills.
@@ -2299,6 +2321,8 @@ async function main() {
       return commandBackup();
     case "pack":
       return commandPack();
+    case "connect-cloud":
+      return commandConnectCloud();
     case "restore":
       return commandRestore(rest);
     case "reset":

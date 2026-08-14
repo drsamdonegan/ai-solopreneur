@@ -188,6 +188,7 @@ in plain English inside a box.
 
 | What you see | What to do |
 | --- | --- |
+| `Free plan resource provision limit exceeded` | Railway will not run a second agent on a free account. The connector reconnects to an existing project by itself when it finds a service named after your repository, so this usually means an older project under a different name. Remove it in the Railway dashboard, or link to it with `railway link`, then run the connector again. |
 | "Nearly there" and a list | Add what it lists, then deploy again. |
 | Build fails at once, log lists only `README.md` | Wrong repository. Point the service at the one with your agent in it. |
 | `Your agent has two different credential keys` | Delete the `N8N_ENCRYPTION_KEY` variable. You never need to set it — the key that unlocks your credentials travels inside your pack. |

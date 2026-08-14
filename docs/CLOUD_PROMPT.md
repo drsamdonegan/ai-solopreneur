@@ -16,8 +16,8 @@ is closed.
 Work through these steps in order. If a step fails, stop and show me the actual
 error. Do not work around it and do not carry on to the next step.
 
-1. Check my agent works here first. Run `npm run status`. If it is not set up
-   yet, stop and tell me.
+1. Check my agent works here first. Run `./status.command` on a Mac, or
+   `status-windows.cmd` on Windows. If it is not set up yet, stop and tell me.
 
 2. Make sure everything I have built is committed and pushed to my own
    repository on GitHub, on the main branch. Show me the list of files before
@@ -29,14 +29,19 @@ error. Do not work around it and do not carry on to the next step.
    - On Windows: npm i -g @railway/cli
    Check it worked with `railway --version`.
 
-4. Run `npm run connect-cloud` and let it take over the terminal.
-   - It will open a browser so I can sign in to Railway. That one is mine to do.
-   - It will ask me to choose a passcode. I will type it. Do not choose one for
-     me, do not suggest one, and do not repeat it back to me afterwards.
-   - When it finishes it prints two web addresses. Show me both and tell me
-     which is which.
+4. Tell me to run the cloud connector myself, and wait for me:
+   - On a Mac: double-click `connect-cloud.command`
+   - On Windows: double-click `connect-cloud-windows.cmd`
+   It needs its own terminal window, because it opens a browser so I can sign
+   in to Railway, and then asks me to choose a passcode. Both are mine to do.
+   Do not choose a passcode for me, do not suggest one, and do not repeat it
+   back to me afterwards.
+   - When it finishes it prints two web addresses. I will paste them to you.
+     Show me both and tell me which is which.
 
-5. Run `npm run pack` and let it take over the terminal.
+5. Tell me to run the packer myself, the same way:
+   - On a Mac: double-click `pack-agent.command`
+   - On Windows: double-click `pack-agent-windows.cmd`
    - It will ask me for a passphrase. I will type it. Same rules as above.
    - Tell me the full path of the file it made.
 
@@ -85,3 +90,11 @@ but only you can tell whether the conversations in the sidebar are yours.
 Whatever it shows you, bring that. The scripts explain their own failures in
 plain English, so the message is usually the answer. The
 [runbook](CLOUD_RUNBOOK.md) has a table of the common ones at the bottom.
+
+One of them is worth knowing in advance, because it is not about your computer
+at all. If the connector stops with **"Free plan resource provision limit
+exceeded"**, that is Railway telling you your account will not run another
+agent on its free plan. It usually means you already have one. Either use the
+project you have — the connector reconnects to it by itself if it can find a
+service named after your repository — or remove the old one in the Railway
+dashboard before you try again.

@@ -50,20 +50,57 @@ function railwayOk(args) {
 }
 
 /**
+ * Runs a Railway command with a value fed to its standard input, so the value
+ * never appears in the process arguments. Returns whether it worked.
+ */
+function railwayStdin(args, value) {
+  const result = spawnSync("railway", args, {
+    encoding: "utf8",
+    input: value,
+    stdio: ["pipe", "pipe", "pipe"],
+  });
+  return !result.error && result.status === 0;
+}
+
+/**
  * Railway has renamed a few commands across versions. Rather than pin to one
  * spelling and break for whoever has a different build installed, each is
  * tried until one works.
+ *
+ * When none of them work, Railway's own message is what gets shown. An earlier
+ * version of this said "update the command line" for every failure, which sent
+ * people off to reinstall a tool that was already current while the real
+ * reason — a plan limit, a name already taken, a signed-out session — stayed
+ * hidden in a captured stream.
  */
 function railwayFirstThatWorks(candidates, label) {
+  let last = null;
   for (const args of candidates) {
     const result = railway(args);
     if (!result.error && result.status === 0) {
       return result;
     }
+    last = result;
   }
+
+  const detail = [last?.stderr, last?.stdout]
+    .map((stream) => (typeof stream === "string" ? stream.trim() : ""))
+    .filter((stream) => stream.length > 0)
+    .join("\n")
+    .split("\n")
+    // The CLI echoes the answers it picked for its own prompts. They are noise
+    // here, and they look like progress rather than the failure they precede.
+    .filter((line) => !line.trimStart().startsWith(">"))
+    .join("\n")
+    .trim();
+
   fail(
-    `${label} did not work with this version of the Railway command line.`,
-    "Update it and try again:  npm i -g @railway/cli",
+    `${label} did not work.`,
+    detail.length > 0 ? `Railway said:\n\n  ${detail.replace(/\n/g, "\n  ")}` : "Railway gave no reason.",
+    "",
+    "That message is from Railway, not from this project. If it mentions a",
+    "plan or a limit, it is about your Railway account rather than anything",
+    "on this computer.",
   );
   return null;
 }
@@ -78,6 +115,65 @@ function jsonOr(args, fallback) {
   } catch {
     return fallback;
   }
+}
+
+/**
+ * Every Railway command here runs with its output captured, which means it has
+ * no terminal to ask questions with. Asked to choose a workspace or a service
+ * without one, the CLI does not explain itself: it fails with whatever error
+ * it was holding, which in testing was a message about plan limits on an
+ * account nowhere near its limit.
+ *
+ * `--json` is the CLI's own switch for running unattended, so it goes on
+ * everything, and the answers it would have asked for are passed in as flags.
+ */
+function automated(args) {
+  return args.includes("--json") ? args : [...args, "--json"];
+}
+
+/** The workspace to build in, so the CLI never has to ask which one. */
+function workspaceId() {
+  const who = jsonOr(["whoami", "--json"], null);
+  const workspaces = Array.isArray(who?.workspaces) ? who.workspaces : [];
+  if (workspaces.length === 0) {
+    return null;
+  }
+  return workspaces[0].id ?? null;
+}
+
+/** The services on a project, as {id, name}, from Railway's edges-and-nodes shape. */
+function servicesOf(project) {
+  const edges = project?.services?.edges;
+  if (!Array.isArray(edges)) {
+    return [];
+  }
+  return edges
+    .map((edge) => edge?.node)
+    .filter((node) => typeof node?.name === "string")
+    .map((node) => ({ id: node.id, name: node.name }));
+}
+
+/** Every project on the account that has not been deleted. */
+function liveProjects() {
+  const projects = jsonOr(["list", "--json"], []);
+  return Array.isArray(projects) ? projects.filter((project) => !project.deletedAt) : [];
+}
+
+/**
+ * The service storage, addresses and settings attach to. These hang off a
+ * service rather than off the project, so naming it means the CLI never has to
+ * ask which one.
+ */
+function serviceName() {
+  const linked = jsonOr(["status", "--json"], null);
+  const direct = servicesOf(linked);
+  if (direct.length > 0) {
+    return direct[0].name;
+  }
+  // `status` reports the linked project by id; find it in the project list.
+  const id = linked?.id ?? linked?.project?.id;
+  const match = liveProjects().find((project) => project.id === id);
+  return servicesOf(match)[0]?.name ?? null;
 }
 
 /**
@@ -121,6 +217,19 @@ function askHidden(question) {
 }
 
 async function askPasscode() {
+  // Without a real terminal there is nothing to type into, and the prompt
+  // would otherwise fall out of the bottom of the script as an unfinished
+  // wait, which reads as a crash.
+  if (!process.stdin.isTTY) {
+    fail(
+      "This needs to run in a terminal window, so you can type a passcode.",
+      "Open the project folder and start it from there:",
+      "",
+      "  macOS:    double-click connect-cloud.command",
+      "  Windows:  double-click connect-cloud-windows.cmd",
+    );
+  }
+
   print("Choose a passcode for your agent.");
   print("This is what stops anyone who finds your web address from opening it,");
   print("reading your conversations and spending your Claude credit.");
@@ -211,44 +320,82 @@ async function main() {
       );
     }
 
-    print("");
-    print(`  Creating a cloud project for ${repo}...`);
-    railwayFirstThatWorks(
-      [
-        ["init", "--name", "my-agent"],
-        ["init", "-n", "my-agent"],
-      ],
-      "Creating the project",
+    // Running this a second time should not build a second agent. A project
+    // already carrying a service for this repository is the one to reconnect
+    // to, and on a free plan it is usually the only one that will be allowed:
+    // a second copy is a second set of resources.
+    const repoName = repo.split("/")[1];
+    const existingProject = liveProjects().find((project) =>
+      servicesOf(project).some((service) => service.name === repoName),
     );
 
-    // --repo keeps it connected to GitHub, which is what makes a push deploy
-    // itself later. Uploading the folder instead would deploy once and then
-    // never notice a change.
-    railwayFirstThatWorks(
-      [
-        ["add", "--repo", repo],
-        ["add", "-r", repo],
-      ],
-      "Connecting your repository",
-    );
-    print("  Project created and connected to your repository.");
+    if (existingProject) {
+      print("");
+      print(`  Found your existing cloud project "${existingProject.name}". Reconnecting to it.`);
+      railwayFirstThatWorks(
+        [
+          automated(["link", "--project", existingProject.id, "--environment", "production"]),
+          automated(["link", "--project", existingProject.id]),
+        ],
+        "Reconnecting to your project",
+      );
+    } else {
+      const workspace = workspaceId();
+      print("");
+      print(`  Creating a cloud project for ${repo}...`);
+      railwayFirstThatWorks(
+        [
+          workspace === null ? null : automated(["init", "--name", "my-agent", "--workspace", workspace]),
+          automated(["init", "--name", "my-agent"]),
+          automated(["init", "-n", "my-agent"]),
+        ].filter((candidate) => candidate !== null),
+        "Creating the project",
+      );
+
+      // --repo keeps it connected to GitHub, which is what makes a push deploy
+      // itself later. Uploading the folder instead would deploy once and then
+      // never notice a change.
+      railwayFirstThatWorks(
+        [
+          automated(["add", "--repo", repo]),
+          automated(["add", "-r", repo]),
+        ],
+        "Connecting your repository",
+      );
+      print("  Project created and connected to your repository.");
+    }
 
     if (!railwayOk(["status"])) {
-      fail("The project was created but is not linked.", "Run `railway link`, then run this again.");
+      fail("The project is not linked.", "Run `railway link`, then run this again.");
     }
   }
   print("  Project linked.");
+
+  // Storage, addresses and settings all belong to a service. Without naming
+  // one the CLI has a question it cannot ask, and it fails with whichever
+  // error it happens to be holding rather than saying so.
+  const service = serviceName();
+  if (service === null) {
+    fail(
+      "Your project has no service in it yet.",
+      "That usually means the repository was never connected. Open your",
+      "project in the Railway dashboard, check a service is there, then run",
+      "this again.",
+    );
+  }
+  const forService = (args) => automated([...args, "--service", service]);
+  print(`  Service: ${service}`);
   print("");
 
   // --- storage ---
-  const volumes = JSON.stringify(jsonOr(["volume", "list", "--json"], []));
+  const volumes = JSON.stringify(jsonOr(forService(["volume", "list"]), []));
   if (volumes.includes(MOUNT_PATH)) {
     print(`  Storage at ${MOUNT_PATH} is already there.`);
   } else {
     railwayFirstThatWorks(
       [
-        ["volume", "add", "--mount-path", MOUNT_PATH],
-        ["volume", "add", "-m", MOUNT_PATH],
+        forService(["volume", "add", "--mount-path", MOUNT_PATH]),
+        forService(["volume", "add", "-m", MOUNT_PATH]),
       ],
       "Adding storage",
     );
@@ -256,7 +403,7 @@ async function main() {
   }
 
   // --- two addresses ---
-  const existing = domainsFrom(jsonOr(["domain", "list", "--json"], {}));
+  const existing = domainsFrom(jsonOr(forService(["domain", "list"]), {}));
   const findFor = (port) => existing.find((entry) => entry.port === port);
 
   for (const [port, label] of [
@@ -269,15 +416,15 @@ async function main() {
     }
     railwayFirstThatWorks(
       [
-        ["domain", "--port", String(port)],
-        ["domain", "-p", String(port)],
+        forService(["domain", "--port", String(port)]),
+        forService(["domain", "-p", String(port)]),
       ],
       `Creating the address for ${label}`,
     );
     print(`  Address created for ${label} (port ${port}).`);
   }
 
-  const after = domainsFrom(jsonOr(["domain", "list", "--json"], {}));
+  const after = domainsFrom(jsonOr(forService(["domain", "list"]), {}));
   const chatHost = after.find((entry) => entry.port === CHAT_PORT)?.host;
   const n8nHost = after.find((entry) => entry.port === N8N_PORT)?.host;
 
@@ -300,22 +447,42 @@ async function main() {
   const setVariable = (key, value) =>
     railwayFirstThatWorks(
       [
-        ["variables", "--set", `${key}=${value}`],
-        ["variable", "set", `${key}=${value}`],
-        ["variables", "set", `${key}=${value}`],
+        forService(["variable", "set", `${key}=${value}`]),
+        forService(["variables", "--set", `${key}=${value}`]),
+        forService(["variables", "set", `${key}=${value}`]),
       ],
       `Setting ${key}`,
     );
 
   setVariable("N8N_PUBLIC_URL", `https://${n8nHost}`);
   print(`  Workshop address set to https://${n8nHost}`);
-  setVariable("AGENT_PASSCODE", passcode);
+
+  // The passcode is handed over on the CLI's standard input rather than as a
+  // command argument. Arguments are readable by anything else running on the
+  // machine for as long as the command lasts, and they are the sort of thing
+  // that ends up in a shell history. Older builds have no --stdin, so an
+  // argument remains the fallback rather than a failure.
+  const passcodeSet = railwayStdin(
+    forService(["variable", "set", "AGENT_PASSCODE", "--stdin"]),
+    passcode,
+  );
+  if (!passcodeSet) {
+    setVariable("AGENT_PASSCODE", passcode);
+  }
   print("  Passcode set.");
 
   // --- go ---
   print("");
   print("Starting your agent. This takes a few minutes.");
-  railway(["redeploy", "--yes"], { quiet: false });
+  // --from-source so the deployment is built from the commit just pushed,
+  // rather than re-running whatever was last built.
+  railwayFirstThatWorks(
+    [
+      ["redeploy", "--service", service, "--yes", "--from-source"],
+      ["redeploy", "--service", service, "--yes"],
+    ],
+    "Starting your agent",
+  );
 
   print("");
   print("Done. Your agent has everything it needs.");
@@ -325,8 +492,13 @@ async function main() {
   }
   print(`  Your workshop: https://${n8nHost}`);
   print("");
-  print("Next: open your agent, sign in with the passcode you just chose, and");
-  print("upload the file you made with `npm run pack`.");
+  print("Next, make the file holding your keys and settings:");
+  print("");
+  print("  macOS:    double-click pack-agent.command");
+  print("  Windows:  double-click pack-agent-windows.cmd");
+  print("");
+  print("Then open your agent above, sign in with the passcode you just chose,");
+  print("and upload that file there.");
   print("");
 }
 
