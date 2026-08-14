@@ -3,3 +3,4 @@ project-assistant
 meeting-analysis
 task-capture
 weekly-status
+linkedin-profile-lookup

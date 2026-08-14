@@ -37,6 +37,14 @@
       ]
     },
     {
+      "id": "skill-finding-customers",
+      "name": "4. Finding customers",
+      "description": "Searching public comments for people describing a problem you solve, and matching one named person to a likely public professional profile.",
+      "workflows": [
+        "61-tool-lookup-linkedin-profile.json"
+      ]
+    },
+    {
       "id": "skill-setup-and-health",
       "name": "5. Setup and health",
       "description": "Run-once plumbing and the health check. A learner rarely opens these, but they should be able to find them.",

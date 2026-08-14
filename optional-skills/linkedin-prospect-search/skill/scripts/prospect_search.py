@@ -18,6 +18,7 @@ from urllib.parse import urlsplit
 
 DEFAULT_LIMIT = 10
 MAX_LIMIT = 25
+MAX_QUERY_TERMS = 4
 GENERIC_TERMS = {
     "and",
     "business",
@@ -45,6 +46,36 @@ def _terms(value: Any) -> list[str]:
         term
         for part in parts
         if (term := _normalise(part)) and term not in GENERIC_TERMS
+    ]
+
+
+def _phrases(value: Any, limit: int = MAX_QUERY_TERMS) -> list[str]:
+    """Split a loose criterion into short searchable phrases, keeping casing.
+
+    A whole criterion is never quoted as one phrase. A search engine treats
+    `"AI communities, technology, not for profit"` as an exact string that no
+    real page contains, so the query returns nothing and the empty result is
+    indistinguishable from a genuine absence of prospects.
+    """
+    parts = re.split(r"[,;/|]+|\band\b", _text(value), flags=re.IGNORECASE)
+    phrases: list[str] = []
+    seen: set[str] = set()
+    for part in parts:
+        phrase = " ".join(part.split())
+        key = _normalise(phrase)
+        if not key or key in GENERIC_TERMS or key in seen:
+            continue
+        seen.add(key)
+        phrases.append(phrase)
+    return phrases[:limit]
+
+
+def _location_parts(value: Any) -> list[str]:
+    """Return location components, most specific first (city, state, country)."""
+    return [
+        " ".join(part.split())
+        for part in re.split(r"[,;/|]+", _text(value))
+        if part.strip()
     ]
 
 
@@ -83,21 +114,77 @@ def _quote(value: str) -> str:
     return f'"{value.replace(chr(34), "")}"'
 
 
+def _any_of(phrases: Sequence[str]) -> str:
+    if len(phrases) == 1:
+        return _quote(phrases[0])
+    return "(" + " OR ".join(_quote(phrase) for phrase in phrases) + ")"
+
+
 def build_public_queries(params: Mapping[str, Any]) -> dict[str, Any]:
+    """Build a narrow-to-broad query ladder from decomposed criteria.
+
+    Only the most specific location component and at most two industry phrases
+    constrain the narrowest query. Everything else stays ranking evidence, so an
+    over-constrained query cannot silently turn a real prospect list into zero
+    results.
+    """
     parsed = parse_input(params)
-    industry = _quote(parsed["industry"])
-    location = _quote(parsed["location"])
-    queries = [
-        f"site:linkedin.com/company/ {location} {industry}",
-        f"LinkedIn company {location} {industry}",
+    industry_phrases = _phrases(parsed["industry"])
+    location_parts = _location_parts(parsed["location"]) or [parsed["location"]]
+    primary_location = location_parts[0]
+    wider_location = location_parts[1:]
+    role_phrases = _phrases(parsed["role_title"], limit=3)
+
+    place = _quote(primary_location)
+    focused = " ".join(_quote(phrase) for phrase in industry_phrases[:2])
+    plan: list[dict[str, str]] = [
+        {
+            "scope": "focused",
+            "query": f"site:linkedin.com/company/ {place} {focused}".strip(),
+        }
     ]
-    if parsed["role_title"]:
-        role = _quote(parsed["role_title"])
-        queries.append(f"site:linkedin.com/in/ {role} {location} {industry}")
+    if len(industry_phrases) > 1:
+        plan.append(
+            {
+                "scope": "widened industry",
+                "query": (
+                    f"site:linkedin.com/company/ {place} {_any_of(industry_phrases)}"
+                ),
+            }
+        )
+    plan.append(
+        {"scope": "location only", "query": f"site:linkedin.com/company/ {place}"}
+    )
+    plan.append(
+        {
+            "scope": "off-site fallback",
+            "query": f"LinkedIn company {place} {focused}".strip(),
+        }
+    )
+    if role_phrases:
+        plan.append(
+            {
+                "scope": "people",
+                "query": (
+                    f"site:linkedin.com/in/ {_any_of(role_phrases)} {place} {focused}"
+                ).strip(),
+            }
+        )
+
     return {
         "ok": True,
         "mode": "manual_query_only",
-        "queries": queries,
+        "queries": [step["query"] for step in plan],
+        "query_plan": plan,
+        "ranking_only_criteria": [
+            value
+            for value in (
+                *wider_location,
+                *industry_phrases[2:],
+                parsed["company_headcount"],
+            )
+            if value
+        ],
         "cannot_verify_from_query": [
             value
             for value in (
@@ -107,6 +194,11 @@ def build_public_queries(params: Mapping[str, Any]) -> dict[str, Any]:
             if value
         ],
         "search_criteria": parsed,
+        "widening_rule": (
+            "Run the ladder from focused to broad and stop at the first scope that "
+            "returns usable results. Name that scope in the answer. Broadening is "
+            "allowed; presenting a broadened search as the requested one is not."
+        ),
         "message": "These are public search strings, not returned or qualified prospects.",
     }
 
@@ -230,7 +322,8 @@ def rank_public_results(
     companies = [item for item in ranked if item["kind"] == "company"]
     people = [item for item in ranked if item["kind"] == "person"]
     limit = parsed["max_results"]
-    return {
+    scopes = sorted({item["source_query"] for item in ranked if item["source_query"]})
+    result = {
         "ok": True,
         "mode": "public_search_results",
         "companies": companies[:limit],
@@ -240,8 +333,17 @@ def rank_public_results(
         "excluded": excluded[:limit],
         "total_count": min(len(companies), limit),
         "search_criteria": parsed,
+        "queries_that_produced_results": scopes,
         "coverage": "Publicly indexed results only; bounded and potentially stale",
     }
+    if not companies and not people:
+        result["message"] = (
+            "No public result matched at the scope searched. An empty result is "
+            "not evidence that no such company or person exists: it can equally "
+            "mean the query was too narrow. Report the scope that was searched, "
+            "then widen one step down the ladder before concluding anything."
+        )
+    return result
 
 
 def _self_test() -> None:
@@ -256,8 +358,28 @@ def _self_test() -> None:
     assert parsed["max_results"] == 10
 
     queries = build_public_queries(params)
-    assert len(queries["queries"]) == 3
+    plan = queries["query_plan"]
+    assert [step["scope"] for step in plan] == [
+        "focused",
+        "widened industry",
+        "location only",
+        "off-site fallback",
+        "people",
+    ]
     assert queries["queries"][0].startswith("site:linkedin.com/company/")
+
+    # The whole criterion must never be quoted as one exact phrase, and the
+    # narrowest query must constrain on the city rather than the full location.
+    for query in queries["queries"]:
+        assert '"Melbourne, Victoria, Australia"' not in query
+        assert '"AI communities, technology, not for profit"' not in query
+    assert '"Melbourne"' in plan[0]["query"]
+    assert "Victoria" in queries["ranking_only_criteria"]
+    assert "11-50" in queries["ranking_only_criteria"]
+
+    # The ladder must actually widen: each step constrains no more than the last.
+    assert plan[0]["query"].count('"') > plan[2]["query"].count('"')
+    assert " OR " in plan[1]["query"]
 
     safe_url, kind = _canonical_linkedin_url(
         "https://au.linkedin.com/company/example-ai-community/?trk=public"
@@ -299,6 +421,12 @@ def _self_test() -> None:
     assert ranked["person_urls"] == ["https://www.linkedin.com/in/alex-example"]
     assert "company headcount" in ranked["companies"][0]["unverified_criteria"]
     assert len(ranked["excluded"]) == 1
+    assert "message" not in ranked
+
+    # An empty result must say the scope was empty, not that nobody exists.
+    empty = rank_public_results(params, [])
+    assert empty["company_urls"] == [] and empty["total_count"] == 0
+    assert "not evidence that no such company or person exists" in empty["message"]
 
     try:
         parse_input({"industry": "Technology", "max_results": 100})
@@ -321,7 +449,7 @@ def main() -> None:
 
     if args.self_test:
         _self_test()
-        print(json.dumps({"ok": True, "tests": 6}))
+        print(json.dumps({"ok": True, "tests": 9}))
         return
     if args.manual_query:
         result = build_public_queries(

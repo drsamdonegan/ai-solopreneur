@@ -36,7 +36,7 @@ python3 skills/linkedin-prospect-search/scripts/prospect_search.py --self-test
 Expected result:
 
 ```json
-{"ok": true, "tests": 6}
+{"ok": true, "tests": 9}
 ```
 
 Generate the exact public-search queries without running a search:
