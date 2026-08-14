@@ -191,7 +191,6 @@ in plain English inside a box.
 | "Nearly there" and a list | Add what it lists, then deploy again. |
 | Build fails at once, log lists only `README.md` | Wrong repository. Point the service at the one with your agent in it. |
 | `Your agent has two different credential keys` | Delete the `N8N_ENCRYPTION_KEY` variable. You never need to set it — the key that unlocks your credentials travels inside your pack. |
-| `Your agent has two different credential keys` | Delete the `N8N_ENCRYPTION_KEY` variable. You never need to set it — the key that unlocks your credentials travels inside your pack. |
 | Red text during the build, before any of the above | The build failed, not your agent. Check whether the same commit runs on your own computer. |
 
 ### It starts, but I cannot get in
