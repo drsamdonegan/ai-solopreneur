@@ -2,17 +2,25 @@
 //
 // Everything a skill needs lives in optional-skills/<id>/. Most of it is new
 // files that can simply be copied in. But four files already exist and differ
-// from one learner to the next: the agent workflow, the tool policy, the skill
-// list, and the base agent instructions. Overwriting those would wipe out
-// whatever else you have already switched on, so this makes the smallest
-// possible addition to each one instead.
+// from one learner to the next:
+//
+//   n8n/workflows/00-start-here-project-partner.json  the agent, and the base
+//                                                     instructions inside it
+//   tools/policy.json                                 what each tool may do
+//   skills/enabled.txt                                which skills are loaded
+//   n8n/folders.manifest.json                         where it shows in n8n
+//
+// Overwriting any of those would wipe out whatever else the learner has
+// already switched on, so this makes the smallest possible addition to each
+// one instead.
 //
 // Safe to run twice. Anything already in place is left exactly as it is.
 //
 //   node optional-skills/_installer/add-skill.mjs <skill-id>
+//   node optional-skills/_installer/add-skill.mjs <github-folder-url>
 //   node optional-skills/_installer/add-skill.mjs --list
 
-import { readFile, writeFile, readdir, mkdir, copyFile, access } from "node:fs/promises";
+import { readFile, writeFile, readdir, mkdir, copyFile, access, rm } from "node:fs/promises";
 import { dirname, join, resolve, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -260,6 +268,102 @@ async function enableSkill(id) {
   note(done, `Switched "${id}" on in skills/enabled.txt`);
 }
 
+// --- fetching one skill from GitHub ----------------------------------------
+
+// A learner who made their project before a skill existed has no folder for it.
+// Rather than copy the whole catalogue down, this fetches exactly the one
+// folder they asked for. Public repository, so no sign-in and no git.
+const DEFAULT_SOURCE = {
+  owner: "drsamdonegan",
+  repo: "ai-solopreneur",
+  ref: "main",
+};
+
+function parseSkillUrl(value) {
+  // https://github.com/<owner>/<repo>/tree/<ref>/optional-skills/<id>
+  const match =
+    /^https?:\/\/github\.com\/([^/]+)\/([^/]+)\/tree\/([^/]+)\/(.+?)\/?$/.exec(value);
+  if (!match) {
+    throw new Error(
+      `That does not look like a GitHub folder link:\n  ${value}\n\n` +
+        "Open the skill's folder on GitHub and copy the address from the browser.",
+    );
+  }
+  const [, owner, repo, ref, path] = match;
+  const id = path.split("/").pop();
+  return { owner, repo, ref, path, id };
+}
+
+async function githubJson(url) {
+  const response = await fetch(url, {
+    headers: { "User-Agent": "ai-solopreneur-add-skill", Accept: "application/vnd.github+json" },
+  });
+  if (response.status === 404) {
+    throw new Error(`GitHub has nothing at that address:\n  ${url}`);
+  }
+  if (response.status === 403) {
+    throw new Error(
+      "GitHub is rate limiting this computer. Wait an hour and try again, or ask " +
+        "your instructor for the skill folder directly.",
+    );
+  }
+  if (!response.ok) {
+    throw new Error(`GitHub returned ${response.status} for:\n  ${url}`);
+  }
+  return response.json();
+}
+
+async function downloadFolder(source, path, target) {
+  const url =
+    `https://api.github.com/repos/${source.owner}/${source.repo}/contents/${path}` +
+    `?ref=${encodeURIComponent(source.ref)}`;
+  const entries = await githubJson(url);
+  if (!Array.isArray(entries)) {
+    throw new Error(`Expected a folder at ${path}, but GitHub returned a file.`);
+  }
+
+  await mkdir(target, { recursive: true });
+  for (const entry of entries) {
+    const destination = join(target, entry.name);
+    if (entry.type === "dir") {
+      await downloadFolder(source, entry.path, destination);
+    } else if (entry.type === "file") {
+      const file = await fetch(entry.download_url, {
+        headers: { "User-Agent": "ai-solopreneur-add-skill" },
+      });
+      if (!file.ok) {
+        throw new Error(`Could not download ${entry.path} (${file.status}).`);
+      }
+      await writeFile(destination, Buffer.from(await file.arrayBuffer()));
+    }
+  }
+}
+
+async function fetchSkill(request) {
+  const skillDirectory = join(optionalSkillsDirectory, request.id);
+
+  if (await exists(skillDirectory)) {
+    note(skipped, `optional-skills/${request.id} is already here, so nothing was downloaded`);
+    return request.id;
+  }
+
+  process.stdout.write(`Downloading the ${request.id} skill from GitHub...\n`);
+  try {
+    await downloadFolder(request, request.path, skillDirectory);
+    if (!(await exists(join(skillDirectory, "manifest.json")))) {
+      throw new Error(
+        `The folder downloaded, but it has no manifest.json, so it is not a skill:\n  ${request.path}`,
+      );
+    }
+  } catch (error) {
+    // Leave nothing half-downloaded behind for the next run to trip over.
+    await rm(skillDirectory, { recursive: true, force: true });
+    throw error;
+  }
+  note(done, `Downloaded optional-skills/${request.id} from GitHub`);
+  return request.id;
+}
+
 // --- main ------------------------------------------------------------------
 
 async function addSkill(id) {
@@ -267,7 +371,11 @@ async function addSkill(id) {
   if (!(await exists(skillDirectory))) {
     const available = await listSkillIds();
     throw new Error(
-      `There is no optional skill called "${id}".\nAvailable: ${available.join(", ")}`,
+      `There is no optional skill called "${id}".\n` +
+        `Available here: ${available.join(", ")}\n\n` +
+        "If the skill is newer than your copy of the project, paste its GitHub\n" +
+        "folder address instead and it will be downloaded first:\n" +
+        `  npm run add-skill -- https://github.com/${DEFAULT_SOURCE.owner}/${DEFAULT_SOURCE.repo}/tree/${DEFAULT_SOURCE.ref}/optional-skills/${id}`,
     );
   }
 
@@ -325,14 +433,21 @@ if (!requested || requested === "--list") {
     process.stdout.write(`  ${id.padEnd(26)} ${manifest.name}${installed}\n`);
   }
   process.stdout.write(
-    "\nAdd one with:\n  node optional-skills/_installer/add-skill.mjs <skill-id>\n",
+    "\nAdd one with:\n" +
+      "  npm run add-skill -- <skill-id>\n\n" +
+      "Or paste a skill's GitHub folder address to download just that one first:\n" +
+      `  npm run add-skill -- https://github.com/${DEFAULT_SOURCE.owner}/${DEFAULT_SOURCE.repo}/tree/${DEFAULT_SOURCE.ref}/optional-skills/<skill-id>\n`,
   );
   process.exit(0);
 }
 
 let manifest;
 try {
-  manifest = await addSkill(requested);
+  // A GitHub folder address means fetch that one skill, then install it.
+  const id = requested.startsWith("http")
+    ? await fetchSkill(parseSkillUrl(requested))
+    : requested;
+  manifest = await addSkill(id);
 } catch (error) {
   // A learner should see the problem, not a stack trace.
   process.stderr.write(`\nCould not add "${requested}".\n\n${error.message}\n\n`);

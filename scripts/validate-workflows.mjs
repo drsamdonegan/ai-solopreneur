@@ -78,13 +78,24 @@ const optionalSkills = await readOptionalSkills();
 const installedSkills = optionalSkills.filter((skill) => skill.installed);
 
 // Deep per-tool checks below are written for tools that may or may not be
-// present. A tool belonging to a skill the learner has not installed is not a
-// failure, so those checks are skipped rather than reported.
-const uninstalledToolNames = new Set(
-  optionalSkills
-    .filter((skill) => !skill.installed)
-    .flatMap((skill) => (skill.agentTools ?? []).map((tool) => tool.name)),
+// present. A tool that is not part of the base and is not wired into the agent
+// belongs to a skill this copy does not have, which is not a failure.
+//
+// This deliberately reads the agent workflow rather than the optional-skills
+// catalogue, because `make-base` ships an agent with no catalogue at all and
+// that copy still has to validate.
+const wiredToolNames = new Set(
+  JSON.parse(
+    await readFile(
+      join(workflowDirectory, "00-start-here-project-partner.json"),
+      "utf8",
+    ),
+  ).nodes
+    .filter((node) => node.type.endsWith("toolWorkflow"))
+    .map((node) => node.name),
 );
+const isOptionalAndAbsent = (name) =>
+  !baseToolNames.includes(name) && !wiredToolNames.has(name);
 const optionalWorkflowFiles = installedSkills.flatMap((skill) => skill.workflowFiles);
 const optionalToolNames = installedSkills.flatMap((skill) =>
   (skill.agentTools ?? []).map((tool) => tool.name),
@@ -108,10 +119,10 @@ const failures = [];
 function isAboutUninstalledTool(message) {
   const named = /^Agent: ([a-z_]+) /.exec(message);
   if (named) {
-    return uninstalledToolNames.has(named[1]);
+    return isOptionalAndAbsent(named[1]);
   }
   const missingNode = /missing node "([a-z_]+)"$/.exec(message);
-  return Boolean(missingNode) && uninstalledToolNames.has(missingNode[1]);
+  return Boolean(missingNode) && isOptionalAndAbsent(missingNode[1]);
 }
 
 function check(condition, message) {
