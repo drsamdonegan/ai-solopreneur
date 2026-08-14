@@ -80,6 +80,23 @@ function jsonOr(args, fallback) {
   }
 }
 
+/**
+ * The learner's own repository, as owner/name. Read from git rather than asked
+ * for, because it is already sitting there and typing it is a chance to get it
+ * wrong.
+ */
+function githubRepo() {
+  const result = spawnSync("git", ["remote", "get-url", "origin"], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  if (result.error || result.status !== 0) {
+    return null;
+  }
+  const match = /github\.com[:/]([^/]+)\/(.+?)(?:\.git)?\s*$/.exec(result.stdout);
+  return match === null ? null : `${match[1]}/${match[2]}`;
+}
+
 function askHidden(question) {
   return new Promise((done) => {
     const rl = createInterface({
@@ -183,12 +200,41 @@ async function main() {
 
   // --- which project ---
   if (!railwayOk(["status"])) {
+    const repo = githubRepo();
+    if (repo === null) {
+      fail(
+        "This folder is not connected to a repository on GitHub yet.",
+        "Your agent has to live on GitHub before the cloud can run it, because",
+        "the cloud reads your code from there every time you push a change.",
+        "",
+        "Push this folder to your own GitHub account, then run this again.",
+      );
+    }
+
     print("");
-    print("Choose the project you just deployed.");
-    print("");
-    railway(["link"], { quiet: false });
+    print(`  Creating a cloud project for ${repo}...`);
+    railwayFirstThatWorks(
+      [
+        ["init", "--name", "my-agent"],
+        ["init", "-n", "my-agent"],
+      ],
+      "Creating the project",
+    );
+
+    // --repo keeps it connected to GitHub, which is what makes a push deploy
+    // itself later. Uploading the folder instead would deploy once and then
+    // never notice a change.
+    railwayFirstThatWorks(
+      [
+        ["add", "--repo", repo],
+        ["add", "-r", repo],
+      ],
+      "Connecting your repository",
+    );
+    print("  Project created and connected to your repository.");
+
     if (!railwayOk(["status"])) {
-      fail("No project is linked.", "Run `railway link` and try again.");
+      fail("The project was created but is not linked.", "Run `railway link`, then run this again.");
     }
   }
   print("  Project linked.");
