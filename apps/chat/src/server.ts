@@ -1,5 +1,10 @@
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
+import {
+  createAccessGate,
+  MIN_PASSCODE_LENGTH,
+  type AccessGate,
+} from "./access.js";
 import { loadAgentRegistry } from "./agents.js";
 import { createChatServer } from "./app.js";
 import { ChatStore } from "./chat-store.js";
@@ -52,6 +57,29 @@ try {
   process.exit(1);
 }
 
+// The gate exists only when a passcode is configured. On a learner's own
+// computer nothing sets one, so the local experience is unchanged; the cloud
+// runner refuses to start without one.
+const passcode = process.env.AGENT_PASSCODE ?? "";
+let accessGate: AccessGate | undefined;
+if (passcode !== "") {
+  if (passcode.length < MIN_PASSCODE_LENGTH) {
+    console.error(
+      `AGENT_PASSCODE must be at least ${MIN_PASSCODE_LENGTH} characters.`,
+    );
+    process.exit(1);
+  }
+  accessGate = createAccessGate({
+    passcode,
+    // Supplied by the cloud runner from the persistent volume, so a redeploy
+    // does not sign the learner out. A random one here would work but would
+    // not survive a restart.
+    sessionSecret: process.env.AGENT_SESSION_SECRET ?? "",
+    secureCookie: process.env.AGENT_COOKIE_SECURE !== "false",
+    proxyHops: positiveInteger(process.env.AGENT_PROXY_HOPS, 1),
+  });
+}
+
 const agents = await loadAgentRegistry(agentRegistryPath);
 const documentStore = new DocumentStore(
   documentDirectory,
@@ -65,6 +93,7 @@ const profileStore = new ProfileStore(
 );
 
 const server = createChatServer({
+  accessGate,
   agents,
   chatStore,
   documentStore,
@@ -82,6 +111,11 @@ server.listen(port, listenAddress, () => {
   );
   console.log(
     `Chat history ready with schema ${chatStore.health().schemaVersion}.`,
+  );
+  console.log(
+    accessGate === undefined
+      ? "Passcode: not set (correct for a local install; never for a public address)."
+      : "Passcode: on. Visitors must sign in before reaching your agent.",
   );
 });
 

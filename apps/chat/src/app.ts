@@ -10,6 +10,7 @@ import {
 } from "node:http";
 import { basename, extname, resolve, sep } from "node:path";
 import Busboy from "busboy";
+import type { AccessGate } from "./access.js";
 import {
   DEFAULT_AGENTS,
   publicAgentDefinitions,
@@ -145,6 +146,12 @@ export interface ChatGatewayOptions {
   documentStore?: DocumentStore;
   chatStore?: ChatStore;
   profileStore?: ProfileStore;
+  /**
+   * Guards every route except /health. Omitted on a learner's own computer,
+   * where the gateway is only reachable from that computer; required before
+   * the gateway is given a public address.
+   */
+  accessGate?: AccessGate | undefined;
 }
 
 class PublicError extends Error {
@@ -1299,6 +1306,16 @@ export function createChatHandler(options: ChatGatewayOptions): RequestListener 
           return;
         }
         sendJson(response, 200, { status: "ok" });
+        return;
+      }
+
+      // Deliberately below /health, so the platform's health check keeps
+      // working while nobody is signed in, and above everything else, so no
+      // route can be added later that forgets to check.
+      if (
+        options.accessGate !== undefined &&
+        (await options.accessGate.handle(request, response, url))
+      ) {
         return;
       }
 
