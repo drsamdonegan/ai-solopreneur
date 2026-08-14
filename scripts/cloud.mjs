@@ -27,7 +27,7 @@ import {
 import { randomBytes } from "node:crypto";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { runSetup, setupIsNeeded } from "./cloud-setup.mjs";
+import { runConfigHelp, runSetup, setupIsNeeded } from "./cloud-setup.mjs";
 import { primeAgent, syncWorkflows } from "./cloud-workflows.mjs";
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -217,6 +217,14 @@ function resolveSessionSecret() {
   return secret;
 }
 
+/**
+ * The port the outside world reaches, on its own. Needed before full config
+ * resolves, because the not-ready-yet page has to be served on it.
+ */
+function chatPort() {
+  return port("PORT", port("CHAT_PORT", 3_000));
+}
+
 function config() {
   const stored = readPublicUrlsFile();
 
@@ -383,14 +391,15 @@ const services = {
 // Volume
 // ---------------------------------------------------------------------------
 
-function assertVolumeMounted() {
-  const parent = dirname(paths.dataDir);
-  if (!existsSync(parent)) {
-    fatal(
-      `There is no ${parent} folder in this container.`,
-      `Set AGENT_DATA_DIR to the folder your storage is mounted on.`,
-    );
-  }
+/**
+ * Everything the agent needs before it can start, gathered in one pass.
+ *
+ * Reporting these one at a time would mean a learner adds storage, waits out a
+ * five-minute build, and is then told about a variable. So they are collected
+ * and shown together.
+ */
+function findConfigProblems() {
+  const problems = [];
 
   try {
     mkdirSync(paths.dataDir, { recursive: true });
@@ -398,21 +407,57 @@ function assertVolumeMounted() {
     writeFileSync(probe, String(startedAt));
     statSync(probe);
     rmSync(probe, { force: true });
-  } catch (error) {
-    fatal(
-      `Your agent cannot save anything to ${paths.dataDir}.`,
-      `The exact problem was: ${error.message}`,
-      "",
-      "This almost always means storage has not been added yet.",
-      "In your hosting dashboard: open your service, choose Settings,",
-      `then Volumes, then Add Volume, and set the mount path to exactly:`,
-      "",
-      `    ${paths.dataDir}`,
-      "",
-      "Without it every conversation, credential and workflow would be",
-      "erased the next time you deploy, so your agent stops here instead.",
-    );
+  } catch {
+    problems.push({
+      title: "Somewhere to keep your work",
+      steps: [
+        "Open your service and choose <strong>Settings</strong>.",
+        "Find <strong>Volumes</strong> and choose <strong>Add Volume</strong>.",
+        `Set the mount path to exactly <code>${paths.dataDir}</code>.`,
+      ],
+      log: [
+        `Your agent cannot save anything to ${paths.dataDir}.`,
+        "Settings, then Volumes, then Add Volume, mount path exactly:",
+        `    ${paths.dataDir}`,
+        "Without it every conversation and credential would be erased on the",
+        "next deploy.",
+      ],
+    });
   }
+
+  if ((process.env.AGENT_PASSCODE ?? "").length < minPasscodeLength) {
+    const tooShort = (process.env.AGENT_PASSCODE ?? "") !== "";
+    problems.push({
+      title: tooShort ? "A longer passcode" : "A passcode, so only you can open it",
+      steps: [
+        "Open your service and choose <strong>Variables</strong>.",
+        `Add one named <code>AGENT_PASSCODE</code>, at least ${minPasscodeLength} characters.`,
+        "Do not reuse a password you use anywhere else.",
+      ],
+      log: [
+        tooShort
+          ? `AGENT_PASSCODE is shorter than ${minPasscodeLength} characters.`
+          : "There is no AGENT_PASSCODE, so anyone who found the address could open your agent.",
+      ],
+    });
+  }
+
+  if (resolveN8nPublicUrl(readPublicUrlsFile()).url === "") {
+    problems.push({
+      title: "The address of your workshop",
+      steps: [
+        "Open <strong>Settings</strong>, then <strong>Networking</strong>.",
+        "Generate a domain for port <strong>5678</strong> if you have not already.",
+        "Under <strong>Variables</strong>, add <code>N8N_PUBLIC_URL</code> set to that address.",
+      ],
+      log: [
+        "Your agent does not know the address people reach its workshop on,",
+        "which is what it prints into every trigger address you copy elsewhere.",
+      ],
+    });
+  }
+
+  return problems;
 }
 
 /**
@@ -633,7 +678,28 @@ async function main() {
   print("Starting your agent...");
   print("");
 
-  assertVolumeMounted();
+  // A hosting platform builds and deploys the moment a project is created, so
+  // the first deploy of every agent lands here before anyone could have added
+  // storage or settings. Holding the door open beats exiting: exiting shows
+  // the learner "healthcheck failure" and hides the reason in a log.
+  const problems = findConfigProblems();
+  if (problems.length > 0) {
+    const width = 72;
+    print(`${"=".repeat(width)}`);
+    print("YOUR AGENT IS NOT READY YET\n");
+    for (const problem of problems) {
+      print(`${problem.title}`);
+      for (const line of problem.log) {
+        print(`  ${line}`);
+      }
+      print("");
+    }
+    print("Add these in your hosting dashboard, then deploy again.");
+    print(`${"=".repeat(width)}`);
+    await runConfigHelp({ port: chatPort(), problems, log: print });
+    return;
+  }
+
   ensureDataDirs();
   const seeded = seedSkills();
   if (seeded.length > 0) {

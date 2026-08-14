@@ -69,8 +69,18 @@ happens a month after free credit runs out.
 
 1. Sign in to `railway.com` with GitHub.
 2. **New Project** → **Deploy from GitHub repo** → choose your own repository.
+
+   Pick the repository your agent is actually in. If the build fails almost
+   immediately saying it could not work out how to build the app, and lists
+   only a `README.md`, you have chosen the wrong one — a real agent repository
+   has a `Dockerfile` in it.
+
 3. It starts building. **This takes five to ten minutes the first time.**
    Nothing is wrong. Later deploys take about two minutes.
+
+   When it finishes, open your agent's address. It will say **"Nearly there"**
+   and list what it still needs. That is expected — the next two steps are
+   those things.
 4. **Settings** → **Volumes** → **Add Volume**. Mount path, exactly:
 
    ```
@@ -169,14 +179,18 @@ Work down this list in order. The first three cover almost everything.
 
 ### My agent will not start at all
 
-Open **Deployments** in Railway and read the log. The agent explains its own
-failures in plain English inside a box. Look for that box first.
+First open your agent's address in a browser. If anything is missing it will
+tell you there, on a page headed **"Nearly there"**, with the exact menus to go
+to. You should not need the logs.
 
-| What the log says | What to do |
+If you do want them, open **Deployments** in Railway. The agent explains itself
+in plain English inside a box.
+
+| What you see | What to do |
 | --- | --- |
-| `Your agent cannot save anything to /data` | The volume is missing. Step 2, part 4. |
-| `Your agent has no passcode` | Add `AGENT_PASSCODE`. Step 2, part 7. |
-| `Your agent does not know its own web address` | Add `N8N_PUBLIC_URL`. Step 2, part 7. |
+| "Nearly there" and a list | Add what it lists, then deploy again. |
+| Build fails at once, log lists only `README.md` | Wrong repository. Point the service at the one with your agent in it. |
+| `Your agent has two different credential keys` | Delete the `N8N_ENCRYPTION_KEY` variable. You never need to set it — the key that unlocks your credentials travels inside your pack. |
 | `Your agent has two different credential keys` | Delete the `N8N_ENCRYPTION_KEY` variable. You never need to set it — the key that unlocks your credentials travels inside your pack. |
 | Red text during the build, before any of the above | The build failed, not your agent. Check whether the same commit runs on your own computer. |
 

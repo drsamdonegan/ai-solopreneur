@@ -506,6 +506,93 @@ export function runSetup({ port, passcode, paths, log }) {
 }
 
 /**
+ * Holds the door open when the agent is not configured yet.
+ *
+ * A hosting platform starts building the moment a project is created, before
+ * anyone has had a chance to add storage or settings, so the very first deploy
+ * of every new agent arrives here. Exiting would be honest but useless: the
+ * platform reports "healthcheck failure" and hides the real reason inside a
+ * log nobody has been taught to open.
+ *
+ * So this answers the health check, stays up, and puts the missing pieces on a
+ * page in the learner's own browser instead.
+ */
+export function runConfigHelp({ port, problems, log }) {
+  return new Promise(() => {
+    const items = problems
+      .map(
+        (problem) =>
+          `<li><h2>${problem.title}</h2><ol>${problem.steps
+            .map((step) => `<li>${step}</li>`)
+            .join("")}</ol></li>`,
+      )
+      .join("");
+
+    const page = `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Your agent needs a moment</title>
+    <link rel="stylesheet" href="/setup.css" />
+  </head>
+  <body>
+    <main>
+      <h1>Nearly there</h1>
+      <p class="lead">
+        Your agent is built and running, but there ${
+          problems.length === 1 ? "is one thing" : `are ${problems.length} things`
+        } it still needs before it can start. Add ${
+          problems.length === 1 ? "it" : "them"
+        } in your hosting dashboard, then deploy again.
+      </p>
+      <ul class="todo">${items}</ul>
+      <p class="footnote">
+        This page will be replaced by your agent as soon as it can start.
+        Nothing here has gone wrong, and nothing has been lost.
+      </p>
+    </main>
+  </body>
+</html>
+`;
+
+    const server = createServer((request, response) => {
+      const url = new URL(request.url ?? "/", "http://localhost");
+      if (url.pathname === "/health") {
+        // Answered so the platform does not kill and restart the container in
+        // a loop while the learner is reading the instructions.
+        sendJson(response, 200, { status: "ok", needsConfiguration: true });
+        return;
+      }
+      if (url.pathname === "/setup.css") {
+        sendAsset(response, STYLESHEET + TODO_STYLES, "text/css; charset=utf-8");
+        return;
+      }
+      sendAsset(response, page, "text/html; charset=utf-8");
+    });
+
+    server.listen(port, "0.0.0.0", () => {
+      log("");
+      log("  Waiting for you. Open your agent's web address to see what it");
+      log("  still needs, or read the list above.");
+      log("");
+    });
+  });
+}
+
+const TODO_STYLES = `
+.todo { list-style: none; margin: 0; padding: 0; }
+.todo > li {
+  padding: 1rem 0 0.2rem;
+  border-top: 1px solid var(--line);
+}
+.todo h2 { margin: 0 0 .5rem; font-size: 1.02rem; }
+.todo ol { margin: 0; padding-left: 1.2rem; color: var(--muted); font-size: .94rem; }
+.todo ol li { margin-bottom: .3rem; }
+`;
+
+/**
  * Setup runs on a fresh volume, or whenever AGENT_RESTORE is set so a learner
  * can bring a newer pack across later.
  */
