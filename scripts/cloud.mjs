@@ -1,0 +1,732 @@
+#!/usr/bin/env node
+/**
+ * Cloud supervisor.
+ *
+ * `scripts/local.mjs` runs the stack on a learner's own computer: it detaches
+ * the services, writes PID files, and returns control to the terminal. A
+ * container needs the opposite of all three. This runner stays in the
+ * foreground as the single process the platform watches, streams every child's
+ * output to stdout where the platform's log viewer can see it, and exits when
+ * any service dies so the platform restarts the container.
+ *
+ * Nothing here is used by the local runner, and the local runner is not used
+ * here. A change to one cannot break the other.
+ */
+
+import { spawn } from "node:child_process";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { randomBytes } from "node:crypto";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { runSetup, setupIsNeeded } from "./cloud-setup.mjs";
+import { primeAgent, syncWorkflows } from "./cloud-workflows.mjs";
+
+const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+
+// The persistent volume. Everything the learner would lose on a redeploy lives
+// under here and nowhere else.
+const dataDir = resolve(process.env.AGENT_DATA_DIR || "/data");
+
+const paths = {
+  dataDir,
+  n8nUserFolder: join(dataDir, "n8n"),
+  chatDataDir: join(dataDir, "chat"),
+  documentDataDir: join(dataDir, "documents"),
+  profileDataDir: join(dataDir, "profile"),
+  skillsDir: join(dataDir, "skills"),
+  configDir: join(dataDir, "config"),
+  publicUrlsFile: join(dataDir, "config", "public-urls.json"),
+  sessionSecretFile: join(dataDir, "config", "session-secret"),
+  n8nBin: join(projectRoot, "node_modules", "n8n", "bin", "n8n"),
+  workflowsDir: join(projectRoot, "n8n", "workflows"),
+  chatServer: join(projectRoot, "apps", "chat", "dist", "server.js"),
+  documentWorkerServer: join(
+    projectRoot,
+    "services",
+    "document-worker",
+    "src",
+    "server.mjs",
+  ),
+  agentRegistry: join(projectRoot, "apps", "chat", "config", "agents.json"),
+  repoSkillsDir: join(projectRoot, "skills"),
+};
+
+const startedAt = Date.now();
+
+// ---------------------------------------------------------------------------
+// Output
+// ---------------------------------------------------------------------------
+
+function print(message = "") {
+  process.stdout.write(`${message}\n`);
+}
+
+/**
+ * Learners read these logs when something goes wrong, so a failure gets a
+ * framed block with the fix in it rather than a stack trace.
+ */
+function fatal(title, ...lines) {
+  const width = 72;
+  process.stdout.write(`\n${"=".repeat(width)}\n`);
+  process.stdout.write(`YOUR AGENT COULD NOT START\n\n${title}\n`);
+  if (lines.length > 0) {
+    process.stdout.write(`\n${lines.join("\n")}\n`);
+  }
+  process.stdout.write(`${"=".repeat(width)}\n\n`);
+  process.exit(1);
+}
+
+// ---------------------------------------------------------------------------
+// Configuration
+// ---------------------------------------------------------------------------
+
+function port(name, fallback) {
+  const raw = process.env[name];
+  if (raw === undefined || raw === "") {
+    return fallback;
+  }
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 65535) {
+    fatal(
+      `${name} is set to "${raw}", which is not a usable port number.`,
+      "Remove that variable in your hosting dashboard and redeploy.",
+    );
+  }
+  return parsed;
+}
+
+function trimTrailingSlash(value) {
+  return value.replace(/\/+$/, "");
+}
+
+function readPublicUrlsFile() {
+  try {
+    const parsed = JSON.parse(readFileSync(paths.publicUrlsFile, "utf8"));
+    return typeof parsed === "object" && parsed !== null ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function asHttpsUrl(value) {
+  if (!value) {
+    return "";
+  }
+  const candidate = /^https?:\/\//.test(value) ? value : `https://${value}`;
+  try {
+    const url = new URL(candidate);
+    if (url.protocol !== "https:" && url.hostname !== "localhost") {
+      return "";
+    }
+    return trimTrailingSlash(url.origin);
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * The address the outside world uses to reach n8n.
+ *
+ * This has to be exact. Every webhook address n8n shows in the editor is built
+ * from it, and those are the addresses a learner pastes into Slack. A wrong
+ * value produces webhooks that look right and never fire.
+ *
+ * RAILWAY_PUBLIC_DOMAIN is deliberately the last resort: a service with two
+ * domains reports only one of them, so on this stack it is as likely to be the
+ * chat address as the n8n address.
+ */
+function resolveN8nPublicUrl(stored) {
+  const fromEnv = asHttpsUrl(process.env.N8N_PUBLIC_URL);
+  if (fromEnv) {
+    return { url: fromEnv, source: "the N8N_PUBLIC_URL variable" };
+  }
+  const fromFile = asHttpsUrl(stored.n8n);
+  if (fromFile) {
+    return { url: fromFile, source: "your saved settings" };
+  }
+  const fromPlatform = asHttpsUrl(process.env.RAILWAY_PUBLIC_DOMAIN);
+  if (fromPlatform) {
+    return { url: fromPlatform, source: "the hosting platform (unconfirmed)" };
+  }
+  return { url: "", source: "" };
+}
+
+function resolveChatPublicUrl(stored) {
+  return (
+    asHttpsUrl(process.env.CHAT_PUBLIC_URL) ||
+    asHttpsUrl(stored.chat) ||
+    asHttpsUrl(process.env.RAILWAY_PUBLIC_DOMAIN) ||
+    ""
+  );
+}
+
+/** Minimum kept in step with MIN_PASSCODE_LENGTH in apps/chat/src/access.ts. */
+const minPasscodeLength = 8;
+
+function resolvePasscode() {
+  const passcode = process.env.AGENT_PASSCODE ?? "";
+  if (passcode === "") {
+    fatal(
+      "Your agent has no passcode, so anyone could open it.",
+      "On your own computer nothing else can reach your agent. On a public",
+      "web address anyone who finds it could read your conversations, read",
+      "your business facts, and spend your Claude credit.",
+      "",
+      "To fix it:",
+      "  1. In your hosting dashboard, open Variables.",
+      `  2. Add AGENT_PASSCODE, and choose at least ${minPasscodeLength} characters.`,
+      "  3. Redeploy.",
+      "",
+      "Do not reuse a password you use anywhere else.",
+    );
+  }
+  if (passcode.length < minPasscodeLength) {
+    fatal(
+      `Your passcode is too short (${passcode.length} characters).`,
+      `Make AGENT_PASSCODE at least ${minPasscodeLength} characters and redeploy.`,
+    );
+  }
+  return passcode;
+}
+
+/**
+ * Signs the sign-in cookie. It lives on the volume rather than in a variable
+ * so that a redeploy does not sign the learner out of their own agent, and so
+ * there is one less thing for them to set by hand.
+ */
+function resolveSessionSecret() {
+  try {
+    const existing = readFileSync(paths.sessionSecretFile, "utf8").trim();
+    if (existing.length >= 32) {
+      return existing;
+    }
+  } catch {
+    // First boot, or the file was removed. Fall through and make one.
+  }
+  const secret = randomBytes(32).toString("hex");
+  writeFileSync(paths.sessionSecretFile, `${secret}\n`, { mode: 0o600 });
+  return secret;
+}
+
+function config() {
+  const stored = readPublicUrlsFile();
+
+  // Hosting platforms inject PORT for the service they route to. That is the
+  // chat app, so it takes precedence over CHAT_PORT.
+  const chatPort = port("PORT", port("CHAT_PORT", 3_000));
+  const n8nPort = port("N8N_PORT", 5_678);
+  const documentWorkerPort = port("DOCUMENT_WORKER_PORT", 3_100);
+  const taskBrokerPort = port(
+    "N8N_RUNNERS_BROKER_PORT",
+    n8nPort === 65_535 ? n8nPort - 1 : n8nPort + 1,
+  );
+
+  const n8nPublic = resolveN8nPublicUrl(stored);
+  if (!n8nPublic.url) {
+    fatal(
+      "Your agent does not know its own web address yet.",
+      "Your workshop (n8n) needs to know the address people reach it on,",
+      "because that is what it prints into every trigger address you copy",
+      "into Slack or anywhere else.",
+      "",
+      "To fix it:",
+      "  1. In your hosting dashboard, open Settings and find your domains.",
+      "  2. Copy the address that points to port " + n8nPort + ".",
+      "  3. Add a variable named N8N_PUBLIC_URL with that address as its value.",
+      "  4. Redeploy.",
+    );
+  }
+
+  const timezone = process.env.GENERIC_TIMEZONE || process.env.TZ || "UTC";
+
+  return {
+    passcode: resolvePasscode(),
+    sessionSecret: resolveSessionSecret(),
+    chatPort,
+    n8nPort,
+    documentWorkerPort,
+    taskBrokerPort,
+    timezone,
+    n8nPublicUrl: n8nPublic.url,
+    n8nPublicUrlSource: n8nPublic.source,
+    chatPublicUrl: resolveChatPublicUrl(stored),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Service definitions
+// ---------------------------------------------------------------------------
+
+function n8nEnv(cfg) {
+  const host = new URL(cfg.n8nPublicUrl).hostname;
+  return {
+    GENERIC_TIMEZONE: cfg.timezone,
+    TZ: cfg.timezone,
+
+    N8N_USER_FOLDER: paths.n8nUserFolder,
+    N8N_LISTEN_ADDRESS: "0.0.0.0",
+    N8N_PORT: String(cfg.n8nPort),
+
+    // Public identity. WEBHOOK_URL is the name n8n actually reads; the local
+    // runner's N8N_WEBHOOK_URL is not a variable n8n recognises.
+    N8N_HOST: host,
+    N8N_PROTOCOL: "https",
+    N8N_EDITOR_BASE_URL: cfg.n8nPublicUrl,
+    WEBHOOK_URL: `${cfg.n8nPublicUrl}/`,
+
+    // Behind the platform's TLS terminator.
+    N8N_PROXY_HOPS: process.env.N8N_PROXY_HOPS || "1",
+    N8N_SECURE_COOKIE: "true",
+
+    // The task broker is an internal channel between n8n and its Code-node
+    // runner. It must never be reachable from outside the container.
+    N8N_RUNNERS_BROKER_LISTEN_ADDRESS: "127.0.0.1",
+    N8N_RUNNERS_BROKER_PORT: String(cfg.taskBrokerPort),
+    N8N_RUNNERS_TASK_TIMEOUT: "60",
+
+    // Unbounded execution history is the way a small volume fills up once
+    // triggers start firing on a schedule.
+    EXECUTIONS_DATA_PRUNE: "true",
+    EXECUTIONS_DATA_MAX_AGE: process.env.EXECUTIONS_DATA_MAX_AGE || "336",
+    EXECUTIONS_DATA_PRUNE_MAX_COUNT:
+      process.env.EXECUTIONS_DATA_PRUNE_MAX_COUNT || "5000",
+    EXECUTIONS_DATA_SAVE_MANUAL_EXECUTIONS: "false",
+    N8N_DEFAULT_BINARY_DATA_MODE: "filesystem",
+
+    // Same posture as the local runner.
+    N8N_BLOCK_ENV_ACCESS_IN_NODE: "true",
+    N8N_COMMUNITY_PACKAGES_ENABLED: "false",
+    N8N_UNVERIFIED_PACKAGES_ENABLED: "false",
+    N8N_DIAGNOSTICS_ENABLED: "false",
+    N8N_PERSONALIZATION_ENABLED: "false",
+    N8N_VERSION_NOTIFICATIONS_ENABLED: "false",
+    N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS: "true",
+  };
+}
+
+function chatEnv(cfg) {
+  return {
+    NODE_ENV: "production",
+    PORT: String(cfg.chatPort),
+    CHAT_LISTEN_ADDRESS: "0.0.0.0",
+    CHAT_REQUEST_TIMEOUT_MS: process.env.CHAT_REQUEST_TIMEOUT_MS || "120000",
+
+    // Everything except /health is behind this.
+    AGENT_PASSCODE: cfg.passcode,
+    AGENT_SESSION_SECRET: cfg.sessionSecret,
+    AGENT_COOKIE_SECURE: "true",
+    AGENT_PROXY_HOPS: process.env.N8N_PROXY_HOPS || "1",
+
+    AGENT_REGISTRY_PATH: paths.agentRegistry,
+    CHAT_DATA_DIRECTORY: paths.chatDataDir,
+    DOCUMENT_DATA_DIRECTORY: paths.documentDataDir,
+    PROFILE_DATA_DIRECTORY: paths.profileDataDir,
+
+    // The profile editor writes SKILL.md back to this folder. Left at its
+    // default it would write into the container image, and every redeploy
+    // would silently discard the learner's own business facts.
+    MY_BUSINESS_SKILL_DIRECTORY: join(paths.skillsDir, "my-business"),
+
+    // Both internal. Traffic between the three services never leaves the
+    // container, so it stays on loopback and out of the public address.
+    DOCUMENT_WORKER_URL: `http://127.0.0.1:${cfg.documentWorkerPort}`,
+    N8N_CHAT_WEBHOOK_URL: `http://127.0.0.1:${cfg.n8nPort}/webhook/chat`,
+  };
+}
+
+function documentWorkerEnv(cfg) {
+  return {
+    NODE_ENV: "production",
+    PORT: String(cfg.documentWorkerPort),
+    DOCUMENT_LISTEN_ADDRESS: "127.0.0.1",
+  };
+}
+
+const services = {
+  n8n: {
+    label: "workshop",
+    tag: "n8n  ",
+    argv: () => [paths.n8nBin],
+    env: n8nEnv,
+    healthUrl: (cfg) => `http://127.0.0.1:${cfg.n8nPort}/healthz`,
+    // n8n runs migrations on a cold database, which is the slowest first boot.
+    readyTimeoutMs: 300_000,
+  },
+  documentWorker: {
+    label: "document reader",
+    tag: "docs ",
+    argv: () => [paths.documentWorkerServer],
+    env: documentWorkerEnv,
+    healthUrl: (cfg) => `http://127.0.0.1:${cfg.documentWorkerPort}/health`,
+    readyTimeoutMs: 60_000,
+  },
+  chat: {
+    label: "chat",
+    tag: "chat ",
+    argv: () => [paths.chatServer],
+    env: chatEnv,
+    healthUrl: (cfg) => `http://127.0.0.1:${cfg.chatPort}/health`,
+    readyTimeoutMs: 60_000,
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Volume
+// ---------------------------------------------------------------------------
+
+function assertVolumeMounted() {
+  const parent = dirname(paths.dataDir);
+  if (!existsSync(parent)) {
+    fatal(
+      `There is no ${parent} folder in this container.`,
+      `Set AGENT_DATA_DIR to the folder your storage is mounted on.`,
+    );
+  }
+
+  try {
+    mkdirSync(paths.dataDir, { recursive: true });
+    const probe = join(paths.dataDir, ".write-test");
+    writeFileSync(probe, String(startedAt));
+    statSync(probe);
+    rmSync(probe, { force: true });
+  } catch (error) {
+    fatal(
+      `Your agent cannot save anything to ${paths.dataDir}.`,
+      `The exact problem was: ${error.message}`,
+      "",
+      "This almost always means storage has not been added yet.",
+      "In your hosting dashboard: open your service, choose Settings,",
+      `then Volumes, then Add Volume, and set the mount path to exactly:`,
+      "",
+      `    ${paths.dataDir}`,
+      "",
+      "Without it every conversation, credential and workflow would be",
+      "erased the next time you deploy, so your agent stops here instead.",
+    );
+  }
+}
+
+/**
+ * The credential key lives on the volume, put there either by n8n on a fresh
+ * start or by a restored pack. Setting N8N_ENCRYPTION_KEY by hand can only
+ * disagree with it, and disagreeing means every saved credential is
+ * unreadable.
+ */
+function assertEncryptionKeyAgrees() {
+  const fromEnv = process.env.N8N_ENCRYPTION_KEY ?? "";
+  if (fromEnv === "") {
+    return;
+  }
+  let onDisk = "";
+  try {
+    onDisk = JSON.parse(
+      readFileSync(join(paths.n8nUserFolder, ".n8n", "config"), "utf8"),
+    ).encryptionKey;
+  } catch {
+    // No key stored yet, so there is nothing to disagree with.
+    return;
+  }
+  if (onDisk === fromEnv) {
+    return;
+  }
+  fatal(
+    "Your agent has two different credential keys and cannot open your credentials.",
+    "Your saved credentials are locked with a key that came across with your",
+    "agent. Something has set a different one, so none of them can be read.",
+    "",
+    "To fix it:",
+    "  1. In your hosting dashboard, open Variables.",
+    "  2. Delete the variable named N8N_ENCRYPTION_KEY.",
+    "  3. Redeploy.",
+    "",
+    "You never need to set that variable. Your key travels inside your agent",
+    "pack, which is why your credentials work without you retyping them.",
+  );
+}
+
+function ensureDataDirs() {
+  for (const dir of [
+    paths.n8nUserFolder,
+    paths.chatDataDir,
+    paths.documentDataDir,
+    paths.profileDataDir,
+    paths.skillsDir,
+    paths.configDir,
+  ]) {
+    mkdirSync(dir, { recursive: true });
+  }
+}
+
+/**
+ * Skills ship in the image but are edited by the learner, so the working copy
+ * has to live on the volume. Seeding only fills gaps: an existing folder is
+ * the learner's and is never overwritten by a deploy.
+ */
+function seedSkills() {
+  if (!existsSync(paths.repoSkillsDir)) {
+    return [];
+  }
+  const seeded = [];
+  for (const entry of readdirSync(paths.repoSkillsDir, { withFileTypes: true })) {
+    if (!entry.isDirectory()) {
+      continue;
+    }
+    const target = join(paths.skillsDir, entry.name);
+    if (existsSync(target)) {
+      continue;
+    }
+    cpSync(join(paths.repoSkillsDir, entry.name), target, { recursive: true });
+    seeded.push(entry.name);
+  }
+  return seeded;
+}
+
+// ---------------------------------------------------------------------------
+// Process supervision
+// ---------------------------------------------------------------------------
+
+const children = new Map();
+let shuttingDown = false;
+
+function streamOutput(tag, stream) {
+  let buffer = "";
+  stream.setEncoding("utf8");
+  stream.on("data", (chunk) => {
+    buffer += chunk;
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+    for (const line of lines) {
+      process.stdout.write(`[${tag}] ${line}\n`);
+    }
+  });
+  stream.on("end", () => {
+    if (buffer.length > 0) {
+      process.stdout.write(`[${tag}] ${buffer}\n`);
+    }
+  });
+}
+
+function startService(name, cfg) {
+  const service = services[name];
+  const child = spawn(process.execPath, service.argv(), {
+    stdio: ["ignore", "pipe", "pipe"],
+    env: { ...process.env, ...service.env(cfg) },
+  });
+
+  streamOutput(service.tag, child.stdout);
+  streamOutput(service.tag, child.stderr);
+  children.set(name, child);
+
+  child.on("exit", (code, signal) => {
+    children.delete(name);
+    if (shuttingDown) {
+      return;
+    }
+    // One dead service means a half-working agent, which is harder for a
+    // learner to diagnose than a restart. Take the whole container down and
+    // let the platform bring back a clean one.
+    print("");
+    print(
+      `The ${service.label} service stopped unexpectedly ` +
+        `(${signal ? `signal ${signal}` : `exit code ${code}`}).`,
+    );
+    print("Restarting your whole agent. The lines above show why it stopped.");
+    void shutdown(1);
+  });
+
+  child.on("error", (error) => {
+    fatal(
+      `The ${service.label} service could not be started.`,
+      error.message,
+    );
+  });
+
+  return child;
+}
+
+function fetchStatus(url, timeoutMs = 3_000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  return fetch(url, { signal: controller.signal })
+    .then((response) => response.ok)
+    .catch(() => false)
+    .finally(() => clearTimeout(timer));
+}
+
+function sleep(ms) {
+  return new Promise((done) => setTimeout(done, ms));
+}
+
+async function waitForService(name, cfg) {
+  const service = services[name];
+  const url = service.healthUrl(cfg);
+  const waitingSince = Date.now();
+  const deadline = waitingSince + service.readyTimeoutMs;
+  let lastNotice = waitingSince;
+
+  while (Date.now() < deadline) {
+    if (!children.has(name)) {
+      // The exit handler has already explained why and started shutdown.
+      await sleep(1_000);
+      return false;
+    }
+    if (await fetchStatus(url)) {
+      print(`  ${service.label} is ready.`);
+      return true;
+    }
+    if (Date.now() - lastNotice > 20_000) {
+      const waited = Math.round((Date.now() - waitingSince) / 1_000);
+      print(`  still waiting for ${service.label} (${waited}s)...`);
+      lastNotice = Date.now();
+    }
+    await sleep(1_000);
+  }
+
+  fatal(
+    `The ${service.label} service did not become ready in time.`,
+    `Nothing answered at ${url}.`,
+    "The lines above, tagged with the service name, show what it was doing.",
+  );
+  return false;
+}
+
+async function shutdown(exitCode) {
+  if (shuttingDown) {
+    return;
+  }
+  shuttingDown = true;
+
+  // Chat first, n8n last: stop accepting new work before stopping the thing
+  // that is doing it, so an in-flight run has a chance to finish.
+  for (const name of ["chat", "documentWorker", "n8n"]) {
+    const child = children.get(name);
+    if (child) {
+      child.kill("SIGTERM");
+    }
+  }
+
+  const deadline = Date.now() + 25_000;
+  while (children.size > 0 && Date.now() < deadline) {
+    await sleep(200);
+  }
+  for (const child of children.values()) {
+    child.kill("SIGKILL");
+  }
+
+  process.exit(exitCode);
+}
+
+// ---------------------------------------------------------------------------
+// Entry point
+// ---------------------------------------------------------------------------
+
+async function main() {
+  print("Starting your agent...");
+  print("");
+
+  assertVolumeMounted();
+  ensureDataDirs();
+  const seeded = seedSkills();
+  if (seeded.length > 0) {
+    print(`  Installed skills for the first time: ${seeded.join(", ")}`);
+  }
+
+  const cfg = config();
+  print(`  Storage:  ${paths.dataDir}`);
+  print(`  Workshop: ${cfg.n8nPublicUrl}  (from ${cfg.n8nPublicUrlSource})`);
+  if (cfg.chatPublicUrl) {
+    print(`  Chat:     ${cfg.chatPublicUrl}`);
+  }
+  if (cfg.n8nPublicUrlSource.includes("unconfirmed")) {
+    print("");
+    print("  NOTE: this address was guessed from the hosting platform, and a");
+    print("  service with two addresses reports only one of them. If your");
+    print("  trigger addresses do not work, set N8N_PUBLIC_URL explicitly.");
+  }
+  print("");
+
+  process.on("SIGTERM", () => void shutdown(0));
+  process.on("SIGINT", () => void shutdown(0));
+
+  // Deliberately before any service starts. Nothing has the databases open
+  // yet, so a restored pack is written straight into place — no staging area,
+  // no restart, and no moment where a half-restored agent is serving.
+  if (setupIsNeeded(paths)) {
+    const outcome = await runSetup({
+      port: cfg.chatPort,
+      passcode: cfg.passcode,
+      paths,
+      log: print,
+    });
+    print(
+      outcome.restored
+        ? `  Your agent was brought across: ${outcome.files.length} files restored.`
+        : "  Starting a new, empty agent.",
+    );
+    print("");
+  }
+
+  // n8n refuses to start if N8N_ENCRYPTION_KEY disagrees with the key on the
+  // volume, which is correct but arrives as a crash loop and a link to the
+  // docs. Nobody needs to set this variable — the key travels inside the pack
+  // — so catching it here turns a confusing loop into an instruction.
+  assertEncryptionKeyAgrees();
+
+  // Also before n8n starts. The CLI works straight on the database, so the
+  // workflows are already correct when n8n first reads them and nothing needs
+  // restarting to pick them up.
+  try {
+    const sync = syncWorkflows({ paths, n8nEnv: n8nEnv(cfg), log: print });
+    if (!sync.skipped) {
+      print(
+        `  ${sync.imported} workflows updated, ${sync.published} turned on` +
+          (sync.mainPublished ? ", and your agent is live." : "."),
+      );
+      if (!sync.mainPublished) {
+        print(
+          "  Your agent itself stays off until its Anthropic credential is in place.",
+        );
+      }
+    }
+  } catch (error) {
+    // A workflow problem should not cost the learner their whole agent: n8n,
+    // the editor and their credentials are all still worth having.
+    print(`  ${String(error.message ?? error)}`);
+    print("  Starting anyway. Open your workshop to see what is there.");
+  }
+  print("");
+
+  // Strict order: n8n owns the database and both other services talk to it.
+  startService("n8n", cfg);
+  if (!(await waitForService("n8n", cfg))) return;
+
+  await primeAgent({ paths, n8nPort: cfg.n8nPort, log: print });
+
+  startService("documentWorker", cfg);
+  if (!(await waitForService("documentWorker", cfg))) return;
+
+  startService("chat", cfg);
+  if (!(await waitForService("chat", cfg))) return;
+
+  const seconds = Math.round((Date.now() - startedAt) / 1_000);
+  print("");
+  print(`Your agent is running. Started in ${seconds}s.`);
+  if (cfg.chatPublicUrl) {
+    print(`  Talk to it:   ${cfg.chatPublicUrl}`);
+  }
+  print(`  Workshop:     ${cfg.n8nPublicUrl}`);
+  print("");
+}
+
+main().catch((error) => {
+  fatal("Something unexpected went wrong while starting.", String(error));
+});

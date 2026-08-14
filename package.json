@@ -10,6 +10,8 @@
   "scripts": {
     "setup": "node scripts/local.mjs setup",
     "start": "node scripts/local.mjs start",
+    "start:cloud": "node scripts/cloud.mjs",
+    "pack": "node scripts/pack-agent.mjs",
     "stop": "node scripts/local.mjs stop",
     "restart": "node scripts/local.mjs restart",
     "status": "node scripts/local.mjs status",

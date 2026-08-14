@@ -1765,6 +1765,22 @@ function sqliteQuickCheck(databasePath) {
   };
 }
 
+/**
+ * Packs the agent for the cloud. Run as a child rather than imported so the
+ * passphrase prompt gets the real terminal, and so the packing logic stays out
+ * of this file.
+ */
+async function commandPack() {
+  requireLocalInstall();
+  const packer = join(projectRoot, "scripts", "pack-agent.mjs");
+  const result = spawnSync(process.execPath, [packer], { stdio: "inherit" });
+  if (result.error) {
+    printError(`Could not run the packer: ${result.error.message}`);
+    return 1;
+  }
+  return result.status ?? 1;
+}
+
 async function commandBackup() {
   requireLocalInstall();
   if (!existsSync(paths.n8nDataDir)) {
@@ -2281,6 +2297,8 @@ async function main() {
       return commandExportWorkflows();
     case "backup":
       return commandBackup();
+    case "pack":
+      return commandPack();
     case "restore":
       return commandRestore(rest);
     case "reset":

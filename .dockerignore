@@ -1,0 +1,38 @@
+# Everything here is either rebuilt inside the image, private to a learner's
+# own computer, or large enough to slow every deploy down.
+
+# Rebuilt during the image build.
+node_modules
+**/node_modules
+dist
+**/dist
+
+# Private local state: saved chats, the n8n database, encrypted credentials.
+# This must never reach a container image. It arrives on the volume instead.
+data
+backups
+.env
+.env.*
+!.env.example
+
+# The learner's own downloaded Node runtime. The image has its own.
+.runtime
+
+# Workflow exports carry instance-specific credential references.
+n8n/exports
+
+# Not needed at runtime.
+.git
+.github
+.gitignore
+docs
+pilot
+examples
+tmp
+*.command
+*.cmd
+*.log
+.DS_Store
+Thumbs.db
+.idea
+.vscode
