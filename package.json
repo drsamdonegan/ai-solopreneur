@@ -12,6 +12,7 @@
     "start": "node scripts/local.mjs start",
     "start:cloud": "node scripts/cloud.mjs",
     "pack": "node scripts/pack-agent.mjs",
+    "connect-cloud": "node scripts/connect-cloud.mjs",
     "stop": "node scripts/local.mjs stop",
     "restart": "node scripts/local.mjs restart",
     "status": "node scripts/local.mjs status",
