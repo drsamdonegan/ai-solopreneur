@@ -54,16 +54,17 @@ Then open the chat and select **New conversation**. An older conversation still 
 
 Some skills need one extra setup step — an API key, or a one-off workflow to create their data store. The installer tells you at the end when that applies, and the skill's own README walks through it.
 
-## If you cloned before these existed
+## If your project is older than the skill you want
 
-If your project has no `optional-skills` folder, ask Claude Code:
+You do not need to update your whole project. Open the skill's folder on GitHub, copy the address out of your browser, and hand it over:
 
-```text
-My project has no optional-skills folder. Please copy it in from
-https://github.com/drsamdonegan/ai-solopreneur, then add the signal-research skill.
+```bash
+npm run add-skill -- https://github.com/drsamdonegan/ai-solopreneur/tree/main/optional-skills/signal-research
 ```
 
-This only copies the folder in. It does not touch your chat app, your existing skills, or anything you have customised.
+That downloads **only that one folder** and installs it. It does not bring the other skills, and it does not touch your chat app, your existing skills, or anything you have customised.
+
+Claude Code understands the same thing in plain English — paste the address and ask it to add that skill.
 
 ## A word on enabling several at once
 
@@ -73,6 +74,25 @@ Add them one at a time, and switch off the ones you are not using by removing th
 
 ## For instructors
 
-Adding a skill touches four shared files that differ from one learner to the next: the agent workflow, `tools/policy.json`, `skills/enabled.txt`, and the base agent instructions inside the workflow's *Build Agent Context* node. The installer makes the smallest possible addition to each and skips anything already present, which is why it is safe to run against a repo a learner has already customised — and why skills are no longer shipped as branches to merge.
+Adding a skill copies in its own files, then makes the smallest possible addition to four shared files that differ from one learner to the next:
 
-Each skill's `manifest.json` declares everything it adds: its agent tool nodes, its `tools/policy.json` entries, and the tool-risk rules that go into the base agent instructions. A new skill needs a manifest, a `skill/` folder, and optionally a `workflows/` folder. Nothing else.
+| File | What a skill adds |
+| --- | --- |
+| `n8n/workflows/00-start-here-project-partner.json` | its tool node, the `ai_tool` wire to the agent, and its risk rule inside `basePolicy` in the *Build Agent Context* node |
+| `tools/policy.json` | the tool's risk classification |
+| `skills/enabled.txt` | one line |
+| `n8n/folders.manifest.json` | which folder it appears under in n8n |
+
+The installer skips anything already present, which is why it is safe to run against a repo a learner has already customised — and why skills are no longer shipped as branches to merge.
+
+Each skill's `manifest.json` declares all of that. A new skill needs a manifest, a `skill/` folder, and optionally a `workflows/` folder. Nothing else. **App code never ships with a skill** — `apps/chat` endpoints live in the base and stay inert until a skill's workflow calls them, which is what keeps a skill install away from the frontend.
+
+### Handing out a base agent
+
+```bash
+node scripts/make-base.mjs ../ai-solopreneur-base
+```
+
+Writes a clean copy with no optional skills, no optional tools, and no catalogue folder. It reads from the last commit, not your working folder, so anything you have installed locally while testing cannot leak into it. Zip the result and hand it out.
+
+The base agent still has its four core skills and three task tools — those *are* the project manager, and `compile-skills.mjs` requires at least one skill enabled. "Base" means no **optional** skills or tools.
