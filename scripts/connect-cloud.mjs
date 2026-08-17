@@ -512,6 +512,30 @@ async function main() {
   };
 
   print(`  Service: ${service}`);
+
+  const setVariable = (key, value) =>
+    railwayFirstThatWorks(
+      [
+        forService(["variable", "set", `${key}=${value}`, "--skip-deploys"]),
+        forGroup(["variable", "set", `${key}=${value}`, "--skip-deploys"]),
+        forService(["variable", "set", `${key}=${value}`]),
+        forGroup(["variable", "set", `${key}=${value}`]),
+        forService(["variables", "--set", `${key}=${value}`]),
+        forService(["variables", "set", `${key}=${value}`]),
+      ],
+      `Setting ${key}`,
+    );
+
+  // Set before anything else, because connecting the repository above already
+  // started a build. railway.json asks for the Dockerfile builder and a brand
+  // new service can ignore it — reading no config file, choosing its own build
+  // system, and failing having printed no build output at all: a few scheduling
+  // lines over ten minutes and nothing else. Naming the Dockerfile as a variable
+  // does not depend on the config file being noticed, and is harmless where it
+  // already was. Verified: the same commit went from a failed RAILPACK build to
+  // a successful DOCKERFILE one with nothing else changed.
+  setVariable("RAILWAY_DOCKERFILE_PATH", "Dockerfile");
+  print("  Build set to use the Dockerfile.");
   print("");
 
   // --- storage ---
@@ -670,19 +694,6 @@ async function main() {
   // Every one of these is written with --skip-deploys, and a single redeploy
   // happens at the end. Setting them one at a time without that flag queues a
   // fresh build per variable, and each build pulls a 1.5 GB image.
-  const setVariable = (key, value) =>
-    railwayFirstThatWorks(
-      [
-        forService(["variable", "set", `${key}=${value}`, "--skip-deploys"]),
-        forGroup(["variable", "set", `${key}=${value}`, "--skip-deploys"]),
-        forService(["variable", "set", `${key}=${value}`]),
-        forGroup(["variable", "set", `${key}=${value}`]),
-        forService(["variables", "--set", `${key}=${value}`]),
-        forService(["variables", "set", `${key}=${value}`]),
-      ],
-      `Setting ${key}`,
-    );
-
   // Written before the passcode is asked for, deliberately. These two need no
   // decision from anyone, and if this run is abandoned at the prompt below —
   // closing the window is the obvious thing to do when interrupted — the agent
@@ -704,16 +715,6 @@ async function main() {
   setVariable("PORT", String(CHAT_PORT));
   print(`  Routing port set to ${CHAT_PORT}.`);
 
-  // railway.json asks for the Dockerfile builder, and a brand new service can
-  // ignore it: the platform reads no config file, picks its own build system,
-  // tries to infer how to build a repository with several package.json files in
-  // it, and fails having printed no build output at all — four scheduling lines
-  // over eleven minutes and nothing else. There is nothing in that log for
-  // anyone to act on. Naming the Dockerfile as a variable does not depend on the
-  // config file being noticed. Harmless when it already was.
-  setVariable("RAILWAY_DOCKERFILE_PATH", "Dockerfile");
-  print("  Build set to use the Dockerfile.");
-  print("");
 
   const passcode = await askPasscode();
   print("");
