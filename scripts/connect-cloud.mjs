@@ -384,16 +384,41 @@ async function main() {
     );
   }
   const forService = (args) => automated([...args, "--service", service]);
+
+  // Where --service is accepted moved between CLI releases. `railway volume`
+  // takes it on the command group and rejects it on the subcommand, so
+  // `volume add --service X` fails outright with "unexpected argument
+  // '--service' found"; other commands take it either way. Rather than pin a
+  // version, every call offers both placements and uses whichever the
+  // installed CLI accepts.
+  const forGroup = (args) => automated([args[0], "--service", service, ...args.slice(1)]);
+
+  /** A JSON read that survives either placement. */
+  const jsonForService = (args, fallback) => {
+    for (const candidate of [forGroup(args), forService(args)]) {
+      const value = jsonOr(candidate, null);
+      if (value !== null) {
+        return value;
+      }
+    }
+    return fallback;
+  };
+
   print(`  Service: ${service}`);
   print("");
 
   // --- storage ---
-  const volumes = JSON.stringify(jsonOr(forService(["volume", "list"]), []));
+  // This read has to succeed for the check below to mean anything: a failed
+  // read looks identical to "no volumes", and then adding one fails because it
+  // is already there. That is what made a second run stop instead of resuming.
+  const volumes = JSON.stringify(jsonForService(["volume", "list"], []));
   if (volumes.includes(MOUNT_PATH)) {
     print(`  Storage at ${MOUNT_PATH} is already there.`);
   } else {
     railwayFirstThatWorks(
       [
+        forGroup(["volume", "add", "--mount-path", MOUNT_PATH]),
+        forGroup(["volume", "add", "-m", MOUNT_PATH]),
         forService(["volume", "add", "--mount-path", MOUNT_PATH]),
         forService(["volume", "add", "-m", MOUNT_PATH]),
       ],
@@ -403,7 +428,7 @@ async function main() {
   }
 
   // --- two addresses ---
-  const existing = domainsFrom(jsonOr(forService(["domain", "list"]), {}));
+  const existing = domainsFrom(jsonForService(["domain", "list"], {}));
   const findFor = (port) => existing.find((entry) => entry.port === port);
 
   for (const [port, label] of [
@@ -418,13 +443,15 @@ async function main() {
       [
         forService(["domain", "--port", String(port)]),
         forService(["domain", "-p", String(port)]),
+        forGroup(["domain", "--port", String(port)]),
+        forGroup(["domain", "-p", String(port)]),
       ],
       `Creating the address for ${label}`,
     );
     print(`  Address created for ${label} (port ${port}).`);
   }
 
-  const after = domainsFrom(jsonOr(forService(["domain", "list"]), {}));
+  const after = domainsFrom(jsonForService(["domain", "list"], {}));
   const chatHost = after.find((entry) => entry.port === CHAT_PORT)?.host;
   const n8nHost = after.find((entry) => entry.port === N8N_PORT)?.host;
 
@@ -448,6 +475,7 @@ async function main() {
     railwayFirstThatWorks(
       [
         forService(["variable", "set", `${key}=${value}`]),
+        forGroup(["variable", "set", `${key}=${value}`]),
         forService(["variables", "--set", `${key}=${value}`]),
         forService(["variables", "set", `${key}=${value}`]),
       ],
@@ -462,10 +490,12 @@ async function main() {
   // machine for as long as the command lasts, and they are the sort of thing
   // that ends up in a shell history. Older builds have no --stdin, so an
   // argument remains the fallback rather than a failure.
-  const passcodeSet = railwayStdin(
-    forService(["variable", "set", "AGENT_PASSCODE", "--stdin"]),
-    passcode,
-  );
+  // Both placements are tried on standard input before the argument form is
+  // considered, so a CLI that only accepts --service on the command group
+  // still keeps the passcode out of the process arguments.
+  const passcodeSet =
+    railwayStdin(forService(["variable", "set", "AGENT_PASSCODE", "--stdin"]), passcode) ||
+    railwayStdin(forGroup(["variable", "set", "AGENT_PASSCODE", "--stdin"]), passcode);
   if (!passcodeSet) {
     setVariable("AGENT_PASSCODE", passcode);
   }
