@@ -1,0 +1,21 @@
+# Line endings, pinned per platform.
+#
+# The Windows launchers contain multi-line parenthesised blocks:
+#
+#   if /I not "%AI_SOLO_NO_PAUSE%"=="1" (
+#     echo.
+#     pause
+#   )
+#
+# cmd.exe reads that correctly only with CRLF line endings. With LF it can run
+# the wrong branch or stop at the closing bracket, and the learner sees a
+# launcher that does nothing or prints a stray syntax error. Every *-windows.cmd
+# in this repository was LF-only until this file existed.
+*.cmd  text eol=crlf
+*.bat  text eol=crlf
+*.ps1  text eol=crlf
+
+# The macOS and Linux side must stay LF: bash treats a trailing carriage return
+# as part of the command and fails with "command not found: bash\r".
+*.sh       text eol=lf
+*.command  text eol=lf
