@@ -3,6 +3,11 @@
 set -euo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# Finder opens a double-clicked .command in the home folder, not here. Commands
+# that read the project's own git remote must run from the project itself.
+cd "${PROJECT_ROOT}"
+
 COMMAND="${1:-}"
 
 if [[ -z "${COMMAND}" ]]; then
