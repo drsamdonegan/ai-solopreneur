@@ -1,0 +1,429 @@
+{
+  "name": "63 - TOOL - get_funding_report",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Read the saved morning report\n\nReturns what the 8am scan already found and saved. It never searches the\nweb, never calls a model, and never writes. If the scan has not run, it\nsays so instead of researching on the spot.",
+        "height": 240,
+        "width": 500,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -660,
+        -220
+      ],
+      "id": "95510000-0000-4000-8000-000000000001",
+      "name": "Report tool explanation"
+    },
+    {
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "sessionId",
+              "type": "string"
+            },
+            {
+              "name": "requestId",
+              "type": "string"
+            },
+            {
+              "name": "when",
+              "type": "string"
+            },
+            {
+              "name": "filter",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -520,
+        40
+      ],
+      "id": "95510000-0000-4000-8000-000000000010",
+      "name": "Tool Input"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const sessionId = typeof $json.sessionId === 'string' ? $json.sessionId.trim() : '';\nconst requestId = typeof $json.requestId === 'string' ? $json.requestId.trim() : '';\nconst rawWhen = typeof $json.when === 'string' ? $json.when.trim().toLowerCase() : '';\nconst rawFilter = typeof $json.filter === 'string' ? $json.filter.trim().toLowerCase() : '';\nconst uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;\nlet error = null;\nif (!uuidPattern.test(sessionId) || !uuidPattern.test(requestId)) {\n  error = { code: 'INVALID_SESSION', message: 'The report request needs a valid conversation and request ID.' };\n}\nconst when = ['latest', 'week'].includes(rawWhen) ? rawWhen : 'latest';\nconst filter = ['open', 'closing', 'all'].includes(rawFilter) ? rawFilter : 'open';\nconst proposedInput = { sessionId, requestId, when, filter };\nreturn { json: { valid: error === null, ...proposedInput, proposedInput, ...(error ? { response: { ok: false, error } } : {}) } };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -280,
+        40
+      ],
+      "id": "95510000-0000-4000-8000-000000000011",
+      "name": "Validate Report Input"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "95510000-0000-4000-8000-000000000012-c1",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -40,
+        40
+      ],
+      "id": "95510000-0000-4000-8000-000000000012",
+      "name": "Input Is Valid?"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "funding_runs",
+          "mode": "name"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": []
+        },
+        "returnAll": false,
+        "limit": 1,
+        "orderBy": true,
+        "orderByColumn": "ranAt",
+        "orderByDirection": "DESC"
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        200,
+        -60
+      ],
+      "id": "95510000-0000-4000-8000-000000000013",
+      "name": "Read Latest Run",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "funding_opportunities",
+          "mode": "name"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": []
+        },
+        "returnAll": true,
+        "orderBy": false
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        440,
+        -60
+      ],
+      "id": "95510000-0000-4000-8000-000000000014",
+      "name": "Read Opportunities",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const input = $('Validate Report Input').first().json;\nconst runRows = $('Read Latest Run').all().map((item) => item.json).filter((row) => row && row.ranAt);\nconst rows = $input.all().map((item) => item.json).filter((row) => row && row.fingerprint);\n\nif (runRows.length === 0) {\n  return [{ json: { ...input, response: {\n    ok: true,\n    hasRun: false,\n    message: 'The funding scan has not produced a report yet. It runs every morning at 8. If it has never run, the 71 - TRIGGER workflow may still be switched off in n8n.'\n  } } }];\n}\n\nconst latest = runRows[0];\nconst dayIndex = (value) => {\n  const text = String(value ?? '').trim();\n  const isoDate = text.match(/^(\\d{4})-(\\d{2})-(\\d{2})$/);\n  if (isoDate) return Math.floor(Date.UTC(Number(isoDate[1]), Number(isoDate[2]) - 1, Number(isoDate[3])) / 86400000);\n  const parsed = new Date(text);\n  if (Number.isNaN(parsed.getTime())) return null;\n  return Math.floor(Date.UTC(parsed.getFullYear(), parsed.getMonth(), parsed.getDate()) / 86400000);\n};\nconst todayIndex = dayIndex(new Date());\nconst daysUntil = (value) => {\n  if (!value) return null;\n  const index = dayIndex(value);\n  return index === null ? null : index - todayIndex;\n};\n\nconst live = rows.filter((row) => String(row.dismissed ?? '') !== 'yes');\nconst chosen = live.filter((row) => {\n  if (input.filter === 'all') return true;\n  const left = daysUntil(row.closesAt);\n  if (input.filter === 'closing') return left !== null && left >= 0 && left <= 14;\n  return String(row.status ?? '') !== 'closed' && (left === null || left >= 0);\n});\n\nchosen.sort((a, b) => {\n  const leftA = daysUntil(a.closesAt);\n  const leftB = daysUntil(b.closesAt);\n  if (leftA === null && leftB === null) return 0;\n  if (leftA === null) return 1;\n  if (leftB === null) return -1;\n  return leftA - leftB;\n});\n\nconst opportunities = chosen.slice(0, 25).map((row) => ({\n  programName: row.programName,\n  administeredBy: row.administeredBy,\n  amountText: row.amountText,\n  closesAt: row.closesAt,\n  daysLeft: daysUntil(row.closesAt),\n  status: row.status,\n  verdict: row.verdict,\n  verdictReason: row.verdictReason,\n  deciderCriterion: row.deciderCriterion,\n  sourceTrust: row.sourceTrust,\n  officialUrl: row.officialUrl,\n}));\n\nreturn [{ json: { ...input, response: {\n  ok: true,\n  hasRun: true,\n  ranAt: latest.ranAt,\n  runStatus: latest.status,\n  reportText: String(latest.reportText ?? ''),\n  totalTracked: live.length,\n  count: opportunities.length,\n  filter: input.filter,\n  opportunities,\n  message: 'This is the saved morning report. It was written by the scheduled scan; nothing was researched to answer this question.'\n} } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        680,
+        -60
+      ],
+      "id": "95510000-0000-4000-8000-000000000015",
+      "name": "Shape Report Result"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const input = $('Validate Report Input').first().json;\nconst response = $json.response ?? { ok: false, error: { code: 'TOOL_FAILED', message: 'The tool did not return a result.' } };\nreturn { json: {\n  occurredAt: new Date().toISOString(),\n  sessionId: input.sessionId,\n  requestId: input.requestId,\n  toolName: 'get_funding_report',\n  proposedInput: JSON.stringify(input.proposedInput ?? {}),\n  result: JSON.stringify(response),\n  error: response.ok === false ? String(response.error?.message ?? 'Tool failed') : '',\n  response\n} };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        920,
+        40
+      ],
+      "id": "95510000-0000-4000-8000-000000000090",
+      "name": "Prepare Audit"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "value": "tool_audit",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "occurredAt": "={{ $json.occurredAt }}",
+            "sessionId": "={{ $json.sessionId }}",
+            "requestId": "={{ $json.requestId }}",
+            "toolName": "={{ $json.toolName }}",
+            "proposedInput": "={{ $json.proposedInput }}",
+            "result": "={{ $json.result }}",
+            "error": "={{ $json.error }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "occurredAt",
+              "displayName": "occurredAt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "sessionId",
+              "displayName": "sessionId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "requestId",
+              "displayName": "requestId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "toolName",
+              "displayName": "toolName",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "proposedInput",
+              "displayName": "proposedInput",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "result",
+              "displayName": "result",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "error",
+              "displayName": "error",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1160,
+        40
+      ],
+      "id": "95510000-0000-4000-8000-000000000091",
+      "name": "Write Tool Audit",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const prepared = $('Prepare Audit').item.json;\nconst response = { ...prepared.response };\nif (!Number.isInteger($json.id)) {\n  response.auditWarning = 'The tool result could not be written to the local audit table.';\n}\nreturn { json: response };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1400,
+        40
+      ],
+      "id": "95510000-0000-4000-8000-000000000092",
+      "name": "Return Tool Result"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Tool Input": {
+      "main": [
+        [
+          {
+            "node": "Validate Report Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Report Input": {
+      "main": [
+        [
+          {
+            "node": "Input Is Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Input Is Valid?": {
+      "main": [
+        [
+          {
+            "node": "Read Latest Run",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Latest Run": {
+      "main": [
+        [
+          {
+            "node": "Read Opportunities",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Opportunities": {
+      "main": [
+        [
+          {
+            "node": "Shape Report Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shape Report Result": {
+      "main": [
+        [
+          {
+            "node": "Prepare Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Audit": {
+      "main": [
+        [
+          {
+            "node": "Write Tool Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Tool Audit": {
+      "main": [
+        [
+          {
+            "node": "Return Tool Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "executionTimeout": 30
+  },
+  "versionId": "95510000-0000-4000-8000-000000000100",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "phase": 15,
+    "testedWithN8n": "2.30.5",
+    "toolRisk": "read",
+    "authorization": "automatic-current-context-read",
+    "dataSource": "local-funding-tables"
+  },
+  "id": "phase15GetFundingReport",
+  "tags": [
+    {
+      "id": "tagAgentCanDo",
+      "name": "What your agent can do"
+    }
+  ]
+}

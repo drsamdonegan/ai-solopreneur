@@ -1,0 +1,720 @@
+{
+  "name": "64 - TOOL - set_funding_profile",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Save what decides eligibility\n\nGrant eligibility turns on facts this project does not otherwise hold:\nentity type, state, headcount, turnover, years trading.\n\nThis saves one row. A field left blank keeps whatever was saved before,\nso the owner can correct one detail without repeating all of them.\n\nIt saves only what the user actually said. Anything the agent guesses\nproduces a wrong verdict every morning until somebody notices.",
+        "height": 320,
+        "width": 500,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -660,
+        -260
+      ],
+      "id": "95520000-0000-4000-8000-000000000001",
+      "name": "Profile tool explanation"
+    },
+    {
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "sessionId",
+              "type": "string"
+            },
+            {
+              "name": "requestId",
+              "type": "string"
+            },
+            {
+              "name": "legalName",
+              "type": "string"
+            },
+            {
+              "name": "entityType",
+              "type": "string"
+            },
+            {
+              "name": "country",
+              "type": "string"
+            },
+            {
+              "name": "region",
+              "type": "string"
+            },
+            {
+              "name": "city",
+              "type": "string"
+            },
+            {
+              "name": "industry",
+              "type": "string"
+            },
+            {
+              "name": "industryCode",
+              "type": "string"
+            },
+            {
+              "name": "headcount",
+              "type": "string"
+            },
+            {
+              "name": "annualRevenue",
+              "type": "string"
+            },
+            {
+              "name": "yearsTrading",
+              "type": "string"
+            },
+            {
+              "name": "registeredForGst",
+              "type": "string"
+            },
+            {
+              "name": "doesRnd",
+              "type": "string"
+            },
+            {
+              "name": "exports",
+              "type": "string"
+            },
+            {
+              "name": "employsApprentices",
+              "type": "string"
+            },
+            {
+              "name": "priorGrants",
+              "type": "string"
+            },
+            {
+              "name": "interests",
+              "type": "string"
+            },
+            {
+              "name": "deliverTo",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -520,
+        60
+      ],
+      "id": "95520000-0000-4000-8000-000000000010",
+      "name": "Tool Input"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "funding_profile",
+          "mode": "name"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "profileId",
+              "condition": "eq",
+              "keyValue": "default"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 1,
+        "orderBy": false
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -280,
+        60
+      ],
+      "id": "95520000-0000-4000-8000-000000000011",
+      "name": "Read Existing Profile",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const SOURCES = {\"australia\":{\"national\":[\"business.gov.au\",\"grants.gov.au\",\"industry.gov.au\",\"austrade.gov.au\",\"ato.gov.au\",\"arena.gov.au\"],\"regional\":{\"victoria\":[\"business.vic.gov.au\",\"vic.gov.au\"],\"new south wales\":[\"nsw.gov.au\",\"business.nsw.gov.au\"],\"queensland\":[\"business.qld.gov.au\",\"qld.gov.au\"],\"western australia\":[\"wa.gov.au\",\"smallbusiness.wa.gov.au\"],\"south australia\":[\"sa.gov.au\",\"business.sa.gov.au\"],\"tasmania\":[\"business.tas.gov.au\",\"tas.gov.au\"],\"northern territory\":[\"nt.gov.au\"],\"australian capital territory\":[\"act.gov.au\"]}},\"united states\":{\"national\":[\"grants.gov\",\"sbir.gov\",\"sba.gov\",\"energy.gov\",\"nsf.gov\"],\"regional\":{}},\"united kingdom\":{\"national\":[\"gov.uk\",\"ukri.org\",\"innovateuk.ukri.org\"],\"regional\":{}},\"canada\":{\"national\":[\"canada.ca\",\"ic.gc.ca\",\"nrc-cnrc.gc.ca\"],\"regional\":{}},\"new zealand\":{\"national\":[\"business.govt.nz\",\"callaghaninnovation.govt.nz\",\"nzte.govt.nz\"],\"regional\":{}}};\nconst input = $('Tool Input').first().json;\nconst existingRows = $input.all().map((item) => item.json).filter((row) => row && row.profileId === 'default');\nconst existing = existingRows[0] ?? {};\n\nconst sessionId = typeof input.sessionId === 'string' ? input.sessionId.trim() : '';\nconst requestId = typeof input.requestId === 'string' ? input.requestId.trim() : '';\nconst uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;\nlet error = null;\nif (!uuidPattern.test(sessionId) || !uuidPattern.test(requestId)) {\n  error = { code: 'INVALID_SESSION', message: 'Saving a funding profile needs a valid conversation and request ID.' };\n}\n\nconst text = (value, limit) => {\n  const raw = typeof value === 'string' ? value.trim() : '';\n  return raw.slice(0, limit ?? 200);\n};\n// Stripping every non-digit turns '$600k' into 600, which would then be\n// checked against every turnover threshold for months without anyone\n// noticing. Read the magnitude, and refuse anything ambiguous so the field\n// stays empty and the agent asks again.\nconst number = (value) => {\n  if (value === null || value === undefined || value === '') return null;\n  const text = String(value).trim().toLowerCase().replace(/[\\s,$£€]/g, '');\n  const match = text.match(/^([0-9]*\\.?[0-9]+)(k|m|bn|b)?$/);\n  if (!match) return null;\n  let parsed = Number(match[1]);\n  if (!Number.isFinite(parsed) || parsed < 0) return null;\n  if (match[2] === 'k') parsed *= 1000;\n  else if (match[2] === 'm') parsed *= 1000000;\n  else if (match[2] === 'b' || match[2] === 'bn') parsed *= 1000000000;\n  return Math.round(parsed);\n};\nconst yesNo = (value) => {\n  const raw = text(value).toLowerCase();\n  if (['yes', 'true', 'y'].includes(raw)) return 'yes';\n  if (['no', 'false', 'n'].includes(raw)) return 'no';\n  return '';\n};\n// A blank field means 'not mentioned this time', never 'erase what I said before'.\nconst keep = (next, previous) => (next === '' || next === null ? (previous ?? '') : next);\n\nconst merged = {\n  legalName: keep(text(input.legalName), existing.legalName),\n  entityType: keep(text(input.entityType, 60), existing.entityType),\n  country: keep(text(input.country, 60), existing.country),\n  region: keep(text(input.region, 60), existing.region),\n  city: keep(text(input.city, 60), existing.city),\n  industry: keep(text(input.industry, 120), existing.industry),\n  industryCode: keep(text(input.industryCode, 20), existing.industryCode),\n  headcount: keep(number(input.headcount), existing.headcount),\n  annualRevenue: keep(number(input.annualRevenue), existing.annualRevenue),\n  yearsTrading: keep(number(input.yearsTrading), existing.yearsTrading),\n  registeredForGst: keep(yesNo(input.registeredForGst), existing.registeredForGst),\n  doesRnd: keep(yesNo(input.doesRnd), existing.doesRnd),\n  exports: keep(yesNo(input.exports), existing.exports),\n  employsApprentices: keep(yesNo(input.employsApprentices), existing.employsApprentices),\n  priorGrants: keep(text(input.priorGrants, 300), existing.priorGrants),\n  interests: keep(text(input.interests, 300), existing.interests),\n  deliverTo: keep(text(input.deliverTo, 120), existing.deliverTo) || 'chat-only',\n};\n\n// Country and region decide which official sources the scan is allowed to\n// read, so a profile without a country cannot produce a trustworthy scan.\nif (!error && !merged.country) {\n  error = { code: 'COUNTRY_REQUIRED', message: 'Ask the user which country the business is registered in before saving. Without it the scan cannot pick official sources.' };\n}\n\nconst countryKey = merged.country.toLowerCase();\nconst jurisdiction = SOURCES[countryKey] ?? null;\nif (!error && !jurisdiction) {\n  error = { code: 'COUNTRY_NOT_SUPPORTED', message: 'This skill ships official source lists for Australia, the United States, the United Kingdom, Canada, and New Zealand. Tell the user their country is not covered yet rather than guessing which websites are official.' };\n}\n\nlet sourceDomains = { national: [], regional: [], local: [] };\nif (jurisdiction) {\n  const regionKey = merged.region.toLowerCase();\n  sourceDomains = {\n    national: jurisdiction.national,\n    regional: jurisdiction.regional[regionKey] ?? [],\n    local: [],\n  };\n}\n\nconst beats = ['national'];\nif (sourceDomains.regional.length > 0) beats.push('regional');\nbeats.push('nongov');\n\nconst proposedInput = { sessionId, requestId, ...merged };\nif (error) {\n  return [{ json: { valid: false, sessionId, requestId, proposedInput, response: { ok: false, error } } }];\n}\n\nreturn [{ json: {\n  valid: true,\n  sessionId,\n  requestId,\n  proposedInput,\n  updatedAt: new Date().toISOString(),\n  ...merged,\n  sourceDomains: JSON.stringify(sourceDomains),\n  beats: JSON.stringify(beats),\n  regionalSourcesFound: sourceDomains.regional.length > 0,\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -40,
+        60
+      ],
+      "id": "95520000-0000-4000-8000-000000000012",
+      "name": "Validate And Merge"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "95520000-0000-4000-8000-000000000013-c1",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        200,
+        60
+      ],
+      "id": "95520000-0000-4000-8000-000000000013",
+      "name": "Profile Is Valid?"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "upsert",
+        "dataTableId": {
+          "__rl": true,
+          "value": "funding_profile",
+          "mode": "name"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "profileId",
+              "condition": "eq",
+              "keyValue": "default"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "profileId": "default",
+            "updatedAt": "={{ $json.updatedAt }}",
+            "legalName": "={{ $json.legalName }}",
+            "entityType": "={{ $json.entityType }}",
+            "country": "={{ $json.country }}",
+            "region": "={{ $json.region }}",
+            "city": "={{ $json.city }}",
+            "industry": "={{ $json.industry }}",
+            "industryCode": "={{ $json.industryCode }}",
+            "headcount": "={{ $json.headcount }}",
+            "annualRevenue": "={{ $json.annualRevenue }}",
+            "yearsTrading": "={{ $json.yearsTrading }}",
+            "registeredForGst": "={{ $json.registeredForGst }}",
+            "doesRnd": "={{ $json.doesRnd }}",
+            "exports": "={{ $json.exports }}",
+            "employsApprentices": "={{ $json.employsApprentices }}",
+            "priorGrants": "={{ $json.priorGrants }}",
+            "interests": "={{ $json.interests }}",
+            "sourceDomains": "={{ $json.sourceDomains }}",
+            "beats": "={{ $json.beats }}",
+            "deliverTo": "={{ $json.deliverTo }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "profileId",
+              "displayName": "profileId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "updatedAt",
+              "displayName": "updatedAt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "legalName",
+              "displayName": "legalName",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entityType",
+              "displayName": "entityType",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "country",
+              "displayName": "country",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "region",
+              "displayName": "region",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "city",
+              "displayName": "city",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "industry",
+              "displayName": "industry",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "industryCode",
+              "displayName": "industryCode",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "headcount",
+              "displayName": "headcount",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "annualRevenue",
+              "displayName": "annualRevenue",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "yearsTrading",
+              "displayName": "yearsTrading",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "registeredForGst",
+              "displayName": "registeredForGst",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "doesRnd",
+              "displayName": "doesRnd",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "exports",
+              "displayName": "exports",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "employsApprentices",
+              "displayName": "employsApprentices",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "priorGrants",
+              "displayName": "priorGrants",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "interests",
+              "displayName": "interests",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "sourceDomains",
+              "displayName": "sourceDomains",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "beats",
+              "displayName": "beats",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "deliverTo",
+              "displayName": "deliverTo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "dryRun": false
+        }
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        440,
+        -40
+      ],
+      "id": "95520000-0000-4000-8000-000000000014",
+      "name": "Upsert Profile",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const merged = $('Validate And Merge').first().json;\nconst saved = Number.isInteger($json.id) || $json.id !== undefined;\nconst missing = [];\nif (!merged.headcount && merged.headcount !== 0) missing.push('how many people work there');\nif (!merged.annualRevenue && merged.annualRevenue !== 0) missing.push('roughly what it turns over in a year');\nif (!merged.entityType) missing.push('what kind of entity it is, such as a company or a sole trader');\nif (!merged.region) missing.push('which state or region it is registered in');\n\nreturn [{ json: { ...merged, response: {\n  ok: true,\n  saved: true,\n  savedProfile: {\n    legalName: merged.legalName, entityType: merged.entityType,\n    country: merged.country, region: merged.region, city: merged.city,\n    industry: merged.industry, headcount: merged.headcount,\n    annualRevenue: merged.annualRevenue, yearsTrading: merged.yearsTrading,\n    doesRnd: merged.doesRnd, exports: merged.exports,\n    deliverTo: merged.deliverTo,\n  },\n  beats: JSON.parse(merged.beats),\n  regionalSourcesFound: merged.regionalSourcesFound,\n  stillMissing: missing,\n  message: missing.length\n    ? 'Saved. Read the saved values back to the user, then ask for the missing ones — an eligibility verdict built on a guess is wrong every morning until someone notices.'\n    : 'Saved. Read the saved values back to the user so they can correct anything you misheard.'\n} } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        680,
+        -40
+      ],
+      "id": "95520000-0000-4000-8000-000000000015",
+      "name": "Shape Profile Result"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const input = $('Validate And Merge').first().json;\nconst response = $json.response ?? { ok: false, error: { code: 'TOOL_FAILED', message: 'The tool did not return a result.' } };\nreturn { json: {\n  occurredAt: new Date().toISOString(),\n  sessionId: input.sessionId,\n  requestId: input.requestId,\n  toolName: 'set_funding_profile',\n  proposedInput: JSON.stringify(input.proposedInput ?? {}),\n  result: JSON.stringify(response),\n  error: response.ok === false ? String(response.error?.message ?? 'Tool failed') : '',\n  response\n} };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        920,
+        60
+      ],
+      "id": "95520000-0000-4000-8000-000000000090",
+      "name": "Prepare Audit"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "value": "tool_audit",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "occurredAt": "={{ $json.occurredAt }}",
+            "sessionId": "={{ $json.sessionId }}",
+            "requestId": "={{ $json.requestId }}",
+            "toolName": "={{ $json.toolName }}",
+            "proposedInput": "={{ $json.proposedInput }}",
+            "result": "={{ $json.result }}",
+            "error": "={{ $json.error }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "occurredAt",
+              "displayName": "occurredAt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "sessionId",
+              "displayName": "sessionId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "requestId",
+              "displayName": "requestId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "toolName",
+              "displayName": "toolName",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "proposedInput",
+              "displayName": "proposedInput",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "result",
+              "displayName": "result",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "error",
+              "displayName": "error",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1160,
+        60
+      ],
+      "id": "95520000-0000-4000-8000-000000000091",
+      "name": "Write Tool Audit",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const prepared = $('Prepare Audit').item.json;\nconst response = { ...prepared.response };\nif (!Number.isInteger($json.id)) {\n  response.auditWarning = 'The tool result could not be written to the local audit table.';\n}\nreturn { json: response };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1400,
+        60
+      ],
+      "id": "95520000-0000-4000-8000-000000000092",
+      "name": "Return Tool Result"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Tool Input": {
+      "main": [
+        [
+          {
+            "node": "Read Existing Profile",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Existing Profile": {
+      "main": [
+        [
+          {
+            "node": "Validate And Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate And Merge": {
+      "main": [
+        [
+          {
+            "node": "Profile Is Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Profile Is Valid?": {
+      "main": [
+        [
+          {
+            "node": "Upsert Profile",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert Profile": {
+      "main": [
+        [
+          {
+            "node": "Shape Profile Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shape Profile Result": {
+      "main": [
+        [
+          {
+            "node": "Prepare Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Audit": {
+      "main": [
+        [
+          {
+            "node": "Write Tool Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Tool Audit": {
+      "main": [
+        [
+          {
+            "node": "Return Tool Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "executionTimeout": 30
+  },
+  "versionId": "95520000-0000-4000-8000-000000000100",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "phase": 15,
+    "testedWithN8n": "2.30.5",
+    "toolRisk": "bounded_local_write",
+    "authorization": "explicit-current-user-request",
+    "externalWrite": "none",
+    "localWrite": "single-funding-profile-row"
+  },
+  "id": "phase15SetFundingProfile",
+  "tags": [
+    {
+      "id": "tagAgentCanDo",
+      "name": "What your agent can do"
+    }
+  ]
+}
