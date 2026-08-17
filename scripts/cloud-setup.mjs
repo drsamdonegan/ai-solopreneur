@@ -177,8 +177,9 @@ const PAGE = `<!DOCTYPE html>
       <form id="form">
         <label for="pack">Your agent pack</label>
         <p class="hint">
-          The file you made with <code>npm run pack</code>. It ends in
-          <code>.agentpack</code>.
+          It is in your project's <code>backups</code> folder and its name
+          starts with <code>my-agent-</code> and ends in <code>.agentpack</code>.
+          You can also drag it onto this page.
         </p>
         <input id="pack" type="file" accept=".agentpack" required />
 
@@ -241,6 +242,9 @@ h1 { margin: 0 0 .4rem; font-size: 1.45rem; }
 .lead { margin: 0 0 1.6rem; color: var(--muted); }
 label { display: block; font-weight: 600; margin-top: 1.3rem; }
 .hint { margin: .15rem 0 .5rem; font-size: .87rem; color: var(--muted); }
+/* Dragging the pack anywhere on the page counts, so the page itself has to look
+   like it is willing to catch it. */
+body.dragging main { outline: 2px dashed var(--ok); outline-offset: 6px; }
 code {
   font-size: .85em; padding: .1em .35em; border-radius: 4px;
   background: var(--page); border: 1px solid var(--line);
@@ -290,6 +294,39 @@ const CLIENT_SCRIPT = `(function () {
     go.disabled = on;
     skip.disabled = on;
   }
+
+  // Dragging the file on is a good deal easier than steering a file chooser to
+  // a folder you have never opened, which is what the alternative asks of
+  // someone who does not usually think in folders. The whole page is the
+  // target, because a small one is its own puzzle.
+  ["dragenter", "dragover"].forEach(function (name) {
+    document.addEventListener(name, function (event) {
+      event.preventDefault();
+      document.body.classList.add("dragging");
+    });
+  });
+  ["dragleave", "drop"].forEach(function (name) {
+    document.addEventListener(name, function (event) {
+      event.preventDefault();
+      if (name === "dragleave" && event.relatedTarget) return;
+      document.body.classList.remove("dragging");
+    });
+  });
+  document.addEventListener("drop", function (event) {
+    var dropped = event.dataTransfer && event.dataTransfer.files;
+    if (!dropped || dropped.length === 0) return;
+    var file = dropped[0];
+    if (!/\\.agentpack$/i.test(file.name)) {
+      show("bad", "That is not an agent pack. The file you want ends in .agentpack.");
+      return;
+    }
+    // Assigning to a file input needs a DataTransfer; without it the chooser
+    // still says "No file chosen" and the form submits nothing.
+    var holder = new DataTransfer();
+    holder.items.add(file);
+    pack.files = holder.files;
+    pack.dispatchEvent(new Event("change"));
+  });
 
   // Reading the header needs no passphrase, so a learner finds out they picked
   // the wrong file before typing anything.
