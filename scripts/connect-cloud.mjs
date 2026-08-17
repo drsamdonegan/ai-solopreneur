@@ -217,6 +217,31 @@ function askHidden(question) {
 }
 
 /**
+ * The dashboard page for this service's addresses. Railway's own link file
+ * already holds the three ids the URL needs, so the learner is handed the page
+ * rather than a trail of menu names to follow.
+ */
+function networkingUrl() {
+  const printed = railway(["open", "--print"]);
+  const direct = (printed.stdout ?? "").trim();
+  const fromCli = direct.match(/https:\/\/\S+/)?.[0];
+
+  const status = jsonOr(["status", "--json"], null);
+  const projectId = status?.id ?? null;
+  const environmentId = status?.environments?.edges?.[0]?.node?.id ?? null;
+  const serviceId = servicesOf(status)[0]?.id ?? null;
+
+  // Only the service panel itself is a real route. A deeper path like
+  // /settings/networking is ignored and silently lands on Deployments, which
+  // sends the learner looking for a button that is not on the page they are on.
+  if (projectId && serviceId) {
+    const query = environmentId ? `?environmentId=${environmentId}` : "";
+    return `https://railway.com/project/${projectId}/service/${serviceId}${query}`;
+  }
+  return fromCli ?? null;
+}
+
+/**
  * Waits for the learner to finish something in their browser. Needs a real
  * terminal for the same reason the passcode does, and says so rather than
  * hanging on a prompt nobody can see.
@@ -504,35 +529,75 @@ async function main() {
   // all: the CLI has no way to add a second service domain, and asking for one
   // silently hands back the first. It is six seconds in the dashboard, so the
   // script waits here rather than sending the learner away and giving up.
+  /**
+   * Repoints a spare address at the workshop port. The CLI cannot create a
+   * second address, but it can move one, so the learner never has to choose a
+   * port — which is the part they get wrong. Railway's own default is 8080.
+   */
+  const adoptSpareDomain = () => {
+    const spare = domainsNow().find(
+      (entry) => entry.port !== CHAT_PORT && entry.port !== N8N_PORT,
+    );
+    if (!spare) {
+      return false;
+    }
+    const moved = railwayFirstThatWorks(
+      [
+        forService(["domain", "update", spare.host, "--port", String(N8N_PORT)]),
+        ["domain", "update", spare.host, "--port", String(N8N_PORT)],
+      ],
+      `Pointing ${spare.host} at port ${N8N_PORT}`,
+    );
+    return Boolean(moved) && Boolean(hostOn(domainsNow(), N8N_PORT));
+  };
+
   if (hostOn(domainsNow(), N8N_PORT)) {
     print("  Address for your workshop already exists.");
+  } else if (adoptSpareDomain()) {
+    print(`  Second address pointed at port ${N8N_PORT} for your workshop.`);
   } else {
     print("");
     print("  One step has to be done in your browser, because the command line");
-    print("  cannot make a second address. In your Railway dashboard:");
+    print("  cannot make a second address. Two clicks, then come back here.");
     print("");
-    print("    Settings  ->  Networking  ->  Generate Domain");
-    print(`    Target port: ${N8N_PORT}`);
+    // The exact page, rather than the name of a menu to go looking for. The ids
+    // are already in the CLI's own link file, so there is nothing to type.
+    const settingsUrl = networkingUrl();
+    if (settingsUrl !== null) {
+      print("  1. Open your service:");
+      print(`     ${settingsUrl}`);
+    } else {
+      print("  1. Open your project in the Railway dashboard, and click your");
+      print("     service.");
+    }
+    print("  2. Click the Settings tab, at the right-hand end of the row that");
+    print("     starts with Deployments, and scroll down to Networking.");
+    print("  3. Click Generate Domain.");
+    print("");
+    print("  Whatever port it offers you is fine — ignore it, do not change it,");
+    print("  and do not touch the address you already have. The port is set for");
+    print("  you when you come back.");
     print("");
 
     for (let attempt = 1; ; attempt += 1) {
-      await askEnter("  Press Enter once you have done that.");
-      if (hostOn(domainsNow(), N8N_PORT)) {
+      await askEnter("  Press Enter once you have generated it.");
+      if (hostOn(domainsNow(), N8N_PORT) || adoptSpareDomain()) {
         break;
       }
       if (attempt >= 3) {
         fail(
-          "Your workshop address still is not there, so it cannot be set for you.",
-          `Add a domain with target port ${N8N_PORT} in Settings, then Networking,`,
-          "then run this again. Everything else you have done is already saved.",
+          "No second address has appeared, so the workshop cannot be set up for you.",
+          "In Settings, then Networking, click Generate Domain so there are two",
+          "addresses listed, then run this again. Everything else you have done",
+          "is already saved.",
         );
       }
       print("");
-      print(`  Nothing on port ${N8N_PORT} yet. Check the target port is exactly`);
-      print(`  ${N8N_PORT} — a domain on the wrong port is the usual reason.`);
+      print("  Still only one address here. Check the Networking section lists");
+      print("  two, then press Enter again.");
       print("");
     }
-    print(`  Address found for your workshop (port ${N8N_PORT}).`);
+    print(`  Address set up for your workshop (port ${N8N_PORT}).`);
   }
 
   const after = domainsNow();
@@ -568,6 +633,15 @@ async function main() {
 
   setVariable("N8N_PUBLIC_URL", `https://${n8nHost}`);
   print(`  Workshop address set to https://${n8nHost}`);
+
+  // Railway injects PORT for the one service it thinks it is routing to, and it
+  // healthchecks that same port. Its default is 8080, which is neither of this
+  // agent's ports, so the agent would listen on 8080 while the addresses point
+  // at 3000 and 5678 — a container that passes its healthcheck and answers
+  // nothing, which is the least diagnosable failure there is. Setting it makes
+  // the platform, the agent and the port-3000 address agree.
+  setVariable("PORT", String(CHAT_PORT));
+  print(`  Routing port set to ${CHAT_PORT}.`);
 
   // The passcode is handed over on the CLI's standard input rather than as a
   // command argument. Arguments are readable by anything else running on the
