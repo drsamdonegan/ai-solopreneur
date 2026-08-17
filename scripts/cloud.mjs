@@ -14,6 +14,7 @@
  */
 
 import { spawn } from "node:child_process";
+import { createServer } from "node:http";
 import {
   cpSync,
   existsSync,
@@ -682,6 +683,64 @@ async function shutdown(exitCode) {
 // Entry point
 // ---------------------------------------------------------------------------
 
+/**
+ * Holds the chat port while the services behind it start.
+ *
+ * Answers the platform's health check so a slow start is not read as a crash,
+ * and tells anyone who arrives early what is happening rather than letting the
+ * platform show them a generic failure page. Returns null if the port cannot be
+ * held, because that is never worth stopping a deploy over.
+ */
+function holdChatPort(cfg) {
+  const server = createServer((request, response) => {
+    if ((request.url ?? "/") === "/health") {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({ status: "ok", starting: true }));
+      return;
+    }
+    response.writeHead(503, {
+      "content-type": "text/html; charset=utf-8",
+      "retry-after": "15",
+    });
+    response.end(
+      `<!doctype html><meta charset="utf-8">` +
+        `<meta http-equiv="refresh" content="10">` +
+        `<title>Starting your agent</title>` +
+        `<style>body{font:16px/1.6 system-ui,sans-serif;max-width:34rem;margin:18vh auto;padding:0 1.5rem;color:#111}` +
+        `h1{font-size:1.4rem;margin:0 0 .75rem}p{margin:0 0 .75rem;color:#444}</style>` +
+        `<h1>Starting your agent</h1>` +
+        `<p>Your workshop is waking up. This takes a minute or two the first time.</p>` +
+        `<p>This page checks by itself and will show your agent when it is ready — ` +
+        `there is nothing you need to do, and nothing has gone wrong.</p>`,
+    );
+  });
+  server.on("error", () => undefined);
+  try {
+    server.listen(cfg.chatPort, "::");
+    // Never the reason this process stays alive. If a service fails to start,
+    // the supervisor shuts down and the container must be free to exit and be
+    // restarted — a placeholder page holding the event loop open would turn a
+    // clean restart into a hang that looks like a working agent.
+    server.unref();
+  } catch {
+    return null;
+  }
+  return server;
+}
+
+/** Steps aside so the real chat app can take the port. */
+function releasePort(server) {
+  if (!server) {
+    return Promise.resolve();
+  }
+  return new Promise((done) => {
+    server.close(() => done());
+    server.closeAllConnections?.();
+    // Never let a lingering socket stall the deploy.
+    setTimeout(done, 2_000);
+  });
+}
+
 async function main() {
   print("Starting your agent...");
   print("");
@@ -749,6 +808,15 @@ async function main() {
     print("");
   }
 
+  // From here until the chat app is listening, n8n has to start and publish
+  // eighteen workflows, which takes the best part of a minute. Nothing is bound
+  // to the chat port during that time, so the platform serves its own
+  // "Application failed to respond" page — to a learner who has just handed
+  // over a file containing every credential they own. This holds the address
+  // with something that says so instead, and steps aside when the real app is
+  // ready. It also covers the same gap on every ordinary redeploy.
+  const holding = holdChatPort(cfg);
+
   // n8n refuses to start if N8N_ENCRYPTION_KEY disagrees with the key on the
   // volume, which is correct but arrives as a crash loop and a link to the
   // docs. Nobody needs to set this variable — the key travels inside the pack
@@ -788,6 +856,7 @@ async function main() {
   startService("documentWorker", cfg);
   if (!(await waitForService("documentWorker", cfg))) return;
 
+  await releasePort(holding);
   startService("chat", cfg);
   if (!(await waitForService("chat", cfg))) return;
 

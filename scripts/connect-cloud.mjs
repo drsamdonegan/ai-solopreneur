@@ -37,9 +37,41 @@ function fail(message, ...lines) {
   process.exit(1);
 }
 
+/**
+ * Where the Railway command actually is, and how it has to be run.
+ *
+ * On Windows `npm i -g @railway/cli` installs no .exe — only a `railway.cmd`
+ * shim. Node has refused to spawn a .cmd without a shell since the fix for
+ * CVE-2024-27980, so `spawnSync("railway", ...)` fails with an error rather
+ * than a non-zero status, and every check built on it reads as "not
+ * installed". The learner is then told to install the thing they just
+ * installed. Resolving the real path once, and only using a shell when the
+ * thing found is a shim, keeps that from happening.
+ */
+const railwayCommand = (() => {
+  if (process.platform !== "win32") {
+    return { command: "railway", shell: false };
+  }
+  const found = spawnSync("where.exe", ["railway"], { encoding: "utf8" });
+  const paths = (found.stdout ?? "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+
+  // An .exe can be spawned directly, which keeps arguments and stdin exactly
+  // as written. A shim cannot, and needs the shell.
+  const exe = paths.find((candidate) => candidate.toLowerCase().endsWith(".exe"));
+  if (exe) {
+    return { command: exe, shell: false };
+  }
+  const shim = paths.find((candidate) => /\.(cmd|bat)$/i.test(candidate));
+  return shim ? { command: shim, shell: true } : { command: "railway", shell: true };
+})();
+
 function railway(args, { quiet = true } = {}) {
-  return spawnSync("railway", args, {
+  return spawnSync(railwayCommand.command, args, {
     encoding: "utf8",
+    shell: railwayCommand.shell,
     stdio: quiet ? ["ignore", "pipe", "pipe"] : "inherit",
   });
 }
@@ -54,8 +86,9 @@ function railwayOk(args) {
  * never appears in the process arguments. Returns whether it worked.
  */
 function railwayStdin(args, value) {
-  const result = spawnSync("railway", args, {
+  const result = spawnSync(railwayCommand.command, args, {
     encoding: "utf8",
+    shell: railwayCommand.shell,
     input: value,
     stdio: ["pipe", "pipe", "pipe"],
   });
@@ -332,6 +365,22 @@ async function main() {
   print("Connecting your agent to the cloud.");
   print("");
 
+  // Checked here rather than at the prompt that needs it. This run will ask for
+  // a passcode and wait for a browser step, and without a terminal it can do
+  // neither — but the prompt comes after the project, the storage and both
+  // addresses have been created, so discovering it there left real things half
+  // made and explained the problem far too late.
+  if (!process.stdin.isTTY) {
+    fail(
+      "This needs to run in a terminal window, so you can type a passcode.",
+      "Nothing has been changed. Open the project folder and start it from",
+      "there:",
+      "",
+      "  macOS:    double-click connect-cloud.command",
+      "  Windows:  double-click connect-cloud-windows.cmd",
+    );
+  }
+
   // --- the tool itself ---
   if (!railwayOk(["--version"])) {
     fail(
@@ -535,8 +584,12 @@ async function main() {
    * port — which is the part they get wrong. Railway's own default is 8080.
    */
   const adoptSpareDomain = () => {
+    // `port > 0` matters more than it looks. domainsFrom() defaults an
+    // unreadable port to 0, so without it the agent's own address — or a custom
+    // domain the learner set up themselves — can qualify as "spare" and get
+    // repointed at the workshop, while this script finishes reporting success.
     const spare = domainsNow().find(
-      (entry) => entry.port !== CHAT_PORT && entry.port !== N8N_PORT,
+      (entry) => entry.port > 0 && entry.port !== CHAT_PORT && entry.port !== N8N_PORT,
     );
     if (!spare) {
       return false;
@@ -613,16 +666,15 @@ async function main() {
   }
   print("");
 
-  // --- the two settings ---
-  // Reading the address back and setting it here is the point of this script:
-  // copying it by hand between two screens is where most people go wrong, and
-  // a wrong value produces trigger addresses that look right and never fire.
-  const passcode = await askPasscode();
-  print("");
-
+  // --- the settings ---
+  // Every one of these is written with --skip-deploys, and a single redeploy
+  // happens at the end. Setting them one at a time without that flag queues a
+  // fresh build per variable, and each build pulls a 1.5 GB image.
   const setVariable = (key, value) =>
     railwayFirstThatWorks(
       [
+        forService(["variable", "set", `${key}=${value}`, "--skip-deploys"]),
+        forGroup(["variable", "set", `${key}=${value}`, "--skip-deploys"]),
         forService(["variable", "set", `${key}=${value}`]),
         forGroup(["variable", "set", `${key}=${value}`]),
         forService(["variables", "--set", `${key}=${value}`]),
@@ -631,6 +683,15 @@ async function main() {
       `Setting ${key}`,
     );
 
+  // Written before the passcode is asked for, deliberately. These two need no
+  // decision from anyone, and if this run is abandoned at the prompt below —
+  // closing the window is the obvious thing to do when interrupted — the agent
+  // is left with addresses and no routing port, which is a permanent 502 that
+  // no amount of redeploying fixes and nothing on screen explains.
+  //
+  // Reading the address back and setting it here is the point of this script:
+  // copying it by hand between two screens is where most people go wrong, and
+  // a wrong value produces trigger addresses that look right and never fire.
   setVariable("N8N_PUBLIC_URL", `https://${n8nHost}`);
   print(`  Workshop address set to https://${n8nHost}`);
 
@@ -642,6 +703,10 @@ async function main() {
   // the platform, the agent and the port-3000 address agree.
   setVariable("PORT", String(CHAT_PORT));
   print(`  Routing port set to ${CHAT_PORT}.`);
+  print("");
+
+  const passcode = await askPasscode();
+  print("");
 
   // The passcode is handed over on the CLI's standard input rather than as a
   // command argument. Arguments are readable by anything else running on the
@@ -652,12 +717,40 @@ async function main() {
   // considered, so a CLI that only accepts --service on the command group
   // still keeps the passcode out of the process arguments.
   const passcodeSet =
+    railwayStdin(
+      forService(["variable", "set", "AGENT_PASSCODE", "--stdin", "--skip-deploys"]),
+      passcode,
+    ) ||
+    railwayStdin(
+      forGroup(["variable", "set", "AGENT_PASSCODE", "--stdin", "--skip-deploys"]),
+      passcode,
+    ) ||
     railwayStdin(forService(["variable", "set", "AGENT_PASSCODE", "--stdin"]), passcode) ||
     railwayStdin(forGroup(["variable", "set", "AGENT_PASSCODE", "--stdin"]), passcode);
   if (!passcodeSet) {
     setVariable("AGENT_PASSCODE", passcode);
   }
+
+  // Read back rather than trust the exit code. A command that reports success
+  // and changes nothing is the failure this whole script has been bitten by
+  // twice: storage that was never mounted, and an address that was never made.
+  // Only the names are looked at — the values stay where they were put.
+  const savedNames = Object.keys(jsonForService(["variable", "list"], {}) ?? {});
+  const missing = ["AGENT_PASSCODE", "PORT", "N8N_PUBLIC_URL"].filter(
+    (key) => savedNames.length > 0 && !savedNames.includes(key),
+  );
+  if (missing.length > 0) {
+    fail(
+      `These settings did not save: ${missing.join(", ")}.`,
+      "Nothing is broken, but your agent will not start without them. Run this",
+      "again — everything else you have done is already saved, so it will pick up",
+      "where it left off.",
+    );
+  }
   print("  Passcode set.");
+  if (savedNames.length === 0) {
+    print("  (Could not read the settings back to double-check them.)");
+  }
 
   // --- go ---
   print("");

@@ -330,7 +330,7 @@ const CLIENT_SCRIPT = `(function () {
       .then(function (r) { return r.json().then(function (b) { return { ok: r.ok, body: b }; }); })
       .then(function (result) {
         if (!result.ok) { busy(false); show("bad", result.body.error || "That did not work."); return; }
-        show("good", "Your agent is here. Starting it now — this page will open your agent when it is ready.");
+        show("good", "Your agent is here. Starting it now — this takes a minute or two while your workshop wakes up. Leave this page open and it will open your agent by itself. Do not reload: while your agent is starting there is nothing at this address yet, so reloading shows a hosting error page instead of this one.");
         setTimeout(waitForAgent, 4000);
       })
       .catch(function () { busy(false); show("bad", "The upload did not finish. Check your connection and try again."); });
