@@ -20,6 +20,12 @@ import {
 import { dirname, join, normalize, resolve, sep } from "node:path";
 import { openPack, PackError, readPackMetadata } from "./agent-pack.mjs";
 
+// Dual-stack. Railway's own network is IPv6, and a server bound to 0.0.0.0
+// answers a healthcheck on loopback while the public proxy cannot reach it at
+// all — which arrives as "Application failed to respond" with healthy logs.
+// "::" accepts IPv6 and IPv4 both, so it is strictly wider than 0.0.0.0.
+const LISTEN_ADDRESS = process.env.CLOUD_LISTEN_ADDRESS ?? "::";
+
 /** A pack of decrypted SQLite databases; far above any real one. */
 const MAX_UPLOAD_BYTES = 200 * 1_024 * 1_024;
 
@@ -496,7 +502,7 @@ export function runSetup({ port, passcode, paths, log }) {
     });
 
     server.on("error", fail);
-    server.listen(port, "0.0.0.0", () => {
+    server.listen(port, LISTEN_ADDRESS, () => {
       log("");
       log("  Your agent is waiting for you to set it up.");
       log("  Open your agent's web address to finish.");
@@ -572,7 +578,7 @@ export function runConfigHelp({ port, problems, log }) {
       sendAsset(response, page, "text/html; charset=utf-8");
     });
 
-    server.listen(port, "0.0.0.0", () => {
+    server.listen(port, LISTEN_ADDRESS, () => {
       log("");
       log("  Waiting for you. Open your agent's web address to see what it");
       log("  still needs, or read the list above.");

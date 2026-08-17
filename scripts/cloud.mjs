@@ -281,7 +281,7 @@ function n8nEnv(cfg) {
     TZ: cfg.timezone,
 
     N8N_USER_FOLDER: paths.n8nUserFolder,
-    N8N_LISTEN_ADDRESS: "0.0.0.0",
+    N8N_LISTEN_ADDRESS: "::",
     N8N_PORT: String(cfg.n8nPort),
 
     // Public identity. WEBHOOK_URL is the name n8n actually reads; the local
@@ -325,7 +325,7 @@ function chatEnv(cfg) {
   return {
     NODE_ENV: "production",
     PORT: String(cfg.chatPort),
-    CHAT_LISTEN_ADDRESS: "0.0.0.0",
+    CHAT_LISTEN_ADDRESS: "::",
     CHAT_REQUEST_TIMEOUT_MS: process.env.CHAT_REQUEST_TIMEOUT_MS || "120000",
 
     // Everything except /health is behind this.
