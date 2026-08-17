@@ -164,16 +164,16 @@ function liveProjects() {
  * service rather than off the project, so naming it means the CLI never has to
  * ask which one.
  */
-function serviceName() {
+function linkedService() {
   const linked = jsonOr(["status", "--json"], null);
   const direct = servicesOf(linked);
   if (direct.length > 0) {
-    return direct[0].name;
+    return direct[0];
   }
   // `status` reports the linked project by id; find it in the project list.
   const id = linked?.id ?? linked?.project?.id;
   const match = liveProjects().find((project) => project.id === id);
-  return servicesOf(match)[0]?.name ?? null;
+  return servicesOf(match)[0] ?? null;
 }
 
 /**
@@ -212,6 +212,30 @@ function askHidden(question) {
       rl.close();
       process.stdout.write("\n");
       done(answer);
+    });
+  });
+}
+
+/**
+ * Waits for the learner to finish something in their browser. Needs a real
+ * terminal for the same reason the passcode does, and says so rather than
+ * hanging on a prompt nobody can see.
+ */
+function askEnter(question) {
+  if (!process.stdin.isTTY) {
+    fail(
+      "This needs to run in a terminal window, so it can wait for you.",
+      "Open the project folder and start it from there:",
+      "",
+      "  macOS:    double-click connect-cloud.command",
+      "  Windows:  double-click connect-cloud-windows.cmd",
+    );
+  }
+  return new Promise((done) => {
+    const rl = createInterface({ input: process.stdin, output: process.stdout });
+    rl.question(`${question} `, () => {
+      rl.close();
+      done();
     });
   });
 }
@@ -374,7 +398,11 @@ async function main() {
   // Storage, addresses and settings all belong to a service. Without naming
   // one the CLI has a question it cannot ask, and it fails with whichever
   // error it happens to be holding rather than saying so.
-  const service = serviceName();
+  const linked = linkedService();
+  const service = linked?.name ?? null;
+  // Some commands want the service by name and one wants it by id. Both are
+  // read once here rather than looked up per call.
+  const serviceId = linked?.id ?? null;
   if (service === null) {
     fail(
       "Your project has no service in it yet.",
@@ -393,9 +421,14 @@ async function main() {
   // installed CLI accepts.
   const forGroup = (args) => automated([args[0], "--service", service, ...args.slice(1)]);
 
-  /** A JSON read that survives either placement. */
+  /** A JSON read that survives either placement, and prefers the service id. */
   const jsonForService = (args, fallback) => {
-    for (const candidate of [forGroup(args), forService(args)]) {
+    const candidates = [
+      serviceId === null ? null : automated([args[0], "--service", serviceId, ...args.slice(1)]),
+      forGroup(args),
+      forService(args),
+    ].filter((candidate) => candidate !== null);
+    for (const candidate of candidates) {
       const value = jsonOr(candidate, null);
       if (value !== null) {
         return value;
@@ -415,45 +448,96 @@ async function main() {
   if (volumes.includes(MOUNT_PATH)) {
     print(`  Storage at ${MOUNT_PATH} is already there.`);
   } else {
+    // `railway volume` documents its --service as a Service ID, and unlike
+    // every other command it does not merely reject a name: it panics inside
+    // the CLI with "called `Option::unwrap()` on a `None` value", which tells a
+    // learner nothing at all. The id is what it wants. --json is left off
+    // deliberately — nothing here reads the output, and it was part of the
+    // combination that panicked.
     railwayFirstThatWorks(
       [
+        serviceId === null ? null : ["volume", "--service", serviceId, "add", "--mount-path", MOUNT_PATH],
+        serviceId === null ? null : ["volume", "--service", serviceId, "add", "-m", MOUNT_PATH],
         forGroup(["volume", "add", "--mount-path", MOUNT_PATH]),
-        forGroup(["volume", "add", "-m", MOUNT_PATH]),
         forService(["volume", "add", "--mount-path", MOUNT_PATH]),
         forService(["volume", "add", "-m", MOUNT_PATH]),
-      ],
+      ].filter((candidate) => candidate !== null),
       "Adding storage",
     );
     print(`  Storage added at ${MOUNT_PATH}.`);
   }
 
   // --- two addresses ---
-  const existing = domainsFrom(jsonForService(["domain", "list"], {}));
-  const findFor = (port) => existing.find((entry) => entry.port === port);
+  const domainsNow = () => domainsFrom(jsonForService(["domain", "list"], {}));
+  const hostOn = (list, port) => list.find((entry) => entry.port === port)?.host;
 
-  for (const [port, label] of [
-    [CHAT_PORT, "your agent"],
-    [N8N_PORT, "your workshop"],
-  ]) {
-    if (findFor(port)) {
-      print(`  Address for ${label} already exists.`);
-      continue;
-    }
+  // The agent's address. `railway domain` generates one service domain, so this
+  // is the one the CLI can make, and it is the important one: it is what the
+  // learner opens and what the health check watches.
+  if (hostOn(domainsNow(), CHAT_PORT)) {
+    print("  Address for your agent already exists.");
+  } else {
     railwayFirstThatWorks(
       [
-        forService(["domain", "--port", String(port)]),
-        forService(["domain", "-p", String(port)]),
-        forGroup(["domain", "--port", String(port)]),
-        forGroup(["domain", "-p", String(port)]),
+        forService(["domain", "--port", String(CHAT_PORT)]),
+        forService(["domain", "-p", String(CHAT_PORT)]),
+        forGroup(["domain", "--port", String(CHAT_PORT)]),
+        forGroup(["domain", "-p", String(CHAT_PORT)]),
       ],
-      `Creating the address for ${label}`,
+      "Creating the address for your agent",
     );
-    print(`  Address created for ${label} (port ${port}).`);
+    // Asked for a second address, `railway domain` returns the one that already
+    // exists and creates nothing, while still exiting zero. So a success here
+    // proves nothing; the list is the only evidence that counts.
+    if (!hostOn(domainsNow(), CHAT_PORT)) {
+      fail(
+        "Your agent's address was not created, even though the command reported no error.",
+        "Add it in your hosting dashboard instead: Settings, then Networking,",
+        `then Generate Domain, with the target port set to ${CHAT_PORT}.`,
+        "Then run this again.",
+      );
+    }
+    print(`  Address created for your agent (port ${CHAT_PORT}).`);
   }
 
-  const after = domainsFrom(jsonForService(["domain", "list"], {}));
-  const chatHost = after.find((entry) => entry.port === CHAT_PORT)?.host;
-  const n8nHost = after.find((entry) => entry.port === N8N_PORT)?.host;
+  // The workshop's address. This one cannot be created from the command line at
+  // all: the CLI has no way to add a second service domain, and asking for one
+  // silently hands back the first. It is six seconds in the dashboard, so the
+  // script waits here rather than sending the learner away and giving up.
+  if (hostOn(domainsNow(), N8N_PORT)) {
+    print("  Address for your workshop already exists.");
+  } else {
+    print("");
+    print("  One step has to be done in your browser, because the command line");
+    print("  cannot make a second address. In your Railway dashboard:");
+    print("");
+    print("    Settings  ->  Networking  ->  Generate Domain");
+    print(`    Target port: ${N8N_PORT}`);
+    print("");
+
+    for (let attempt = 1; ; attempt += 1) {
+      await askEnter("  Press Enter once you have done that.");
+      if (hostOn(domainsNow(), N8N_PORT)) {
+        break;
+      }
+      if (attempt >= 3) {
+        fail(
+          "Your workshop address still is not there, so it cannot be set for you.",
+          `Add a domain with target port ${N8N_PORT} in Settings, then Networking,`,
+          "then run this again. Everything else you have done is already saved.",
+        );
+      }
+      print("");
+      print(`  Nothing on port ${N8N_PORT} yet. Check the target port is exactly`);
+      print(`  ${N8N_PORT} — a domain on the wrong port is the usual reason.`);
+      print("");
+    }
+    print(`  Address found for your workshop (port ${N8N_PORT}).`);
+  }
+
+  const after = domainsNow();
+  const chatHost = hostOn(after, CHAT_PORT);
+  const n8nHost = hostOn(after, N8N_PORT);
 
   if (!n8nHost) {
     fail(
