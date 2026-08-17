@@ -22,9 +22,17 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
+# npm_config_jobs / JOBS: node-gyp compiles with one job per CPU by default, and
+# isolated-vm builds V8 isolates — several parallel C++ compilers each holding a
+# lot of memory. On a small build machine that peak is what kills the build, and
+# it does it in the least helpful way available: the builder is killed, so the
+# log dies with it and fourteen minutes of output is replaced by nothing at all.
+# One job is slower and finishes.
 ENV npm_config_cache=/tmp/npm-cache \
     npm_config_audit=false \
-    npm_config_fund=false
+    npm_config_fund=false \
+    npm_config_jobs=1 \
+    JOBS=1
 
 # n8n is ~1.5 GB installed and changes only when package-lock.json changes.
 # It is copied and installed on its own so that every later edit to a skill,
