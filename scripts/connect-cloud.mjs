@@ -703,6 +703,16 @@ async function main() {
   // the platform, the agent and the port-3000 address agree.
   setVariable("PORT", String(CHAT_PORT));
   print(`  Routing port set to ${CHAT_PORT}.`);
+
+  // railway.json asks for the Dockerfile builder, and a brand new service can
+  // ignore it: the platform reads no config file, picks its own build system,
+  // tries to infer how to build a repository with several package.json files in
+  // it, and fails having printed no build output at all — four scheduling lines
+  // over eleven minutes and nothing else. There is nothing in that log for
+  // anyone to act on. Naming the Dockerfile as a variable does not depend on the
+  // config file being noticed. Harmless when it already was.
+  setVariable("RAILWAY_DOCKERFILE_PATH", "Dockerfile");
+  print("  Build set to use the Dockerfile.");
   print("");
 
   const passcode = await askPasscode();
