@@ -46,6 +46,22 @@
     },
     {
       "parameters": {
+        "httpMethod": "POST",
+        "path": "setup-funding-data",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -660,
+        320
+      ],
+      "id": "95500000-0000-4000-8000-000000000015",
+      "name": "Temporary Setup Webhook"
+    },
+    {
+      "parameters": {
         "resource": "table",
         "operation": "create",
         "tableName": "funding_profile",
@@ -386,6 +402,17 @@
         [
           {
             "node": "Confirm Setup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Temporary Setup Webhook": {
+      "main": [
+        [
+          {
+            "node": "Create Profile Table",
             "type": "main",
             "index": 0
           }

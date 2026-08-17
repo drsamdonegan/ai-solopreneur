@@ -16,6 +16,7 @@ Each skill is self-contained. Adding one **never** changes the chat app, never t
 | [`seo-article-writer`](seo-article-writer/) | Writes a full article grounded in what your research actually found | `paid-domain-research` |
 | [`linkedin-profile-lookup`](linkedin-profile-lookup/) | Looks up a named person's public professional details | A paid people-search account |
 | [`linkedin-prospect-search`](linkedin-prospect-search/) | Searches for people matching a description of your ideal customer | `linkedin-profile-lookup` |
+| [`monthly-update`](monthly-update/) | Reads a month of your email and writes your company's monthly update | A read-only Gmail connection |
 
 Open any skill's folder and read its `skill/README.md` before you install it. Each one tells you what it costs, what it can't do, and how to prove it loaded.
 

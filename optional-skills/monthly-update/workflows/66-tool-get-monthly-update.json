@@ -1,0 +1,459 @@
+{
+  "name": "66 - TOOL - get_monthly_update",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Read the saved update\n\nReturns what a run already produced. It never reads email, never calls a\nmodel, and never writes. If no run has produced an update, it says so\ninstead of writing one on the spot.\n\nIt also returns the evidence behind the update, so the agent can answer\n\"where did that line come from?\" with real message IDs.",
+        "height": 280,
+        "width": 520,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -900,
+        -280
+      ],
+      "id": "95620000-0000-4000-8000-000000000001",
+      "name": "Read tool explanation"
+    },
+    {
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "sessionId",
+              "type": "string"
+            },
+            {
+              "name": "requestId",
+              "type": "string"
+            },
+            {
+              "name": "month",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -660,
+        40
+      ],
+      "id": "95620000-0000-4000-8000-000000000010",
+      "name": "Tool Input"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const MONTH_NAMES = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];\nconst now = new Date();\n\n// Resolves 'July', 'July 2026', '2026-07', 'last month', and '' to one month.\n// Anything it cannot read becomes null, so the caller asks rather than\n// silently reporting on the wrong month.\nconst resolveMonth = (value) => {\n  const raw = String(value ?? '').trim().toLowerCase();\n  const previous = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));\n  if (!raw || raw === 'last month' || raw === 'previous month') {\n    return { year: previous.getUTCFullYear(), monthIndex: previous.getUTCMonth() };\n  }\n  if (raw === 'this month' || raw === 'current month') {\n    return { year: now.getUTCFullYear(), monthIndex: now.getUTCMonth() };\n  }\n  const explicit = /^(\\d{4})-(\\d{1,2})$/.exec(raw);\n  if (explicit) {\n    const monthIndex = Number(explicit[2]) - 1;\n    if (monthIndex < 0 || monthIndex > 11) return null;\n    return { year: Number(explicit[1]), monthIndex };\n  }\n  const named = /^([a-z]+)\\s*(\\d{4})?$/.exec(raw);\n  if (named) {\n    const monthIndex = MONTH_NAMES.findIndex((name) => name.startsWith(named[1]) && named[1].length >= 3);\n    if (monthIndex === -1) return null;\n    if (named[2]) return { year: Number(named[2]), monthIndex };\n    // A bare month name means the most recent one that has already happened.\n    const year = monthIndex > now.getUTCMonth() ? now.getUTCFullYear() - 1 : now.getUTCFullYear();\n    return { year, monthIndex };\n  }\n  return null;\n};\n\nconst sessionId = typeof $json.sessionId === 'string' ? $json.sessionId.trim() : '';\nconst requestId = typeof $json.requestId === 'string' ? $json.requestId.trim() : '';\nconst uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;\n\nlet error = null;\nif (!uuidPattern.test(sessionId) || !uuidPattern.test(requestId)) {\n  error = { code: 'INVALID_SESSION', message: 'Reading a monthly update needs a valid conversation and request ID.' };\n}\n\nconst requested = String($json.month ?? '').trim();\n// No month means 'whatever is newest', which is the common case.\nlet monthBucket = '';\nif (!error && requested) {\n  const resolved = resolveMonth(requested);\n  if (!resolved) {\n    error = { code: 'MONTH_NOT_UNDERSTOOD', message: 'Ask the user which month they mean, and pass it as a month name or as 2026-07.' };\n  } else {\n    const pad = (value) => String(value).padStart(2, '0');\n    monthBucket = `${resolved.year}-${pad(resolved.monthIndex + 1)}-01`;\n  }\n}\n\nconst proposedInput = { sessionId, requestId, month: requested };\nreturn [{ json: {\n  valid: error === null,\n  sessionId,\n  requestId,\n  monthBucket,\n  proposedInput,\n  ...(error ? { response: { ok: false, error } } : {}),\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -420,
+        40
+      ],
+      "id": "95620000-0000-4000-8000-000000000011",
+      "name": "Validate Get Input"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "95620000-0000-4000-8000-000000000012-c1",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -180,
+        40
+      ],
+      "id": "95620000-0000-4000-8000-000000000012",
+      "name": "Input Is Valid?"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "update_runs",
+          "mode": "name"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": []
+        },
+        "returnAll": false,
+        "limit": 24,
+        "orderBy": true,
+        "orderByColumn": "startedAt",
+        "orderByDirection": "DESC"
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        60,
+        -60
+      ],
+      "id": "95620000-0000-4000-8000-000000000013",
+      "name": "Read Runs",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const input = $('Validate Get Input').first().json;\nconst rows = $input.all().map((item) => item.json).filter((row) => row && row.runId);\n\nconst candidates = input.monthBucket\n  ? rows.filter((row) => String(row.monthBucket ?? '') === input.monthBucket)\n  : rows;\n\nconst chosen = candidates\n  .sort((a, b) => String(b.startedAt ?? '').localeCompare(String(a.startedAt ?? '')))[0] ?? null;\n\nif (!chosen) {\n  return [{ json: { ...input, hasRun: false, runId: '__none__' } }];\n}\n\nreturn [{ json: { ...input, hasRun: true, runId: chosen.runId, run: chosen } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        300,
+        -60
+      ],
+      "id": "95620000-0000-4000-8000-000000000014",
+      "name": "Choose Run"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "update_evidence",
+          "mode": "name"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "runId",
+              "condition": "eq",
+              "keyValue": "={{ $json.runId }}"
+            }
+          ]
+        },
+        "returnAll": true,
+        "orderBy": false
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        540,
+        -60
+      ],
+      "id": "95620000-0000-4000-8000-000000000015",
+      "name": "Read Evidence",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const chosen = $('Choose Run').first().json;\nconst input = $('Validate Get Input').first().json;\n\nif (!chosen.hasRun) {\n  return [{ json: { ...input, response: {\n    ok: true,\n    hasRun: false,\n    message: input.monthBucket\n      ? 'There is no update for that month yet. Offer to read that month now; it takes a few minutes and costs a couple of dollars in API usage, so ask before starting.'\n      : 'No monthly update has been produced yet. Offer to read last month now; it takes a few minutes and costs a couple of dollars in API usage, so ask before starting.',\n  } } }];\n}\n\nconst run = chosen.run;\nconst rows = $input.all().map((item) => item.json).filter((row) => row && row.evidenceId);\n\nlet notes = { notes: [], unsupportedClaims: [] };\ntry { notes = JSON.parse(run.groundednessNotes || '{}'); } catch { notes = { notes: [], unsupportedClaims: [] }; }\nlet structured = {};\ntry { structured = JSON.parse(run.structuredJson || '{}'); } catch { structured = {}; }\n\nconst included = rows.filter((row) => String(row.includeDecision ?? '') === 'include');\nconst evidence = (included.length ? included : rows).slice(0, 40).map((row) => ({\n  kind: row.kind,\n  title: row.title,\n  summary: row.summary,\n  value: [row.valueText, row.unit].filter(Boolean).join(' '),\n  date: row.eventDate,\n  section: row.suggestedSection,\n  whyItMatters: row.whyItMatters,\n  emailIds: String(row.evidenceMessageIds ?? '').split(',').filter(Boolean),\n  needsReview: row.needsReview === 'yes',\n}));\n\nconst STATUS_MESSAGES = {\n  queued: 'That run has not started reading yet. Ask again in a few minutes.',\n  running: 'That run is still reading the month. Ask again in a few minutes.',\n  completed: 'This is the saved update. Read it back as it is written; it is already in the founder\u2019s voice.',\n  partial: 'This update finished with something worth flagging. Read it back, and tell the user plainly which part needs checking before they send it.',\n  failed: 'That run did not produce an update. Say what went wrong and offer to try again.',\n};\n\nreturn [{ json: { ...input, response: {\n  ok: true,\n  hasRun: true,\n  runId: run.runId,\n  status: run.status,\n  monthLabel: run.monthLabel,\n  audience: run.audience,\n  updateText: String(run.updateText ?? ''),\n  structured,\n  groundednessStatus: run.groundednessStatus,\n  groundednessNotes: notes.notes ?? [],\n  unsupportedClaims: notes.unsupportedClaims ?? [],\n  stats: {\n    emailsListed: Number(run.messagesListed ?? 0),\n    emailsWorthReading: Number(run.messagesAfterHeuristic ?? 0),\n    threadsRead: Number(run.threadsExtracted ?? 0),\n    factsFound: Number(run.evidenceExtracted ?? 0),\n    factsUsed: Number(run.evidenceIncluded ?? 0),\n    inputTokens: Number(run.inputTokens ?? 0),\n    outputTokens: Number(run.outputTokens ?? 0),\n  },\n  evidence,\n  errorSummary: String(run.errorSummary ?? ''),\n  message: STATUS_MESSAGES[String(run.status ?? '')] ?? 'This is the saved update.',\n} } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        780,
+        -60
+      ],
+      "id": "95620000-0000-4000-8000-000000000016",
+      "name": "Shape Update Result"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const input = $('Validate Get Input').first().json;\nconst response = $json.response ?? { ok: false, error: { code: 'TOOL_FAILED', message: 'The tool did not return a result.' } };\nreturn { json: {\n  occurredAt: new Date().toISOString(),\n  sessionId: input.sessionId,\n  requestId: input.requestId,\n  toolName: 'get_monthly_update',\n  proposedInput: JSON.stringify(input.proposedInput ?? {}),\n  result: JSON.stringify(response),\n  error: response.ok === false ? String(response.error?.message ?? 'Tool failed') : '',\n  response\n} };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1020,
+        40
+      ],
+      "id": "95620000-0000-4000-8000-000000000090",
+      "name": "Prepare Audit"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "value": "tool_audit",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "occurredAt": "={{ $json.occurredAt }}",
+            "sessionId": "={{ $json.sessionId }}",
+            "requestId": "={{ $json.requestId }}",
+            "toolName": "={{ $json.toolName }}",
+            "proposedInput": "={{ $json.proposedInput }}",
+            "result": "={{ $json.result }}",
+            "error": "={{ $json.error }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "occurredAt",
+              "displayName": "occurredAt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "sessionId",
+              "displayName": "sessionId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "requestId",
+              "displayName": "requestId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "toolName",
+              "displayName": "toolName",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "proposedInput",
+              "displayName": "proposedInput",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "result",
+              "displayName": "result",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "error",
+              "displayName": "error",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1260,
+        40
+      ],
+      "id": "95620000-0000-4000-8000-000000000091",
+      "name": "Write Tool Audit",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const prepared = $('Prepare Audit').item.json;\nconst response = { ...prepared.response };\nif (!Number.isInteger($json.id)) {\n  response.auditWarning = 'The tool result could not be written to the local audit table.';\n}\nreturn { json: response };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1500,
+        40
+      ],
+      "id": "95620000-0000-4000-8000-000000000092",
+      "name": "Return Tool Result"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Tool Input": {
+      "main": [
+        [
+          {
+            "node": "Validate Get Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Get Input": {
+      "main": [
+        [
+          {
+            "node": "Input Is Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Input Is Valid?": {
+      "main": [
+        [
+          {
+            "node": "Read Runs",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Runs": {
+      "main": [
+        [
+          {
+            "node": "Choose Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Choose Run": {
+      "main": [
+        [
+          {
+            "node": "Read Evidence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Evidence": {
+      "main": [
+        [
+          {
+            "node": "Shape Update Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shape Update Result": {
+      "main": [
+        [
+          {
+            "node": "Prepare Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Audit": {
+      "main": [
+        [
+          {
+            "node": "Write Tool Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Tool Audit": {
+      "main": [
+        [
+          {
+            "node": "Return Tool Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "executionTimeout": 30
+  },
+  "versionId": "95620000-0000-4000-8000-0000000000100",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "phase": 16,
+    "testedWithN8n": "2.30.5",
+    "toolRisk": "read",
+    "authorization": "automatic-current-context-read",
+    "externalRead": "none",
+    "externalWrite": "none",
+    "dataSource": "local-monthly-update-tables"
+  },
+  "id": "phase16GetMonthlyUpdate",
+  "tags": [
+    {
+      "id": "tagAgentCanDo",
+      "name": "What your agent can do"
+    }
+  ]
+}

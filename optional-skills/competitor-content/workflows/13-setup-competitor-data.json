@@ -12,6 +12,19 @@
     },
     {
       "parameters": {
+        "httpMethod": "POST",
+        "path": "setup-competitor-data",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "c1000000-0000-4000-8000-000000000006",
+      "name": "Temporary Setup Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [-360, 140]
+    },
+    {
+      "parameters": {
         "resource": "table",
         "operation": "create",
         "tableName": "competitor_posts",
@@ -82,6 +95,9 @@
   ],
   "connections": {
     "Run Setup Once": {
+      "main": [[{ "node": "Create Competitor Posts Table", "type": "main", "index": 0 }]]
+    },
+    "Temporary Setup Webhook": {
       "main": [[{ "node": "Create Competitor Posts Table", "type": "main", "index": 0 }]]
     },
     "Create Competitor Posts Table": {

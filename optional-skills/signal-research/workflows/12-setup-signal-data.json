@@ -12,6 +12,19 @@
     },
     {
       "parameters": {
+        "httpMethod": "POST",
+        "path": "setup-signal-data",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "a1000000-0000-4000-8000-000000000006",
+      "name": "Temporary Setup Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [-360, 140]
+    },
+    {
+      "parameters": {
         "resource": "table",
         "operation": "create",
         "tableName": "signals",
@@ -80,6 +93,9 @@
   ],
   "connections": {
     "Run Setup Once": {
+      "main": [[{ "node": "Create Signals Table", "type": "main", "index": 0 }]]
+    },
+    "Temporary Setup Webhook": {
       "main": [[{ "node": "Create Signals Table", "type": "main", "index": 0 }]]
     },
     "Create Signals Table": {

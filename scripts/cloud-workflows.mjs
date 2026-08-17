@@ -21,33 +21,100 @@ import { DatabaseSync } from "node:sqlite";
 const CLI_TIMEOUT_MS = 5 * 60 * 1_000;
 
 /**
- * Workflows that must be live for the agent to answer at all: the tools it
- * calls and the two setup workflows that build its data tables and sync its
- * skills. Mirrors workflowIds in scripts/local.mjs.
+ * Filename prefixes for the workflows that must be live for the agent to work:
+ * the tools it calls, the sub-workflows those call, the confirmation step, and
+ * the run-once setup workflows.
+ *
+ * Read from the files rather than kept as a list of IDs, because a list kept by
+ * hand is wrong the moment a learner installs a skill that adds one — and the
+ * way it is wrong is silent. An unpublished tool is not an error, it is an
+ * agent that quietly cannot do the thing it was just given.
+ *
+ * Triggers are deliberately absent. A Slack trigger with no token, or a funding
+ * scan with no business profile, should not start itself. The learner switches
+ * those on, and learnerPublishedIds below is what makes that survive a deploy.
  */
-const SETUP_WORKFLOWS = ["phase4TaskSetup", "phase5SyncEnabledSkills"];
-
-const TOOL_WORKFLOWS = [
-  "phase4ListTasks",
-  "phase4CreateTask",
-  "phase4UpdateTaskStatus",
-  "phase5ProposeCreateTask",
-  "phase5ProposeTaskStatus",
-  "phase5ConfirmTaskWrite",
-  "phase9StartDomainResearch",
-  "phase9CompleteDomainResearch",
-  "phase9GetBusinessMemory",
-  "phase11StartPaidDomainResearch",
-  "phase11CompletePaidDomainResearch",
-  "phase11GetPaidDomainResearch",
-  "phase13StartSeoArticle",
-  "phase13WriteSeoArticle",
-  "phase13GetSeoArticle",
-  "phase12LookupLinkedInProfile",
-];
+const MUST_BE_LIVE = /^\d+-(tool|setup|internal|confirm|run)-/;
 
 /** The conversation entry point. Useless without an Anthropic credential. */
 const MAIN_WORKFLOW = "phase3StartHere";
+
+export function readWorkflowFiles(workflowsDir) {
+  const files = [];
+  for (const name of readdirSync(workflowsDir).sort()) {
+    if (!name.endsWith(".json")) {
+      continue;
+    }
+    try {
+      files.push({ name, workflow: JSON.parse(readFileSync(join(workflowsDir, name), "utf8")) });
+    } catch {
+      // A malformed workflow is the validator's job to catch. Skipping it here
+      // keeps one bad file from taking down a learner's whole deploy.
+    }
+  }
+  return files;
+}
+
+/** IDs of every workflow that has to be published for the agent to function. */
+export function requiredWorkflowIds(workflowsDir) {
+  return readWorkflowFiles(workflowsDir)
+    .filter(({ name }) => MUST_BE_LIVE.test(name))
+    .map(({ workflow }) => workflow.id)
+    .filter((id) => typeof id === "string" && id.length > 0 && id !== MAIN_WORKFLOW);
+}
+
+/**
+ * The workflows the learner switched on themselves.
+ *
+ * n8n's import deactivates everything it touches — `import:workflow` defaults
+ * to `activeState: false`, and the `fromJson` alternative only works in queue
+ * mode. So without remembering this first, installing any skill would silently
+ * switch off the Slack trigger they set up by hand, and they would find out
+ * when a message got no reply.
+ *
+ * The main workflow is excluded because the credential check below owns it.
+ */
+export function learnerPublishedIds(databasePath) {
+  if (!existsSync(databasePath)) {
+    return [];
+  }
+  try {
+    const db = new DatabaseSync(databasePath, { readOnly: true });
+    try {
+      return db
+        .prepare("SELECT id FROM workflow_entity WHERE active = 1")
+        .all()
+        .map((row) => String(row.id))
+        .filter((id) => id !== MAIN_WORKFLOW);
+    } finally {
+      db.close();
+    }
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Webhook paths on run-once setup workflows, in filename order.
+ *
+ * A setup workflow announces itself with a webhook, the way
+ * 10-setup-local-task-data already does, so a skill a learner installs builds
+ * its own tables on the next deploy instead of waiting for them to find it.
+ */
+export function setupWebhookPaths(workflowsDir) {
+  const found = [];
+  for (const { name, workflow } of readWorkflowFiles(workflowsDir)) {
+    if (!/^\d+-setup-/.test(name)) {
+      continue;
+    }
+    for (const node of workflow.nodes ?? []) {
+      if (node?.type === "n8n-nodes-base.webhook" && typeof node.parameters?.path === "string") {
+        found.push(node.parameters.path);
+      }
+    }
+  }
+  return found;
+}
 
 function fingerprintWorkflows(workflowsDir) {
   const hash = createHash("sha256");
@@ -147,6 +214,9 @@ export function syncWorkflows({ paths, n8nEnv, log }) {
       : "  Your Anthropic credential is here. Turning your agent on...",
   );
 
+  // Read before the import, because the import is what clears it.
+  const learnerPublished = learnerPublishedIds(databasePath);
+
   const importResult = runCli(
     paths.n8nBin,
     ["import:workflow", "--separate", `--input=${paths.workflowsDir}`],
@@ -159,10 +229,16 @@ export function syncWorkflows({ paths, n8nEnv, log }) {
   }
 
   // Imports always land unpublished. In the cloud an unpublished workflow is a
-  // silent failure: a trigger that never fires and reports nothing.
+  // silent failure: a trigger that never fires and reports nothing. So publish
+  // everything the agent needs, plus everything the learner had switched on.
+  const toPublish = new Set([
+    ...requiredWorkflowIds(paths.workflowsDir),
+    ...learnerPublished,
+  ]);
+
   let published = 0;
   const failures = [];
-  for (const id of [...SETUP_WORKFLOWS, ...TOOL_WORKFLOWS]) {
+  for (const id of toPublish) {
     const result = runCli(paths.n8nBin, ["publish:workflow", `--id=${id}`], n8nEnv);
     if (result.error || result.status !== 0) {
       failures.push(id);
@@ -207,8 +283,9 @@ export function syncWorkflows({ paths, n8nEnv, log }) {
 }
 
 /**
- * Runs the two setup workflows, which need n8n listening. Builds the local
- * data tables and pushes the learner's enabled skills into the agent.
+ * Runs the setup workflows, which need n8n listening. Builds the local data
+ * tables, pushes the learner's enabled skills into the agent, and then builds
+ * the tables belonging to whichever skills they have installed.
  */
 export async function primeAgent({ paths, n8nPort, log }) {
   const post = async (name, body) => {
@@ -246,6 +323,26 @@ export async function primeAgent({ paths, n8nPort, log }) {
     return false;
   }
 
-  log("  Task tables ready and your skills are synced in.");
+  // Then any skill the learner installed. These are optional by definition, so
+  // one that fails is a note rather than a failed boot: the agent still answers,
+  // and only that one skill is missing its tables.
+  const extras = setupWebhookPaths(paths.workflowsDir).filter(
+    (path) => path !== "setup-task-data" && path !== "sync-enabled-skills",
+  );
+  let extrasReady = 0;
+  for (const path of extras) {
+    const result = await post(path, "{}");
+    if (result === null || !result.includes('"ok":true')) {
+      log(`  Note: one skill's setup (${path}) did not finish, so that skill may be missing its tables.`);
+      continue;
+    }
+    extrasReady += 1;
+  }
+
+  log(
+    extras.length === 0
+      ? "  Task tables ready and your skills are synced in."
+      : `  Task tables ready, your skills are synced in, and ${extrasReady} of ${extras.length} skill setups ran.`,
+  );
   return true;
 }

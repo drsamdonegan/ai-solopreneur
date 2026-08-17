@@ -1,0 +1,265 @@
+{
+  "name": "15 - SETUP - Monthly Update Data",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Run this once\n\nSelect **Execute workflow** below. It creates the three local tables the\nmonthly update needs and does nothing else. Running it again is safe: it\nleaves existing tables and their contents alone.\n\nNothing here touches your email. This is local storage only.",
+        "height": 260,
+        "width": 460,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -880,
+        -260
+      ],
+      "id": "95600000-0000-4000-8000-000000000001",
+      "name": "Sticky Start Here"
+    },
+    {
+      "parameters": {
+        "content": "## Then, in order\n\n1. Create the **Gmail (read-only)** credential in n8n. `docs/MONTHLY_UPDATE.md`\n   walks through the Google Cloud part.\n2. Tell your agent about your company in the chat, so it can save a profile.\n   Nothing runs without one.\n3. Ask it for your monthly update.\n\nThe scheduled monthly run in `73 - TRIGGER` ships switched off. Turn it on\nonly once you have seen an update you are happy with.",
+        "height": 300,
+        "width": 460,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -880,
+        60
+      ],
+      "id": "95600000-0000-4000-8000-000000000002",
+      "name": "Sticky Next Step"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -380,
+        -40
+      ],
+      "id": "95600000-0000-4000-8000-000000000010",
+      "name": "Run Setup Once"
+    },
+    {
+      "parameters": {
+        "resource": "table",
+        "operation": "create",
+        "tableName": "company_profile",
+        "columns": {
+          "column": [
+            { "name": "profileId", "type": "string" },
+            { "name": "updatedAt", "type": "date" },
+            { "name": "companyName", "type": "string" },
+            { "name": "oneLiner", "type": "string" },
+            { "name": "domainAliases", "type": "string" },
+            { "name": "founderNames", "type": "string" },
+            { "name": "teamNames", "type": "string" },
+            { "name": "investorDomains", "type": "string" },
+            { "name": "investorNames", "type": "string" },
+            { "name": "customerDomains", "type": "string" },
+            { "name": "customerNames", "type": "string" },
+            { "name": "prospectDomains", "type": "string" },
+            { "name": "prospectNames", "type": "string" },
+            { "name": "competitorDomains", "type": "string" },
+            { "name": "competitorNames", "type": "string" },
+            { "name": "positiveKeywords", "type": "string" },
+            { "name": "negativeKeywords", "type": "string" },
+            { "name": "stage", "type": "string" },
+            { "name": "voiceNotes", "type": "string" },
+            { "name": "audience", "type": "string" },
+            { "name": "deliverTo", "type": "string" }
+          ]
+        },
+        "options": {
+          "createIfNotExists": true
+        }
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -140,
+        -40
+      ],
+      "id": "95600000-0000-4000-8000-000000000011",
+      "name": "Create Company Profile Table"
+    },
+    {
+      "parameters": {
+        "resource": "table",
+        "operation": "create",
+        "tableName": "update_evidence",
+        "columns": {
+          "column": [
+            { "name": "evidenceId", "type": "string" },
+            { "name": "runId", "type": "string" },
+            { "name": "monthBucket", "type": "string" },
+            { "name": "kind", "type": "string" },
+            { "name": "canonicalKey", "type": "string" },
+            { "name": "eventType", "type": "string" },
+            { "name": "metricKey", "type": "string" },
+            { "name": "valueText", "type": "string" },
+            { "name": "valueNumber", "type": "string" },
+            { "name": "unit", "type": "string" },
+            { "name": "title", "type": "string" },
+            { "name": "summary", "type": "string" },
+            { "name": "eventDate", "type": "string" },
+            { "name": "datePrecision", "type": "string" },
+            { "name": "sentiment", "type": "string" },
+            { "name": "importance", "type": "number" },
+            { "name": "confidence", "type": "number" },
+            { "name": "evidenceMessageIds", "type": "string" },
+            { "name": "sourceThreadIds", "type": "string" },
+            { "name": "includeDecision", "type": "string" },
+            { "name": "includeScore", "type": "number" },
+            { "name": "suggestedSection", "type": "string" },
+            { "name": "whyItMatters", "type": "string" },
+            { "name": "excludeReason", "type": "string" },
+            { "name": "needsReview", "type": "string" }
+          ]
+        },
+        "options": {
+          "createIfNotExists": true
+        }
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        100,
+        -40
+      ],
+      "id": "95600000-0000-4000-8000-000000000012",
+      "name": "Create Evidence Table"
+    },
+    {
+      "parameters": {
+        "resource": "table",
+        "operation": "create",
+        "tableName": "update_runs",
+        "columns": {
+          "column": [
+            { "name": "runId", "type": "string" },
+            { "name": "startedAt", "type": "date" },
+            { "name": "finishedAt", "type": "date" },
+            { "name": "status", "type": "string" },
+            { "name": "monthLabel", "type": "string" },
+            { "name": "monthBucket", "type": "string" },
+            { "name": "windowStart", "type": "string" },
+            { "name": "windowEnd", "type": "string" },
+            { "name": "audience", "type": "string" },
+            { "name": "messagesListed", "type": "number" },
+            { "name": "messagesAfterHeuristic", "type": "number" },
+            { "name": "messagesClassified", "type": "number" },
+            { "name": "threadsExtracted", "type": "number" },
+            { "name": "evidenceExtracted", "type": "number" },
+            { "name": "evidenceIncluded", "type": "number" },
+            { "name": "inputTokens", "type": "number" },
+            { "name": "outputTokens", "type": "number" },
+            { "name": "groundednessStatus", "type": "string" },
+            { "name": "groundednessNotes", "type": "string" },
+            { "name": "updateText", "type": "string" },
+            { "name": "structuredJson", "type": "string" },
+            { "name": "errorSummary", "type": "string" }
+          ]
+        },
+        "options": {
+          "createIfNotExists": true
+        }
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        340,
+        -40
+      ],
+      "id": "95600000-0000-4000-8000-000000000013",
+      "name": "Create Runs Table"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "return [{ json: {\n  ok: true,\n  created: ['company_profile', 'update_evidence', 'update_runs'],\n  message: 'The three monthly-update tables are ready. Next: create the read-only Gmail credential in n8n, then tell your agent about your company in the chat so it can save a profile. See docs/MONTHLY_UPDATE.md.'\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        580,
+        -40
+      ],
+      "id": "95600000-0000-4000-8000-000000000014",
+      "name": "Confirm Setup"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Run Setup Once": {
+      "main": [
+        [
+          {
+            "node": "Create Company Profile Table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Company Profile Table": {
+      "main": [
+        [
+          {
+            "node": "Create Evidence Table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Evidence Table": {
+      "main": [
+        [
+          {
+            "node": "Create Runs Table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Runs Table": {
+      "main": [
+        [
+          {
+            "node": "Confirm Setup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "executionTimeout": 60
+  },
+  "versionId": "95600000-0000-4000-8000-000000000100",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "phase": 16,
+    "testedWithN8n": "2.30.5",
+    "toolRisk": "bounded_local_write",
+    "authorization": "manual-run-once",
+    "externalRead": "none",
+    "externalWrite": "none"
+  },
+  "id": "phase16MonthlyUpdateSetup",
+  "tags": []
+}

@@ -24,6 +24,21 @@ const CHAT_PORT = 3_000;
 const N8N_PORT = 5_678;
 const MIN_PASSCODE_LENGTH = 8;
 
+/**
+ * This computer's timezone, or null when it cannot be read.
+ *
+ * Null rather than a guessed default: a wrong timezone is worse than a known
+ * missing one, because UTC at least fails in a way the deploy log can warn about.
+ */
+function detectTimezone() {
+  try {
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return typeof zone === "string" && zone.includes("/") ? zone : null;
+  } catch {
+    return null;
+  }
+}
+
 function print(message = "") {
   process.stdout.write(`${message}\n`);
 }
