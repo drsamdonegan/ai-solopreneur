@@ -233,7 +233,13 @@ function askHidden(question) {
       output: process.stdout,
       terminal: true,
     });
-    const mask = () => {
+    const mask = (chunk) => {
+      // Enter arrives here too, and by then readline has already emptied the
+      // line — so redrawing would print the question again with no asterisks
+      // after it, which reads as being asked the same thing twice.
+      if (chunk && /[\r\n]/.test(String(chunk))) {
+        return;
+      }
       process.stdout.clearLine(0);
       process.stdout.cursorTo(0);
       process.stdout.write(`${question}${"*".repeat(rl.line.length)}`);
@@ -715,6 +721,21 @@ async function main() {
   setVariable("PORT", String(CHAT_PORT));
   print(`  Routing port set to ${CHAT_PORT}.`);
 
+  // A container has no idea what time it is where the learner lives. Railway
+  // sets no timezone, and scripts/cloud.mjs then falls back to UTC — so a
+  // workflow scheduled for 8am would run at 6pm in Melbourne. That failure is
+  // invisible until the morning it does not happen, and "check your timezone"
+  // is not where anyone looks. This machine already knows the answer, so send
+  // it once, here, rather than asking thirty people to edit a dashboard.
+  const timezone = detectTimezone();
+  if (timezone === null) {
+    print("  Could not read this computer's timezone, so cloud times will be UTC.");
+    print("  Set GENERIC_TIMEZONE in the Railway dashboard if you schedule anything.");
+  } else {
+    setVariable("GENERIC_TIMEZONE", timezone);
+    print(`  Cloud clock set to ${timezone}, so scheduled times mean what they say.`);
+  }
+
 
   const passcode = await askPasscode();
   print("");
@@ -784,13 +805,18 @@ async function main() {
   }
   print(`  Your workshop: https://${n8nHost}`);
   print("");
-  print("Next, make the file holding your keys and settings:");
+  // The learner is being walked through this by a coding agent in another
+  // window, and that agent opens the next tool itself. Printing "double-click
+  // pack-agent" here gave them a second, competing set of instructions at the
+  // one moment they most need a single next step.
+  print("Now go back to Claude Code and type:   connected");
   print("");
-  print("  macOS:    double-click pack-agent.command");
-  print("  Windows:  double-click pack-agent-windows.cmd");
+  print("It takes you through the rest: making the file that holds your keys,");
+  print("and bringing your agent across.");
   print("");
-  print("Then open your agent above, sign in with the passcode you just chose,");
-  print("and upload that file there.");
+  print("Working without Claude Code? Run pack-agent.command instead (or");
+  print("pack-agent-windows.cmd on Windows), then open your agent above, sign");
+  print("in with the passcode you just chose, and upload the file it makes.");
   print("");
 }
 

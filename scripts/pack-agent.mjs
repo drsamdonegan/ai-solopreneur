@@ -85,7 +85,13 @@ function askHidden(question) {
     });
     // Replace the echo so the passphrase never appears on screen or in a
     // scrollback buffer someone else might read.
-    const onKeypress = () => {
+    const onKeypress = (chunk) => {
+      // Enter arrives here too, and by then readline has already emptied the
+      // line — so redrawing would print the question again with no asterisks
+      // after it, which reads as being asked the same thing twice.
+      if (chunk && /[\r\n]/.test(String(chunk))) {
+        return;
+      }
       const written = rl.line.length;
       process.stdout.clearLine(0);
       process.stdout.cursorTo(0);
@@ -315,10 +321,15 @@ async function main() {
   print(`  ${output}`);
   print(`  ${humanSize(statSync(output).size)}`);
   print("");
-  print("What to do next:");
-  print("  1. Open your agent's web address.");
-  print("  2. Choose this file when it asks for your agent pack.");
-  print("  3. Type the passphrase you just chose.");
+  // Same reason as the connector: the agent in the other window is running this
+  // sequence and will hand over the address and the path. One next step, not two.
+  print("Now go back to Claude Code and type:   packed");
+  print("");
+  print("It gives you your agent's address and walks you through the upload.");
+  print("");
+  print("Working without Claude Code? Open your agent's web address, choose");
+  print("this file when it asks for your agent pack, and type the passphrase");
+  print("you just chose.");
   print("");
   print("This file holds your API keys. Do not email it and do not put it in");
   print("Dropbox or Google Drive. Leave it in backups/, which is already kept");
