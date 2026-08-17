@@ -222,15 +222,21 @@ function resolveSessionSecret() {
  * resolves, because the not-ready-yet page has to be served on it.
  */
 function chatPort() {
-  return port("PORT", port("CHAT_PORT", 3_000));
+  return port("CHAT_PORT", port("PORT", 3_000));
 }
 
 function config() {
   const stored = readPublicUrlsFile();
 
-  // Hosting platforms inject PORT for the service they route to. That is the
-  // chat app, so it takes precedence over CHAT_PORT.
-  const chatPort = port("PORT", port("CHAT_PORT", 3_000));
+  // Hosting platforms inject PORT for the single service they assume they are
+  // routing to. This agent is two services behind two domains with explicit
+  // target ports, so one injected number cannot describe both — and taking it
+  // moved the chat app to Railway's PORT of 8080 while both domains still
+  // pointed at 3000 and 5678. Every request then failed at the edge while the
+  // container looked perfectly healthy. CHAT_PORT is set in the Dockerfile and
+  // is what the domains are created against, so it wins; PORT stays as the
+  // fallback for a platform that only offers one.
+  const chatPort = port("CHAT_PORT", port("PORT", 3_000));
   const n8nPort = port("N8N_PORT", 5_678);
   const documentWorkerPort = port("DOCUMENT_WORKER_PORT", 3_100);
   const taskBrokerPort = port(
