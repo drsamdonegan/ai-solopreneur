@@ -415,7 +415,7 @@
         "workflowInputs": {
           "mappingMode": "defineBelow",
           "value": {
-            "sessionId": "={{ $('Validate and Normalise').item.json.sessionId }}",
+            "sessionId": "={{ $('Validate and Normalise').first().json.sessionId }}",
             "status": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('status', `Use \"all\" unless the user explicitly asks for backlog, todo, in_progress, blocked, or done tasks.`, 'string') }}",
             "priority": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('priority', `Use \"all\" unless the user explicitly asks for low, medium, or high priority tasks.`, 'string') }}"
           },
@@ -475,7 +475,7 @@
         "workflowInputs": {
           "mappingMode": "defineBelow",
           "value": {
-            "sessionId": "={{ $('Validate and Normalise').item.json.sessionId }}",
+            "sessionId": "={{ $('Validate and Normalise').first().json.sessionId }}",
             "title": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('title', 'Required task title, 1-120 characters.', 'string') }}",
             "description": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('description', 'Optional task detail, at most 2,000 characters. Use an empty string when omitted.', 'string') }}",
             "status": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('status', 'One of backlog, todo, in_progress, blocked, or done. Use todo when omitted.', 'string') }}",
@@ -565,7 +565,7 @@
         "workflowInputs": {
           "mappingMode": "defineBelow",
           "value": {
-            "sessionId": "={{ $('Validate and Normalise').item.json.sessionId }}",
+            "sessionId": "={{ $('Validate and Normalise').first().json.sessionId }}",
             "taskId": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('taskId', 'Positive whole-number ID of the existing local task.', 'number') }}",
             "status": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('status', 'New status: backlog, todo, in_progress, blocked, or done.', 'string') }}"
           },
@@ -855,8 +855,8 @@
         "workflowInputs": {
           "mappingMode": "defineBelow",
           "value": {
-            "sessionId": "={{ $('Validate and Normalise').item.json.sessionId }}",
-            "requestId": "={{ $('Validate and Normalise').item.json.requestId }}"
+            "sessionId": "={{ $('Validate and Normalise').first().json.sessionId }}",
+            "requestId": "={{ $('Validate and Normalise').first().json.requestId }}"
           },
           "matchingColumns": [],
           "schema": [
@@ -905,8 +905,8 @@
         "workflowInputs": {
           "mappingMode": "defineBelow",
           "value": {
-            "sessionId": "={{ $('Validate and Normalise').item.json.sessionId }}",
-            "requestId": "={{ $('Validate and Normalise').item.json.requestId }}",
+            "sessionId": "={{ $('Validate and Normalise').first().json.sessionId }}",
+            "requestId": "={{ $('Validate and Normalise').first().json.requestId }}",
             "when": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('when', 'Use latest for the most recent report, or week when the user asks about the last several days. Defaults to latest.', 'string') }}",
             "filter": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('filter', 'Use open for programs still accepting applications, closing for ones closing within two weeks, or all to include closed ones. Defaults to open.', 'string') }}"
           },
@@ -975,8 +975,8 @@
         "workflowInputs": {
           "mappingMode": "defineBelow",
           "value": {
-            "sessionId": "={{ $('Validate and Normalise').item.json.sessionId }}",
-            "requestId": "={{ $('Validate and Normalise').item.json.requestId }}",
+            "sessionId": "={{ $('Validate and Normalise').first().json.sessionId }}",
+            "requestId": "={{ $('Validate and Normalise').first().json.requestId }}",
             "legalName": "Registered business name, exactly as the user said it. Empty string when not mentioned.",
             "entityType": "Legal structure the user stated, such as Pty Ltd, sole trader, LLC, or charity. Empty string when not mentioned.",
             "country": "Country the business is registered in. Required before a profile can be saved; ask if the user has not said.",
@@ -1195,8 +1195,8 @@
         "workflowInputs": {
           "mappingMode": "defineBelow",
           "value": {
-            "sessionId": "={{ $('Validate and Normalise').item.json.sessionId }}",
-            "requestId": "={{ $('Validate and Normalise').item.json.requestId }}",
+            "sessionId": "={{ $('Validate and Normalise').first().json.sessionId }}",
+            "requestId": "={{ $('Validate and Normalise').first().json.requestId }}",
             "domain": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('domain', 'Required public business domain named in the current user direct research request.', 'string') }}",
             "companyName": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('companyName', 'Optional company name; use an empty string when omitted.', 'string') }}",
             "researchDepth": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('researchDepth', 'Use standard unless the user explicitly asks for deep research.', 'string') }}",
@@ -1285,8 +1285,8 @@
         "workflowInputs": {
           "mappingMode": "defineBelow",
           "value": {
-            "sessionId": "={{ $('Validate and Normalise').item.json.sessionId }}",
-            "requestId": "={{ $('Validate and Normalise').item.json.requestId }}",
+            "sessionId": "={{ $('Validate and Normalise').first().json.sessionId }}",
+            "requestId": "={{ $('Validate and Normalise').first().json.requestId }}",
             "jobId": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('jobId', 'Exact job ID returned by start_domain_research in this conversation.', 'string') }}"
           },
           "matchingColumns": [],
@@ -1345,8 +1345,8 @@
         "workflowInputs": {
           "mappingMode": "defineBelow",
           "value": {
-            "sessionId": "={{ $('Validate and Normalise').item.json.sessionId }}",
-            "requestId": "={{ $('Validate and Normalise').item.json.requestId }}",
+            "sessionId": "={{ $('Validate and Normalise').first().json.sessionId }}",
+            "requestId": "={{ $('Validate and Normalise').first().json.requestId }}",
             "domain": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('domain', 'Saved business domain when known; otherwise an empty string.', 'string') }}"
           },
           "matchingColumns": [],

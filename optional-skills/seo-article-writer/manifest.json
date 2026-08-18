@@ -20,8 +20,8 @@
         "workflowInputs": {
           "mappingMode": "defineBelow",
           "value": {
-            "sessionId": "={{ $('Validate and Normalise').item.json.sessionId }}",
-            "requestId": "={{ $('Validate and Normalise').item.json.requestId }}",
+            "sessionId": "={{ $('Validate and Normalise').first().json.sessionId }}",
+            "requestId": "={{ $('Validate and Normalise').first().json.requestId }}",
             "domain": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('domain', 'Bare saved business domain for the requested article.', 'string') }}",
             "primaryKeyword": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('primaryKeyword', 'Main topic stated by the user. Use an empty string when they chose a numbered idea or asked you to choose.', 'string') }}",
             "selectionNumber": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('selectionNumber', 'The exact article number 1, 2 or 3 chosen by the user. Use 0 when no numbered choice was made.', 'number') }}",
@@ -186,8 +186,8 @@
         "workflowInputs": {
           "mappingMode": "defineBelow",
           "value": {
-            "sessionId": "={{ $('Validate and Normalise').item.json.sessionId }}",
-            "requestId": "={{ $('Validate and Normalise').item.json.requestId }}",
+            "sessionId": "={{ $('Validate and Normalise').first().json.sessionId }}",
+            "requestId": "={{ $('Validate and Normalise').first().json.requestId }}",
             "jobId": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('jobId', 'Exact article job ID from this conversation, or an empty string.', 'string') }}",
             "domain": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('domain', 'Saved business domain when the exact job ID is unavailable, or an empty string.', 'string') }}"
           },

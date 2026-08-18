@@ -18,8 +18,8 @@
         "workflowInputs": {
           "mappingMode": "defineBelow",
           "value": {
-            "session_id": "={{ $('Validate and Normalise').item.json.sessionId }}",
-            "request_id": "={{ $('Validate and Normalise').item.json.requestId }}",
+            "session_id": "={{ $('Validate and Normalise').first().json.sessionId }}",
+            "request_id": "={{ $('Validate and Normalise').first().json.requestId }}",
             "email_address": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('email_address', 'Optional work email supplied by the current user; use an empty string when omitted. Never invent an email.', 'string') }}",
             "full_name": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('full_name', 'Required name for one person. Copy it exactly from the current user, preserving professional titles such as Dr or Professor and any credentials. Do not normalize or shorten it.', 'string') }}",
             "country_region": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('country_region', 'Optional country or region supplied by the current user; use an empty string when omitted.', 'string') }}",

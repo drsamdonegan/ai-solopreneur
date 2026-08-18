@@ -18,8 +18,8 @@
         "workflowInputs": {
           "mappingMode": "defineBelow",
           "value": {
-            "sessionId": "={{ $('Validate and Normalise').item.json.sessionId }}",
-            "requestId": "={{ $('Validate and Normalise').item.json.requestId }}",
+            "sessionId": "={{ $('Validate and Normalise').first().json.sessionId }}",
+            "requestId": "={{ $('Validate and Normalise').first().json.requestId }}",
             "domain": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('domain', 'Required public business domain named in the current user direct research request.', 'string') }}",
             "companyName": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('companyName', 'Optional company name; use an empty string when omitted.', 'string') }}",
             "researchDepth": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('researchDepth', 'Use standard unless the user explicitly asks for deep research.', 'string') }}",
@@ -104,8 +104,8 @@
         "workflowInputs": {
           "mappingMode": "defineBelow",
           "value": {
-            "sessionId": "={{ $('Validate and Normalise').item.json.sessionId }}",
-            "requestId": "={{ $('Validate and Normalise').item.json.requestId }}",
+            "sessionId": "={{ $('Validate and Normalise').first().json.sessionId }}",
+            "requestId": "={{ $('Validate and Normalise').first().json.requestId }}",
             "jobId": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('jobId', 'Exact job ID returned by start_domain_research in this conversation.', 'string') }}"
           },
           "matchingColumns": [],
@@ -160,8 +160,8 @@
         "workflowInputs": {
           "mappingMode": "defineBelow",
           "value": {
-            "sessionId": "={{ $('Validate and Normalise').item.json.sessionId }}",
-            "requestId": "={{ $('Validate and Normalise').item.json.requestId }}",
+            "sessionId": "={{ $('Validate and Normalise').first().json.sessionId }}",
+            "requestId": "={{ $('Validate and Normalise').first().json.requestId }}",
             "domain": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('domain', 'Saved business domain when known; otherwise an empty string.', 'string') }}"
           },
           "matchingColumns": [],
