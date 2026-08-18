@@ -8,6 +8,7 @@
     "node": "24.x"
   },
   "scripts": {
+    "verify": "node scripts/verify.mjs",
     "setup": "node scripts/local.mjs setup",
     "start": "node scripts/local.mjs start",
     "start:cloud": "node scripts/cloud.mjs",

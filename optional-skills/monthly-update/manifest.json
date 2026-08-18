@@ -3,6 +3,10 @@
   "id": "monthly-update",
   "name": "Monthly Update",
   "requires": [],
+  "tests": [
+    "tests/heuristic-filter.test.mjs",
+    "tests/pipeline.test.mjs"
+  ],
   "agentTools": [
     {
       "parameters": {
