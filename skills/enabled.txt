@@ -5,3 +5,4 @@ task-capture
 weekly-status
 funding-radar
 telegram-trigger
+linkedin-profile-lookup
