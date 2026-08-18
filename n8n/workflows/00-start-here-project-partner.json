@@ -844,7 +844,7 @@
     },
     {
       "parameters": {
-        "description": "Goes out and searches for funding this business could apply for: grants, rebates, tax incentives, vouchers, and credit programs. Use it when the user asks you to look for funding, find grants, check what is available, or refresh what you know. It starts the search and answers immediately; the search itself takes a few minutes, so read the result back later with get_funding_report rather than waiting. It needs a saved funding profile first, and it refuses to start a second search while one is running.",
+        "description": "Goes out and searches for funding this business could apply for: grants, rebates, tax incentives, vouchers, and credit programs. Use it whenever the user asks you to look for funding, find grants, or check what is available. Start it straight away: it fills in anything it does not know with sensible starting assumptions and tells you which ones it used, so never ask the user questions before calling it. It answers immediately and the search itself takes a few minutes, so read the result back later with get_funding_report rather than waiting. It refuses to start a second search while one is running.",
         "source": "database",
         "workflowId": {
           "__rl": true,
@@ -856,7 +856,8 @@
           "mappingMode": "defineBelow",
           "value": {
             "sessionId": "={{ $('Validate and Normalise').first().json.sessionId }}",
-            "requestId": "={{ $('Validate and Normalise').first().json.requestId }}"
+            "requestId": "={{ $('Validate and Normalise').first().json.requestId }}",
+            "domain": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('domain', 'The business's website domain when one is known, such as mlai.au, so the search can work out what the business does. Empty string when the user has not given one.', 'string') }}"
           },
           "matchingColumns": [],
           "schema": [
@@ -872,6 +873,15 @@
             {
               "id": "requestId",
               "displayName": "requestId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "domain",
+              "displayName": "domain",
               "required": false,
               "defaultMatch": false,
               "display": true,
@@ -977,23 +987,22 @@
           "value": {
             "sessionId": "={{ $('Validate and Normalise').first().json.sessionId }}",
             "requestId": "={{ $('Validate and Normalise').first().json.requestId }}",
-            "legalName": "Registered business name, exactly as the user said it. Empty string when not mentioned.",
-            "entityType": "Legal structure the user stated, such as Pty Ltd, sole trader, LLC, or charity. Empty string when not mentioned.",
-            "country": "Country the business is registered in. Required before a profile can be saved; ask if the user has not said.",
-            "region": "State, province, or territory, spelled out in full such as Victoria or New South Wales. Empty string when not mentioned.",
-            "city": "City or council area. Empty string when not mentioned.",
-            "industry": "What the business does, in the user's own words. Empty string when not mentioned.",
-            "industryCode": "Official industry code such as ANZSIC or NAICS, only when the user gives one. Never look one up or guess it.",
-            "headcount": "Number of people who work there, as a plain number. Empty string when the user has not said.",
-            "annualRevenue": "Approximate yearly turnover as a plain number with no currency symbol. Empty string when the user has not said.",
-            "yearsTrading": "How many years it has been trading, as a plain number. Empty string when the user has not said.",
-            "registeredForGst": "yes or no, only when the user says. Empty string otherwise.",
-            "doesRnd": "yes or no: whether it does research and development. Empty string when the user has not said.",
-            "exports": "yes or no: whether it sells overseas. Empty string when the user has not said.",
-            "employsApprentices": "yes or no: whether it employs apprentices or trainees. Empty string when the user has not said.",
-            "priorGrants": "Grants it has already received, if the user mentions any. Empty string otherwise.",
-            "interests": "What the user says they want money for, such as hiring, equipment, or export. Empty string otherwise.",
-            "deliverTo": "Where the funding report should go: 'chat-only', or 'slack:CHANNELID' when the user gives a Slack channel. Empty string to leave unchanged."
+            "legalName": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('legalName', 'Registered business name, exactly as the user said it. Empty string when not mentioned.', 'string') }}",
+            "entityType": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('entityType', 'Legal structure the user stated, such as Pty Ltd, sole trader, LLC, or charity. Empty string when not mentioned.', 'string') }}",
+            "country": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('country', 'Country the business is registered in, spelled out in full, such as Australia or United Kingdom. Required before a profile can be saved; ask if the user has not said.', 'string') }}",
+            "region": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('region', 'State, province, or territory, spelled out in full such as Victoria or New South Wales. Empty string when not mentioned.', 'string') }}",
+            "city": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('city', 'City or council area. Empty string when not mentioned.', 'string') }}",
+            "industry": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('industry', 'What the business does, in the user's own words. Empty string when not mentioned.', 'string') }}",
+            "industryCode": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('industryCode', 'Official industry code such as ANZSIC or NAICS, only when the user gives one. Never look one up or guess it.', 'string') }}",
+            "headcount": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('headcount', 'Number of people who work there, as a plain number. Empty string when the user has not said.', 'string') }}",
+            "annualRevenue": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('annualRevenue', 'Approximate yearly turnover as a plain number with no currency symbol. Empty string when the user has not said.', 'string') }}",
+            "yearsTrading": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('yearsTrading', 'How many years it has been trading, as a plain number. Empty string when the user has not said.', 'string') }}",
+            "registeredForGst": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('registeredForGst', 'yes or no, only when the user says. Empty string otherwise.', 'string') }}",
+            "doesRnd": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('doesRnd', 'yes or no: whether it does research and development. Empty string when the user has not said.', 'string') }}",
+            "exports": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('exports', 'yes or no: whether it sells overseas. Empty string when the user has not said.', 'string') }}",
+            "employsApprentices": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('employsApprentices', 'yes or no: whether it employs apprentices or trainees. Empty string when the user has not said.', 'string') }}",
+            "priorGrants": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('priorGrants', 'Grants it has already received, if the user mentions any. Empty string otherwise.', 'string') }}",
+            "interests": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('interests', 'What the user says they want money for, such as hiring, equipment, or export. Empty string otherwise.', 'string') }}"
           },
           "matchingColumns": [],
           "schema": [
@@ -1153,15 +1162,6 @@
             {
               "id": "interests",
               "displayName": "interests",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "string"
-            },
-            {
-              "id": "deliverTo",
-              "displayName": "deliverTo",
               "required": false,
               "defaultMatch": false,
               "display": true,
