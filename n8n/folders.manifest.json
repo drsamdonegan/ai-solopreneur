@@ -37,6 +37,16 @@
       ]
     },
     {
+      "id": "skill-your-business",
+      "name": "3. Your business",
+      "description": "Researching a website you own and recalling what the agent already learned about the business.",
+      "workflows": [
+        "50-tool-start-domain-research.json",
+        "51-tool-complete-domain-research.json",
+        "52-tool-get-business-memory.json"
+      ]
+    },
+    {
       "id": "skill-setup-and-health",
       "name": "5. Setup and health",
       "description": "Run-once plumbing and the health check. A learner rarely opens these, but they should be able to find them.",
