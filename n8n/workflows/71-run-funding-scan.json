@@ -1408,8 +1408,8 @@
   "settings": {
     "executionOrder": "v1",
     "saveDataErrorExecution": "all",
-    "saveDataSuccessExecution": "all",
-    "saveExecutionProgress": true,
+    "saveDataSuccessExecution": "none",
+    "saveExecutionProgress": false,
     "saveManualExecutions": true,
     "executionTimeout": 1800
   },
