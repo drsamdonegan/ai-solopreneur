@@ -59,6 +59,7 @@ const paths = {
   ),
   agentRegistry: join(projectRoot, "apps", "chat", "config", "agents.json"),
   repoSkillsDir: join(projectRoot, "skills"),
+  repoOptionalSkillsDir: join(projectRoot, "optional-skills"),
 };
 
 const startedAt = Date.now();
@@ -553,7 +554,7 @@ function seedSkills() {
  * image. Everything the learner wrote is left exactly as it is.
  */
 function migrateSkillMetadata() {
-  if (!existsSync(paths.skillsDir) || !existsSync(paths.repoSkillsDir)) {
+  if (!existsSync(paths.skillsDir)) {
     return [];
   }
   const migrated = [];
@@ -562,15 +563,27 @@ function migrateSkillMetadata() {
       continue;
     }
     const saved = join(paths.skillsDir, entry.name, "skill.yaml");
+    // A base skill sits at skills/<name>/skill.yaml. An installable one keeps
+    // its own copy a level deeper, at optional-skills/<name>/skill/skill.yaml.
+    // A volume can hold either, so look in both before giving up: a learner who
+    // installed an optional skill before it gained an owning agent has a saved
+    // copy that only the catalogue can repair.
     const shipped = join(paths.repoSkillsDir, entry.name, "skill.yaml");
-    if (!existsSync(saved) || !existsSync(shipped)) {
+    const optional = join(
+      paths.repoOptionalSkillsDir,
+      entry.name,
+      "skill",
+      "skill.yaml",
+    );
+    const source = existsSync(shipped) ? shipped : optional;
+    if (!existsSync(saved) || !existsSync(source)) {
       continue;
     }
     const current = readFileSync(saved, "utf8");
     if (/^agent:/m.test(current)) {
       continue;
     }
-    const line = readFileSync(shipped, "utf8").match(/^agent:.*$/m);
+    const line = readFileSync(source, "utf8").match(/^agent:.*$/m);
     if (!line) {
       continue;
     }
