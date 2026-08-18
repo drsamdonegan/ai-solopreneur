@@ -3,7 +3,7 @@
   "nodes": [
     {
       "parameters": {
-        "content": "## Run this once\n\nSelect **Execute workflow** below. It creates three local tables:\n\n- `funding_profile` — the facts about your business that decide what you can apply for\n- `funding_opportunities` — every program the morning scan has ever found\n- `funding_runs` — a copy of each morning's report\n\nNothing leaves your computer. All three start empty.\n\nRunning this again is safe and changes nothing.",
+        "content": "## Run this once\n\nSelect **Execute workflow** below. It creates three local tables:\n\n- `funding_profile` — the facts about your business that decide what you can apply for\n- `funding_opportunities` — every program the search has ever found\n- `funding_runs` — a copy of each report, and what that search cost\n\nNothing leaves your computer. All three start empty.\n\nRunning this again is safe and changes nothing.",
         "height": 380,
         "width": 420,
         "color": 4
@@ -19,7 +19,7 @@
     },
     {
       "parameters": {
-        "content": "## Then tell your agent about your business\n\nThe 8am scan does nothing until a profile exists, because eligibility is\ndecided by things this project does not otherwise know: where you are\nregistered, how many staff you have, and roughly what you turn over.\n\nOpen the chat and say it in plain words, for example:\n\n> We're a Pty Ltd in Melbourne, four staff, about $600k a year, trading three years.\n\nThe agent saves it and reads it back to you.",
+        "content": "## Then tell your agent about your business\n\nThe search does nothing until a profile exists, because eligibility is\ndecided by things this project does not otherwise know: where you are\nregistered, how many staff you have, and roughly what you turn over.\n\nOpen the chat and say it in plain words, for example:\n\n> We're a Pty Ltd in Melbourne, four staff, about $600k a year, trading three years.\n\nThe agent saves it and reads it back to you.",
         "height": 380,
         "width": 420,
         "color": 5
@@ -280,6 +280,10 @@
         "columns": {
           "column": [
             {
+              "name": "runId",
+              "type": "string"
+            },
+            {
               "name": "ranAt",
               "type": "date"
             },
@@ -350,7 +354,7 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "return [{ json: {\n  ok: true,\n  message: 'The three funding tables are ready. Next: tell your agent about your business so it can save a funding profile, then switch on the 8am scan.'\n} }];"
+        "jsCode": "return [{ json: {\n  ok: true,\n  message: 'The three funding tables are ready. Next: tell your agent about your business, then ask it to look for funding you can apply for.'\n} }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,

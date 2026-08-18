@@ -1,9 +1,9 @@
 {
-  "name": "71 - TRIGGER - Daily Funding Scan",
+  "name": "71 - RUN - Funding Scan",
   "nodes": [
     {
       "parameters": {
-        "content": "## Your agent goes looking while you sleep\n\nThis is an **entry point**, not a tool. Your agent cannot start it, and\nnothing on a web page can either. The clock starts it.\n\nIt reads your funding profile, searches the official sources for your\ncountry and state plus non-government money, checks each new program\nagainst its own official page, and saves a short report.\n\n**It is switched off until you activate it** with the toggle at the top\nright, and it only runs while n8n is running. On a laptop that means the\nlaptop is awake at 8am.\n\nIt never applies for anything and never contacts anyone.",
+        "content": "## The search itself\n\nThis is the workhorse: it reads your funding profile, searches the\nofficial sources for your country and state plus non-government money,\nchecks each new program against its own official page, and saves a short\nreport.\n\n**Nothing here decides when it runs.** Your agent starts it when you ask,\nand a scheduler can start it on a clock later. Both call this same\nworkflow, so there is only ever one copy of the actual searching.\n\nIt takes a few minutes. It never applies for anything and never contacts\nanyone.",
         "height": 460,
         "width": 460,
         "color": 4
@@ -19,7 +19,7 @@
     },
     {
       "parameters": {
-        "content": "## What a morning costs\n\nThree searches per beat, four page checks, one eligibility pass.\nRoughly nine searches and a dollar or less a day at the shipped settings.\n\nEvery run records its own searches and tokens in `funding_runs`, so after\na week you can read the real number instead of trusting an estimate.\n\nTo spend less: remove a beat from your profile, or switch the schedule\nbelow to weekdays only.",
+        "content": "## What one search costs\n\nThree searches per beat, four page checks, one eligibility pass.\nRoughly nine searches and a dollar or less each time you run it.\n\nEvery run records its own searches and tokens in `funding_runs`, so after\na few goes you can read the real number instead of trusting an estimate.\n\nTo spend less, remove a beat from your profile.",
         "height": 460,
         "width": 420,
         "color": 5
@@ -35,25 +35,24 @@
     },
     {
       "parameters": {
-        "rule": {
-          "interval": [
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
             {
-              "field": "days",
-              "daysInterval": 1,
-              "triggerAtHour": 8,
-              "triggerAtMinute": 0
+              "name": "runId",
+              "type": "string"
             }
           ]
         }
       },
-      "type": "n8n-nodes-base.scheduleTrigger",
-      "typeVersion": 1.3,
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
       "position": [
         -1360,
         200
       ],
       "id": "95540000-0000-4000-8000-000000000010",
-      "name": "Every Morning At 8"
+      "name": "Run Input"
     },
     {
       "parameters": {
@@ -93,7 +92,7 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "const rows = $input.all().map((item) => item.json).filter((row) => row && row.profileId === 'default');\nconst profile = rows[0] ?? null;\nconst now = new Date();\n// The local calendar date, not the UTC one: at 8am in Melbourne, UTC is\n// still yesterday, and telling the model the wrong date makes it judge every\n// deadline against the wrong day.\nconst pad = (value) => String(value).padStart(2, '0');\nconst today = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;\nlet timezone = 'the local timezone';\ntry { timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || timezone; } catch {}\n\nif (!profile || !profile.country) {\n  return [{ json: { ready: false, today, reason: 'no-profile' } }];\n}\n\nlet sourceDomains = { national: [], regional: [], local: [] };\ntry { sourceDomains = { ...sourceDomains, ...JSON.parse(profile.sourceDomains ?? '{}') }; } catch {}\nlet beats = [];\ntry { beats = JSON.parse(profile.beats ?? '[]'); } catch {}\nif (!Array.isArray(beats) || beats.length === 0) beats = ['national', 'nongov'];\n\nconst updatedAt = Date.parse(String(profile.updatedAt ?? ''));\nconst staleDays = Number.isNaN(updatedAt) ? null : Math.round((now.getTime() - updatedAt) / 86400000);\n\nconst forPrompt = {\n  legalName: profile.legalName, entityType: profile.entityType,\n  country: profile.country, region: profile.region, city: profile.city,\n  industry: profile.industry, industryCode: profile.industryCode,\n  headcount: profile.headcount, annualRevenue: profile.annualRevenue,\n  yearsTrading: profile.yearsTrading, registeredForGst: profile.registeredForGst,\n  doesRnd: profile.doesRnd, exports: profile.exports,\n  employsApprentices: profile.employsApprentices,\n  priorGrants: profile.priorGrants, interests: profile.interests,\n};\n\nreturn [{ json: {\n  ready: true,\n  today,\n  timezone,\n  beats,\n  sourceDomains,\n  staleDays,\n  deliverTo: String(profile.deliverTo ?? 'chat-only'),\n  profileJson: JSON.stringify(forPrompt, null, 1),\n  region: String(profile.region ?? ''),\n  city: String(profile.city ?? ''),\n  industry: String(profile.industry ?? ''),\n} }];"
+        "jsCode": "// A run started by hand from the n8n canvas arrives with no runId, so make\n// one rather than writing a row that nothing can find again.\nconst runId = String($('Run Input').first().json?.runId ?? '').trim()\n  || `run-${new Date().toISOString().replace(/[^0-9]/g, '').slice(0, 14)}`;\nconst startedAt = new Date().toISOString();\nconst rows = $input.all().map((item) => item.json).filter((row) => row && row.profileId === 'default');\nconst profile = rows[0] ?? null;\nconst now = new Date();\n// The local calendar date, not the UTC one: at 8am in Melbourne, UTC is\n// still yesterday, and telling the model the wrong date makes it judge every\n// deadline against the wrong day.\nconst pad = (value) => String(value).padStart(2, '0');\nconst today = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;\nlet timezone = 'the local timezone';\ntry { timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || timezone; } catch {}\n\nif (!profile || !profile.country) {\n  return [{ json: { ready: false, today, runId, startedAt, reason: 'no-profile' } }];\n}\n\nlet sourceDomains = { national: [], regional: [], local: [] };\ntry { sourceDomains = { ...sourceDomains, ...JSON.parse(profile.sourceDomains ?? '{}') }; } catch {}\nlet beats = [];\ntry { beats = JSON.parse(profile.beats ?? '[]'); } catch {}\nif (!Array.isArray(beats) || beats.length === 0) beats = ['national', 'nongov'];\n\nconst updatedAt = Date.parse(String(profile.updatedAt ?? ''));\nconst staleDays = Number.isNaN(updatedAt) ? null : Math.round((now.getTime() - updatedAt) / 86400000);\n\nconst forPrompt = {\n  legalName: profile.legalName, entityType: profile.entityType,\n  country: profile.country, region: profile.region, city: profile.city,\n  industry: profile.industry, industryCode: profile.industryCode,\n  headcount: profile.headcount, annualRevenue: profile.annualRevenue,\n  yearsTrading: profile.yearsTrading, registeredForGst: profile.registeredForGst,\n  doesRnd: profile.doesRnd, exports: profile.exports,\n  employsApprentices: profile.employsApprentices,\n  priorGrants: profile.priorGrants, interests: profile.interests,\n};\n\nreturn [{ json: {\n  ready: true,\n  runId,\n  startedAt,\n  today,\n  timezone,\n  beats,\n  sourceDomains,\n  staleDays,\n  deliverTo: String(profile.deliverTo ?? 'chat-only'),\n  profileJson: JSON.stringify(forPrompt, null, 1),\n  region: String(profile.region ?? ''),\n  city: String(profile.city ?? ''),\n  industry: String(profile.industry ?? ''),\n} }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -159,6 +158,87 @@
       "id": "95540000-0000-4000-8000-000000000014",
       "name": "Load Business Memory",
       "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "value": "funding_runs",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "runId": "={{ $json.runId }}",
+            "ranAt": "={{ $json.startedAt }}",
+            "status": "running",
+            "reportText": "",
+            "errorSummary": ""
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "runId",
+              "displayName": "runId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "ranAt",
+              "displayName": "ranAt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "reportText",
+              "displayName": "reportText",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "errorSummary",
+              "displayName": "errorSummary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -480,
+        240
+      ],
+      "id": "95540000-0000-4000-8000-000000000035",
+      "name": "Mark Run Started",
       "onError": "continueRegularOutput"
     },
     {
@@ -326,7 +406,7 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "const hostOf = (value) => {\n  let host = String(value ?? '').trim().toLowerCase();\n  const scheme = host.match(/^([a-z][a-z0-9+.-]*):\\/\\//);\n  if (scheme) host = ['http', 'https'].includes(scheme[1]) ? host.slice(scheme[0].length) : '';\n  host = host.split('/')[0].split('?')[0].split('#')[0];\n  const port = host.match(/^(.*):([0-9]*)$/);\n  if (port) host = port[1];\n  return host.replace(/\\.$/, '').replace(/^www\\./, '');\n};\nconst slug = (value) => String(value ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80);\nconst hash = (value) => {\n  let h = 5381;\n  const text = String(value ?? '');\n  for (let i = 0; i < text.length; i += 1) h = ((h * 33) ^ text.charCodeAt(i)) >>> 0;\n  return h.toString(36);\n};\nconst textFrom = (body) => (Array.isArray(body?.content) ? body.content : [])\n  .filter((block) => block && block.type === 'text')\n  .map((block) => String(block.text ?? '')).join('').trim();\nconst jsonFrom = (raw) => {\n  let text = String(raw ?? '').trim();\n  if (text.startsWith('```')) text = text.replace(/^```[a-z]*\\s*/i, '').replace(/```\\s*$/, '').trim();\n  const open = text.indexOf('{');\n  const close = text.lastIndexOf('}');\n  if (open === -1 || close <= open) return null;\n  try { return JSON.parse(text.slice(open, close + 1)); } catch { return null; }\n};\nconst searchesIn = (body) => Number(body?.usage?.server_tool_use?.web_search_requests ?? 0) || 0;\n// A failed server-tool call is an HTTP 200 whose result block carries an\n// object instead of the usual list. Indexing it blindly is the bug.\nconst toolErrorsIn = (body) => (Array.isArray(body?.content) ? body.content : [])\n  .filter((block) => block && String(block.type ?? '').endsWith('_tool_result'))\n  .filter((block) => !Array.isArray(block.content))\n  .map((block) => String(block.content?.error_code ?? 'unknown'));\n\nconst collected = $('Collect Candidates').first().json;\nconst known = $input.all().map((item) => item.json).filter((row) => row && row.fingerprint);\nconst byFingerprint = new Map(known.map((row) => [row.fingerprint, row]));\n\nconst material = (candidate) => hash([\n  candidate.closesAt, candidate.amountText, candidate.opensAt,\n].join('|'));\n\nconst fresh = [];\nconst unchanged = [];\nfor (const candidate of collected.candidates) {\n  const existing = byFingerprint.get(candidate.fingerprint);\n  const contentHash = material(candidate);\n  if (!existing) {\n    fresh.push({ ...candidate, contentHash, change: 'new' });\n  } else if (String(existing.dismissed ?? '') === 'yes') {\n    unchanged.push({ ...candidate, contentHash, change: 'dismissed' });\n  } else if (String(existing.contentHash ?? '') !== contentHash) {\n    fresh.push({ ...candidate, contentHash, change: 'changed', previous: { closesAt: existing.closesAt, amountText: existing.amountText } });\n  } else {\n    unchanged.push({ ...candidate, contentHash, change: 'same' });\n  }\n}\n\n// Verification is the expensive half, so only new and changed programs get\n// it, official sources first, and never more than four in one morning.\nfresh.sort((a, b) => {\n  if (a.sourceTrust !== b.sourceTrust) return a.sourceTrust === 'official' ? -1 : 1;\n  return a.change === 'new' && b.change !== 'new' ? -1 : 0;\n});\nconst shortlist = fresh.slice(0, 4);\n\nreturn [{ json: {\n  ...collected,\n  shortlist,\n  skippedForBudget: Math.max(0, fresh.length - shortlist.length),\n  unchangedCount: unchanged.length,\n  knownCount: known.length,\n} }];"
+        "jsCode": "const hostOf = (value) => {\n  let host = String(value ?? '').trim().toLowerCase();\n  const scheme = host.match(/^([a-z][a-z0-9+.-]*):\\/\\//);\n  if (scheme) host = ['http', 'https'].includes(scheme[1]) ? host.slice(scheme[0].length) : '';\n  host = host.split('/')[0].split('?')[0].split('#')[0];\n  const port = host.match(/^(.*):([0-9]*)$/);\n  if (port) host = port[1];\n  return host.replace(/\\.$/, '').replace(/^www\\./, '');\n};\nconst slug = (value) => String(value ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80);\nconst hash = (value) => {\n  let h = 5381;\n  const text = String(value ?? '');\n  for (let i = 0; i < text.length; i += 1) h = ((h * 33) ^ text.charCodeAt(i)) >>> 0;\n  return h.toString(36);\n};\nconst textFrom = (body) => (Array.isArray(body?.content) ? body.content : [])\n  .filter((block) => block && block.type === 'text')\n  .map((block) => String(block.text ?? '')).join('').trim();\nconst jsonFrom = (raw) => {\n  let text = String(raw ?? '').trim();\n  if (text.startsWith('```')) text = text.replace(/^```[a-z]*\\s*/i, '').replace(/```\\s*$/, '').trim();\n  const open = text.indexOf('{');\n  const close = text.lastIndexOf('}');\n  if (open === -1 || close <= open) return null;\n  try { return JSON.parse(text.slice(open, close + 1)); } catch { return null; }\n};\nconst searchesIn = (body) => Number(body?.usage?.server_tool_use?.web_search_requests ?? 0) || 0;\n// A failed server-tool call is an HTTP 200 whose result block carries an\n// object instead of the usual list. Indexing it blindly is the bug.\nconst toolErrorsIn = (body) => (Array.isArray(body?.content) ? body.content : [])\n  .filter((block) => block && String(block.type ?? '').endsWith('_tool_result'))\n  .filter((block) => !Array.isArray(block.content))\n  .map((block) => String(block.content?.error_code ?? 'unknown'));\n\nconst collected = $('Collect Candidates').first().json;\nconst known = $input.all().map((item) => item.json).filter((row) => row && row.fingerprint);\nconst byFingerprint = new Map(known.map((row) => [row.fingerprint, row]));\n\nconst material = (candidate) => hash([\n  candidate.closesAt, candidate.amountText, candidate.opensAt,\n].join('|'));\n\nconst fresh = [];\nconst unchanged = [];\nfor (const candidate of collected.candidates) {\n  const existing = byFingerprint.get(candidate.fingerprint);\n  const contentHash = material(candidate);\n  if (!existing) {\n    fresh.push({ ...candidate, contentHash, change: 'new' });\n  } else if (String(existing.dismissed ?? '') === 'yes') {\n    unchanged.push({ ...candidate, contentHash, change: 'dismissed' });\n  } else if (String(existing.contentHash ?? '') !== contentHash) {\n    fresh.push({ ...candidate, contentHash, change: 'changed', previous: { closesAt: existing.closesAt, amountText: existing.amountText } });\n  } else {\n    unchanged.push({ ...candidate, contentHash, change: 'same' });\n  }\n}\n\n// Verification is the expensive half, so only new and changed programs get\n// it, official sources first, and never more than four in one search.\nfresh.sort((a, b) => {\n  if (a.sourceTrust !== b.sourceTrust) return a.sourceTrust === 'official' ? -1 : 1;\n  return a.change === 'new' && b.change !== 'new' ? -1 : 0;\n});\nconst shortlist = fresh.slice(0, 4);\n\nreturn [{ json: {\n  ...collected,\n  shortlist,\n  skippedForBudget: Math.max(0, fresh.length - shortlist.length),\n  unchangedCount: unchanged.length,\n  knownCount: known.length,\n} }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -542,7 +622,7 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "const hostOf = (value) => {\n  let host = String(value ?? '').trim().toLowerCase();\n  const scheme = host.match(/^([a-z][a-z0-9+.-]*):\\/\\//);\n  if (scheme) host = ['http', 'https'].includes(scheme[1]) ? host.slice(scheme[0].length) : '';\n  host = host.split('/')[0].split('?')[0].split('#')[0];\n  const port = host.match(/^(.*):([0-9]*)$/);\n  if (port) host = port[1];\n  return host.replace(/\\.$/, '').replace(/^www\\./, '');\n};\nconst slug = (value) => String(value ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80);\nconst hash = (value) => {\n  let h = 5381;\n  const text = String(value ?? '');\n  for (let i = 0; i < text.length; i += 1) h = ((h * 33) ^ text.charCodeAt(i)) >>> 0;\n  return h.toString(36);\n};\nconst textFrom = (body) => (Array.isArray(body?.content) ? body.content : [])\n  .filter((block) => block && block.type === 'text')\n  .map((block) => String(block.text ?? '')).join('').trim();\nconst jsonFrom = (raw) => {\n  let text = String(raw ?? '').trim();\n  if (text.startsWith('```')) text = text.replace(/^```[a-z]*\\s*/i, '').replace(/```\\s*$/, '').trim();\n  const open = text.indexOf('{');\n  const close = text.lastIndexOf('}');\n  if (open === -1 || close <= open) return null;\n  try { return JSON.parse(text.slice(open, close + 1)); } catch { return null; }\n};\nconst searchesIn = (body) => Number(body?.usage?.server_tool_use?.web_search_requests ?? 0) || 0;\n// A failed server-tool call is an HTTP 200 whose result block carries an\n// object instead of the usual list. Indexing it blindly is the bug.\nconst toolErrorsIn = (body) => (Array.isArray(body?.content) ? body.content : [])\n  .filter((block) => block && String(block.type ?? '').endsWith('_tool_result'))\n  .filter((block) => !Array.isArray(block.content))\n  .map((block) => String(block.content?.error_code ?? 'unknown'));\n\nconst collected = $('Collect Verified').first().json;\nconst incoming = $input.first()?.json ?? {};\nconst judged = typeof incoming.statusCode === 'number' ? incoming : null;\n\nlet verdicts = [];\nlet inputTokens = Number(collected.inputTokens ?? 0);\nlet outputTokens = Number(collected.outputTokens ?? 0);\nlet judgeFailed = false;\n\nif (judged) {\n  if (Number(judged.statusCode) === 200) {\n    const body = judged.body ?? {};\n    inputTokens += Number(body?.usage?.input_tokens ?? 0) || 0;\n    outputTokens += Number(body?.usage?.output_tokens ?? 0) || 0;\n    const parsed = jsonFrom(textFrom(body));\n    if (parsed && Array.isArray(parsed.verdicts)) verdicts = parsed.verdicts;\n    else judgeFailed = true;\n  } else {\n    judgeFailed = true;\n  }\n}\n\nconst byIndex = new Map(verdicts.map((verdict) => [Number(verdict.index), verdict]));\nconst allowed = ['eligible', 'likely', 'unclear', 'not-eligible'];\n\nconst findings = collected.verified.map((program, index) => {\n  const verdict = byIndex.get(index) ?? {};\n  return {\n    ...program,\n    verdict: allowed.includes(String(verdict.verdict)) ? String(verdict.verdict) : 'unclear',\n    verdictReason: String(verdict.verdictReason ?? 'The criteria were not assessed this morning.').slice(0, 400),\n    deciderCriterion: String(verdict.deciderCriterion ?? 'Check the eligibility section on the official page.').slice(0, 300),\n    priority: Number(verdict.priority ?? 0) || 0,\n    eligibilitySummary: (program.eligibility ?? []).join('; ').slice(0, 800),\n  };\n});\n\n// Not-eligible programs are still stored, so tomorrow does not rediscover\n// and re-verify them, but they never reach the report.\nconst reportable = findings.filter((finding) => finding.verdict !== 'not-eligible');\nreportable.sort((a, b) => b.priority - a.priority);\n\nreturn [{ json: {\n  ...collected,\n  findings,\n  reportable,\n  judgeFailed,\n  inputTokens,\n  outputTokens,\n} }];"
+        "jsCode": "const hostOf = (value) => {\n  let host = String(value ?? '').trim().toLowerCase();\n  const scheme = host.match(/^([a-z][a-z0-9+.-]*):\\/\\//);\n  if (scheme) host = ['http', 'https'].includes(scheme[1]) ? host.slice(scheme[0].length) : '';\n  host = host.split('/')[0].split('?')[0].split('#')[0];\n  const port = host.match(/^(.*):([0-9]*)$/);\n  if (port) host = port[1];\n  return host.replace(/\\.$/, '').replace(/^www\\./, '');\n};\nconst slug = (value) => String(value ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80);\nconst hash = (value) => {\n  let h = 5381;\n  const text = String(value ?? '');\n  for (let i = 0; i < text.length; i += 1) h = ((h * 33) ^ text.charCodeAt(i)) >>> 0;\n  return h.toString(36);\n};\nconst textFrom = (body) => (Array.isArray(body?.content) ? body.content : [])\n  .filter((block) => block && block.type === 'text')\n  .map((block) => String(block.text ?? '')).join('').trim();\nconst jsonFrom = (raw) => {\n  let text = String(raw ?? '').trim();\n  if (text.startsWith('```')) text = text.replace(/^```[a-z]*\\s*/i, '').replace(/```\\s*$/, '').trim();\n  const open = text.indexOf('{');\n  const close = text.lastIndexOf('}');\n  if (open === -1 || close <= open) return null;\n  try { return JSON.parse(text.slice(open, close + 1)); } catch { return null; }\n};\nconst searchesIn = (body) => Number(body?.usage?.server_tool_use?.web_search_requests ?? 0) || 0;\n// A failed server-tool call is an HTTP 200 whose result block carries an\n// object instead of the usual list. Indexing it blindly is the bug.\nconst toolErrorsIn = (body) => (Array.isArray(body?.content) ? body.content : [])\n  .filter((block) => block && String(block.type ?? '').endsWith('_tool_result'))\n  .filter((block) => !Array.isArray(block.content))\n  .map((block) => String(block.content?.error_code ?? 'unknown'));\n\nconst collected = $('Collect Verified').first().json;\nconst incoming = $input.first()?.json ?? {};\nconst judged = typeof incoming.statusCode === 'number' ? incoming : null;\n\nlet verdicts = [];\nlet inputTokens = Number(collected.inputTokens ?? 0);\nlet outputTokens = Number(collected.outputTokens ?? 0);\nlet judgeFailed = false;\n\nif (judged) {\n  if (Number(judged.statusCode) === 200) {\n    const body = judged.body ?? {};\n    inputTokens += Number(body?.usage?.input_tokens ?? 0) || 0;\n    outputTokens += Number(body?.usage?.output_tokens ?? 0) || 0;\n    const parsed = jsonFrom(textFrom(body));\n    if (parsed && Array.isArray(parsed.verdicts)) verdicts = parsed.verdicts;\n    else judgeFailed = true;\n  } else {\n    judgeFailed = true;\n  }\n}\n\nconst byIndex = new Map(verdicts.map((verdict) => [Number(verdict.index), verdict]));\nconst allowed = ['eligible', 'likely', 'unclear', 'not-eligible'];\n\nconst findings = collected.verified.map((program, index) => {\n  const verdict = byIndex.get(index) ?? {};\n  return {\n    ...program,\n    verdict: allowed.includes(String(verdict.verdict)) ? String(verdict.verdict) : 'unclear',\n    verdictReason: String(verdict.verdictReason ?? 'The criteria were not assessed on this run.').slice(0, 400),\n    deciderCriterion: String(verdict.deciderCriterion ?? 'Check the eligibility section on the official page.').slice(0, 300),\n    priority: Number(verdict.priority ?? 0) || 0,\n    eligibilitySummary: (program.eligibility ?? []).join('; ').slice(0, 800),\n  };\n});\n\n// Not-eligible programs are still stored, so a later search does not\n// rediscover and re-verify them, but they never reach the report.\nconst reportable = findings.filter((finding) => finding.verdict !== 'not-eligible');\nreportable.sort((a, b) => b.priority - a.priority);\n\nreturn [{ json: {\n  ...collected,\n  findings,\n  reportable,\n  judgeFailed,\n  inputTokens,\n  outputTokens,\n} }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -584,7 +664,7 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "const dayIndex = (value) => {\n  const text = String(value ?? '').trim();\n  const isoDate = text.match(/^(\\d{4})-(\\d{2})-(\\d{2})$/);\n  if (isoDate) return Math.floor(Date.UTC(Number(isoDate[1]), Number(isoDate[2]) - 1, Number(isoDate[3])) / 86400000);\n  const parsed = new Date(text);\n  if (Number.isNaN(parsed.getTime())) return null;\n  return Math.floor(Date.UTC(parsed.getFullYear(), parsed.getMonth(), parsed.getDate()) / 86400000);\n};\nconst todayIndex = dayIndex(new Date());\nconst daysUntil = (value) => {\n  if (!value) return null;\n  const index = dayIndex(value);\n  return index === null ? null : index - todayIndex;\n};\n\nconst incoming = $input.first()?.json ?? {};\nconst context = $('Check Profile').first().json;\nconst now = new Date();\nconst stamp = now.toISOString();\nconst pad = (value) => String(value).padStart(2, '0');\n// Header shows the owner's calendar date; ranAt stays a UTC timestamp.\nconst localDate = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;\n\n// The chat window renders plain text, so no markdown tables, no hashes,\n// and no bold markers: they arrive as literal characters.\nconst lines = [];\n\nif (!Array.isArray(incoming.findings)) {\n  lines.push(`Funding scan — ${localDate}`);\n  lines.push('');\n  lines.push('I could not scan this morning, because I do not know enough about the business yet.');\n  lines.push('');\n  lines.push('Eligibility is decided by things I do not otherwise hold: what kind of entity it is, which state it is registered in, how many people work there, and roughly what it turns over.');\n  lines.push('');\n  lines.push('Tell me those in the chat and I will save them, then the scan runs tomorrow morning.');\n  return [{ json: {\n    reportText: lines.join('\\n'), status: 'blocked', ranAt: stamp,\n    beatsAttempted: 0, beatsSucceeded: 0, candidatesFound: 0,\n    newCount: 0, changedCount: 0, closingSoonCount: 0, searchCount: 0,\n    inputTokens: 0, outputTokens: 0, deliverToSlack: false, slackChannel: '',\n    errorSummary: 'No funding profile saved.', findings: [],\n  } }];\n}\n\nconst closingSoon = $('Load Closing Soon').all().map((item) => item.json)\n  .filter((row) => row && row.fingerprint && String(row.dismissed ?? '') !== 'yes')\n  .filter((row) => !incoming.reportable.some((finding) => finding.fingerprint === row.fingerprint))\n  .map((row) => ({ ...row, daysLeft: daysUntil(row.closesAt) }))\n  .filter((row) => row.daysLeft !== null && row.daysLeft >= 0 && row.daysLeft <= 14)\n  .sort((a, b) => a.daysLeft - b.daysLeft)\n  .slice(0, 5);\n\nconst shown = incoming.reportable.slice(0, 5);\nconst newCount = shown.filter((finding) => finding.change === 'new').length;\nconst changedCount = shown.filter((finding) => finding.change === 'changed').length;\n\nlines.push(`Funding scan — ${localDate}`);\nlines.push('');\n\nif (context.staleDays !== null && context.staleDays > 90) {\n  lines.push(`Note: this is based on a business profile last updated ${context.staleDays} days ago. If headcount, turnover, or location has changed, tell me and I will redo it.`);\n  lines.push('');\n}\n\nconst headline = [];\nif (newCount > 0) headline.push(`${newCount} new`);\nif (changedCount > 0) headline.push(`${changedCount} changed`);\nif (closingSoon.length > 0) headline.push(`${closingSoon.length} closing soon`);\nlines.push(headline.length > 0 ? `${headline.join(', ')}.` : 'Nothing new today.');\nlines.push('');\n\nif (shown.length > 0) {\n  lines.push(shown.some((finding) => finding.change === 'changed') ? 'NEW AND CHANGED' : 'NEW');\n  shown.forEach((finding, index) => {\n    const left = daysUntil(finding.closesAt);\n    lines.push(`${index + 1}. ${finding.programName}${finding.amountText ? ' — ' + finding.amountText : ''}`);\n    if (finding.administeredBy) lines.push(`   Who runs it: ${finding.administeredBy}`);\n    if (finding.whatItFunds) lines.push(`   For: ${finding.whatItFunds}`);\n    if (finding.closesAt) {\n      lines.push(`   Closes: ${finding.closesAt}${left !== null && left >= 0 ? ' (' + left + ' days)' : ''}`);\n    } else {\n      lines.push('   Closes: not stated on the page');\n    }\n    if (finding.change === 'changed' && finding.previous) {\n      lines.push(`   Changed since I last looked: was closing ${finding.previous.closesAt || 'unstated'}, amount was ${finding.previous.amountText || 'unstated'}.`);\n    }\n    lines.push(`   ${finding.verdictReason}`);\n    lines.push(`   What to check yourself: ${finding.deciderCriterion}`);\n    if (finding.sourceTrust !== 'official') {\n      lines.push('   Found on a third-party site — I could not confirm this on an official page.');\n    }\n    lines.push(`   ${finding.officialUrl}`);\n    lines.push('');\n  });\n}\n\nif (closingSoon.length > 0) {\n  lines.push('CLOSING SOON');\n  for (const row of closingSoon) {\n    lines.push(`- ${row.programName} closes in ${row.daysLeft} days. I first flagged it on ${String(row.firstSeenAt ?? '').slice(0, 10)}.`);\n  }\n  lines.push('');\n}\n\nconst checked = (incoming.beatsRun ?? []).filter((beat) => !(incoming.failedBeats ?? []).some((failed) => failed.beat === beat));\nif (shown.length === 0 && closingSoon.length === 0) {\n  lines.push(`I checked ${checked.length > 0 ? checked.join(', ') : 'no'} sources and found nothing new.`);\n  lines.push('');\n} else if (checked.length > 0) {\n  lines.push(`Checked: ${checked.join(', ')}.`);\n  lines.push('');\n}\n\nconst notes = [];\nfor (const failed of incoming.failedBeats ?? []) {\n  notes.push(`I could not reach the ${failed.beat} sources today.`);\n}\nif (incoming.judgeFailed) notes.push('I could not assess eligibility this morning, so the verdicts above are placeholders.');\nif (incoming.skippedForBudget > 0) notes.push(`${incoming.skippedForBudget} more programs are waiting to be checked; I do four a day and will pick them up tomorrow.`);\nfor (const dropped of incoming.droppedInVerification ?? []) {\n  notes.push(`I dropped \"${dropped.programName}\" because ${dropped.reason}.`);\n}\nif (notes.length > 0) {\n  lines.push('NOTES');\n  for (const note of notes) lines.push(`- ${note}`);\n  lines.push('');\n}\n\nlines.push('I find and report. I never apply for anything, and I never contact the people running these programs — that part is yours.');\n\nconst status = incoming.beatsSucceeded === 0\n  ? 'failed'\n  : (incoming.failedBeats ?? []).length > 0 || incoming.judgeFailed ? 'partial' : 'ok';\n\nconst deliverTo = String(context.deliverTo ?? 'chat-only');\nconst slackChannel = deliverTo.startsWith('slack:') ? deliverTo.slice(6).trim() : '';\n\nreturn [{ json: {\n  reportText: lines.join('\\n'),\n  status,\n  ranAt: stamp,\n  beatsAttempted: Number(incoming.beatsAttempted ?? 0),\n  beatsSucceeded: Number(incoming.beatsSucceeded ?? 0),\n  candidatesFound: (incoming.candidates ?? []).length,\n  newCount,\n  changedCount,\n  closingSoonCount: closingSoon.length,\n  searchCount: Number(incoming.searchCount ?? 0),\n  inputTokens: Number(incoming.inputTokens ?? 0),\n  outputTokens: Number(incoming.outputTokens ?? 0),\n  errorSummary: (incoming.failedBeats ?? []).map((failed) => `${failed.beat}: ${failed.error}`).join(' | ').slice(0, 900),\n  deliverToSlack: status !== 'failed' && slackChannel !== '',\n  slackChannel,\n  findings: incoming.findings ?? [],\n  reportedFingerprints: shown.map((finding) => finding.fingerprint),\n} }];"
+        "jsCode": "const dayIndex = (value) => {\n  const text = String(value ?? '').trim();\n  const isoDate = text.match(/^(\\d{4})-(\\d{2})-(\\d{2})$/);\n  if (isoDate) return Math.floor(Date.UTC(Number(isoDate[1]), Number(isoDate[2]) - 1, Number(isoDate[3])) / 86400000);\n  const parsed = new Date(text);\n  if (Number.isNaN(parsed.getTime())) return null;\n  return Math.floor(Date.UTC(parsed.getFullYear(), parsed.getMonth(), parsed.getDate()) / 86400000);\n};\nconst todayIndex = dayIndex(new Date());\nconst daysUntil = (value) => {\n  if (!value) return null;\n  const index = dayIndex(value);\n  return index === null ? null : index - todayIndex;\n};\n\nconst incoming = $input.first()?.json ?? {};\nconst context = $('Check Profile').first().json;\nconst now = new Date();\nconst stamp = now.toISOString();\nconst pad = (value) => String(value).padStart(2, '0');\n// Header shows the owner's calendar date; ranAt stays a UTC timestamp.\nconst localDate = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;\n\n// The chat window renders plain text, so no markdown tables, no hashes,\n// and no bold markers: they arrive as literal characters.\nconst lines = [];\n\nif (!Array.isArray(incoming.findings)) {\n  lines.push(`Funding scan — ${localDate}`);\n  lines.push('');\n  lines.push('I could not search, because I do not know enough about the business yet.');\n  lines.push('');\n  lines.push('Eligibility is decided by things I do not otherwise hold: what kind of entity it is, which state it is registered in, how many people work there, and roughly what it turns over.');\n  lines.push('');\n  lines.push('Tell me those in the chat and I will save them, then ask me to look for funding again.');\n  return [{ json: {\n    reportText: lines.join('\\n'), status: 'blocked', ranAt: stamp,\n    runId: context.runId,\n    beatsAttempted: 0, beatsSucceeded: 0, candidatesFound: 0,\n    newCount: 0, changedCount: 0, closingSoonCount: 0, searchCount: 0,\n    inputTokens: 0, outputTokens: 0, deliverToSlack: false, slackChannel: '',\n    errorSummary: 'No funding profile saved.', findings: [],\n  } }];\n}\n\nconst closingSoon = $('Load Closing Soon').all().map((item) => item.json)\n  .filter((row) => row && row.fingerprint && String(row.dismissed ?? '') !== 'yes')\n  .filter((row) => !incoming.reportable.some((finding) => finding.fingerprint === row.fingerprint))\n  .map((row) => ({ ...row, daysLeft: daysUntil(row.closesAt) }))\n  .filter((row) => row.daysLeft !== null && row.daysLeft >= 0 && row.daysLeft <= 14)\n  .sort((a, b) => a.daysLeft - b.daysLeft)\n  .slice(0, 5);\n\nconst shown = incoming.reportable.slice(0, 5);\nconst newCount = shown.filter((finding) => finding.change === 'new').length;\nconst changedCount = shown.filter((finding) => finding.change === 'changed').length;\n\nlines.push(`Funding scan — ${localDate}`);\nlines.push('');\n\nif (context.staleDays !== null && context.staleDays > 90) {\n  lines.push(`Note: this is based on a business profile last updated ${context.staleDays} days ago. If headcount, turnover, or location has changed, tell me and I will redo it.`);\n  lines.push('');\n}\n\nconst headline = [];\nif (newCount > 0) headline.push(`${newCount} new`);\nif (changedCount > 0) headline.push(`${changedCount} changed`);\nif (closingSoon.length > 0) headline.push(`${closingSoon.length} closing soon`);\nlines.push(headline.length > 0 ? `${headline.join(', ')}.` : 'Nothing new today.');\nlines.push('');\n\nif (shown.length > 0) {\n  lines.push(shown.some((finding) => finding.change === 'changed') ? 'NEW AND CHANGED' : 'NEW');\n  shown.forEach((finding, index) => {\n    const left = daysUntil(finding.closesAt);\n    lines.push(`${index + 1}. ${finding.programName}${finding.amountText ? ' — ' + finding.amountText : ''}`);\n    if (finding.administeredBy) lines.push(`   Who runs it: ${finding.administeredBy}`);\n    if (finding.whatItFunds) lines.push(`   For: ${finding.whatItFunds}`);\n    if (finding.closesAt) {\n      lines.push(`   Closes: ${finding.closesAt}${left !== null && left >= 0 ? ' (' + left + ' days)' : ''}`);\n    } else {\n      lines.push('   Closes: not stated on the page');\n    }\n    if (finding.change === 'changed' && finding.previous) {\n      lines.push(`   Changed since I last looked: was closing ${finding.previous.closesAt || 'unstated'}, amount was ${finding.previous.amountText || 'unstated'}.`);\n    }\n    lines.push(`   ${finding.verdictReason}`);\n    lines.push(`   What to check yourself: ${finding.deciderCriterion}`);\n    if (finding.sourceTrust !== 'official') {\n      lines.push('   Found on a third-party site — I could not confirm this on an official page.');\n    }\n    lines.push(`   ${finding.officialUrl}`);\n    lines.push('');\n  });\n}\n\nif (closingSoon.length > 0) {\n  lines.push('CLOSING SOON');\n  for (const row of closingSoon) {\n    lines.push(`- ${row.programName} closes in ${row.daysLeft} days. I first flagged it on ${String(row.firstSeenAt ?? '').slice(0, 10)}.`);\n  }\n  lines.push('');\n}\n\nconst checked = (incoming.beatsRun ?? []).filter((beat) => !(incoming.failedBeats ?? []).some((failed) => failed.beat === beat));\nif (shown.length === 0 && closingSoon.length === 0) {\n  lines.push(`I checked ${checked.length > 0 ? checked.join(', ') : 'no'} sources and found nothing new.`);\n  lines.push('');\n} else if (checked.length > 0) {\n  lines.push(`Checked: ${checked.join(', ')}.`);\n  lines.push('');\n}\n\nconst notes = [];\nfor (const failed of incoming.failedBeats ?? []) {\n  notes.push(`I could not reach the ${failed.beat} sources today.`);\n}\nif (incoming.judgeFailed) notes.push('I could not assess eligibility on this run, so the verdicts above are placeholders.');\nif (incoming.skippedForBudget > 0) notes.push(`${incoming.skippedForBudget} more programs are waiting to be checked; I check four per search and will pick them up next time.`);\nfor (const dropped of incoming.droppedInVerification ?? []) {\n  notes.push(`I dropped \"${dropped.programName}\" because ${dropped.reason}.`);\n}\nif (notes.length > 0) {\n  lines.push('NOTES');\n  for (const note of notes) lines.push(`- ${note}`);\n  lines.push('');\n}\n\nlines.push('I find and report. I never apply for anything, and I never contact the people running these programs — that part is yours.');\n\nconst status = incoming.beatsSucceeded === 0\n  ? 'failed'\n  : (incoming.failedBeats ?? []).length > 0 || incoming.judgeFailed ? 'partial' : 'ok';\n\nconst deliverTo = String(context.deliverTo ?? 'chat-only');\nconst slackChannel = deliverTo.startsWith('slack:') ? deliverTo.slice(6).trim() : '';\n\nreturn [{ json: {\n  reportText: lines.join('\\n'),\n  status,\n  runId: context.runId,\n  ranAt: stamp,\n  beatsAttempted: Number(incoming.beatsAttempted ?? 0),\n  beatsSucceeded: Number(incoming.beatsSucceeded ?? 0),\n  candidatesFound: (incoming.candidates ?? []).length,\n  newCount,\n  changedCount,\n  closingSoonCount: closingSoon.length,\n  searchCount: Number(incoming.searchCount ?? 0),\n  inputTokens: Number(incoming.inputTokens ?? 0),\n  outputTokens: Number(incoming.outputTokens ?? 0),\n  errorSummary: (incoming.failedBeats ?? []).map((failed) => `${failed.beat}: ${failed.error}`).join(' | ').slice(0, 900),\n  deliverToSlack: status !== 'failed' && slackChannel !== '',\n  slackChannel,\n  findings: incoming.findings ?? [],\n  reportedFingerprints: shown.map((finding) => finding.fingerprint),\n} }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -598,15 +678,26 @@
     {
       "parameters": {
         "resource": "row",
-        "operation": "insert",
+        "operation": "upsert",
         "dataTableId": {
           "__rl": true,
           "value": "funding_runs",
           "mode": "name"
         },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "runId",
+              "condition": "eq",
+              "keyValue": "={{ $json.runId }}"
+            }
+          ]
+        },
         "columns": {
           "mappingMode": "defineBelow",
           "value": {
+            "runId": "={{ $json.runId }}",
             "ranAt": "={{ $json.ranAt }}",
             "status": "={{ $json.status }}",
             "beatsAttempted": "={{ $json.beatsAttempted }}",
@@ -623,6 +714,15 @@
           },
           "matchingColumns": [],
           "schema": [
+            {
+              "id": "runId",
+              "displayName": "runId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
             {
               "id": "ranAt",
               "displayName": "ranAt",
@@ -744,7 +844,9 @@
           "attemptToConvertTypes": true,
           "convertFieldsToString": false
         },
-        "options": {}
+        "options": {
+          "dryRun": false
+        }
       },
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1.1,
@@ -1084,7 +1186,7 @@
   ],
   "pinData": {},
   "connections": {
-    "Every Morning At 8": {
+    "Run Input": {
       "main": [
         [
           {
@@ -1121,7 +1223,7 @@
       "main": [
         [
           {
-            "node": "Load Business Memory",
+            "node": "Mark Run Started",
             "type": "main",
             "index": 0
           }
@@ -1129,6 +1231,17 @@
         [
           {
             "node": "Write Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Run Started": {
+      "main": [
+        [
+          {
+            "node": "Load Business Memory",
             "type": "main",
             "index": 0
           }
@@ -1379,12 +1492,12 @@
     "templateCredsSetupCompleted": false,
     "phase": 15,
     "testedWithN8n": "2.30.5",
-    "toolRisk": "trigger",
-    "authorization": "scheduled-no-user-present",
+    "toolRisk": "bounded_external_read_and_local_write",
+    "authorization": "started-by-an-explicit-request-or-a-scheduler",
     "externalWrite": "optional-slack-message-to-configured-channel",
     "externalRead": "official-funding-sources-and-anthropic-api",
     "localWrite": "funding-opportunities-and-funding-runs"
   },
-  "id": "phase15DailyFundingScan",
+  "id": "phase15RunFundingScan",
   "tags": []
 }

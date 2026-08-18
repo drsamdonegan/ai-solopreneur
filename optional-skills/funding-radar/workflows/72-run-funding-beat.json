@@ -3,7 +3,7 @@
   "nodes": [
     {
       "parameters": {
-        "content": "## One slice of the morning scan\n\nThe 8am scan calls this once per beat: national sources, your state's\nsources, and non-government money such as foundations and platform credits.\n\n**Your agent cannot call this.** It is plumbing for the scheduled scan,\nnot a tool, so nothing a web page says can start it.\n\nIt searches with Claude's own web search, restricted to the official\ndomains for your jurisdiction where there is a list, and returns JSON.\nIt never writes anywhere.",
+        "content": "## One slice of the search\n\nThe funding scan calls this once per beat: national sources, your state's\nsources, and non-government money such as foundations and platform credits.\n\n**Your agent cannot call this.** It is plumbing for the funding scan,\nnot a tool, so nothing a web page says can start it.\n\nIt searches with Claude's own web search, restricted to the official\ndomains for your jurisdiction where there is a list, and returns JSON.\nIt never writes anywhere.",
         "height": 380,
         "width": 460,
         "color": 4
@@ -321,7 +321,7 @@
     "phase": 15,
     "testedWithN8n": "2.30.5",
     "toolRisk": "bounded_external_read",
-    "authorization": "scheduled-scan-only",
+    "authorization": "called-by-the-funding-scan-only",
     "externalWrite": "none",
     "externalRead": "official-funding-sources-and-anthropic-api"
   },
