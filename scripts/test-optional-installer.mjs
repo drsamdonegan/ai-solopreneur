@@ -96,6 +96,40 @@ try {
     install(root, skillId);
   }
 
+  const linkedInCatalogueSkill = await readFile(
+    join(
+      root,
+      "optional-skills",
+      "linkedin-profile-lookup",
+      "skill",
+      "SKILL.md",
+    ),
+    "utf8",
+  );
+  const installedLinkedInSkill = await readFile(
+    join(root, "skills", "linkedin-profile-lookup", "SKILL.md"),
+    "utf8",
+  );
+  assert.equal(
+    installedLinkedInSkill,
+    linkedInCatalogueSkill,
+    "installed LinkedIn instructions must remain byte-identical to the catalogue",
+  );
+  assert(
+    installedLinkedInSkill.trim().length < 7200,
+    "LinkedIn instructions must retain maintenance headroom",
+  );
+  assert.doesNotMatch(
+    installedLinkedInSkill,
+    /profile_matcher\.py|free mode:|fall back to free public search/i,
+    "the n8n agent must not be told to run the removed public-search fallback",
+  );
+  assert.match(
+    installedLinkedInSkill,
+    /live profile lookup is unavailable in this agent/i,
+    "the skill must fail honestly when its provider tool is unavailable",
+  );
+
   const workflow = JSON.parse(
     await readFile(
       join(root, "n8n", "workflows", "00-start-here-project-partner.json"),

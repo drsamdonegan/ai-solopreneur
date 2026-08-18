@@ -587,6 +587,10 @@ if (agentWorkflow) {
       /Do not normalize or shorten it/.test(
         linkedInLookupTool?.parameters?.workflowInputs?.value?.full_name ?? "",
       ) &&
+      /True only after the current user explicitly approves this one Crustdata profile search costing up to 0\.30 credits/.test(
+        linkedInLookupTool?.parameters?.workflowInputs?.value
+          ?.paid_lookup_confirmed ?? "",
+      ) &&
       /never returns phone numbers, email addresses, contact data/i.test(
         linkedInLookupTool?.parameters?.description ?? "",
       ),
