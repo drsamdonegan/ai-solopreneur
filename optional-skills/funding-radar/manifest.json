@@ -20,7 +20,7 @@
           "value": {
             "sessionId": "={{ $('Validate and Normalise').first().json.sessionId }}",
             "requestId": "={{ $('Validate and Normalise').first().json.requestId }}",
-            "domain": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('domain', 'The business's website domain when one is known, such as mlai.au, so the search can work out what the business does. Empty string when the user has not given one.', 'string') }}"
+            "domain": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('domain', `The business's website domain when one is known, such as mlai.au, so the search can work out what the business does. Empty string when the user has not given one.`, 'string') }}"
           },
           "matchingColumns": [],
           "schema": [
@@ -147,7 +147,7 @@
             "country": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('country', 'Country the business is registered in, spelled out in full, such as Australia or United Kingdom. Required before a profile can be saved; ask if the user has not said.', 'string') }}",
             "region": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('region', 'State, province, or territory, spelled out in full such as Victoria or New South Wales. Empty string when not mentioned.', 'string') }}",
             "city": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('city', 'City or council area. Empty string when not mentioned.', 'string') }}",
-            "industry": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('industry', 'What the business does, in the user's own words. Empty string when not mentioned.', 'string') }}",
+            "industry": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('industry', `What the business does, in the user's own words. Empty string when not mentioned.`, 'string') }}",
             "industryCode": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('industryCode', 'Official industry code such as ANZSIC or NAICS, only when the user gives one. Never look one up or guess it.', 'string') }}",
             "headcount": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('headcount', 'Number of people who work there, as a plain number. Empty string when the user has not said.', 'string') }}",
             "annualRevenue": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('annualRevenue', 'Approximate yearly turnover as a plain number with no currency symbol. Empty string when the user has not said.', 'string') }}",
