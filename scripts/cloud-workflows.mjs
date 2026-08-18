@@ -345,6 +345,20 @@ export function syncWorkflows({ paths, n8nEnv, log }) {
     credentialPresent && state.mainPublished !== true;
 
   if (!workflowsChanged && !credentialAppeared) {
+    // Even with nothing to import, a credential may still be missing from a
+    // node: an earlier deploy cleared it, or the learner has only just made
+    // one. Both leave a trigger that cannot publish and says so in a way that
+    // sounds like they did something wrong. It is a read and a conditional
+    // write, so it is cheap enough to do on every boot rather than only on the
+    // deploys that happen to carry a workflow change.
+    const filled = restoreCredentials(
+      databasePath,
+      savedCredentials(databasePath),
+      credentialsByType(databasePath),
+    );
+    if (filled > 0) {
+      log(`  ${filled} credential ${filled === 1 ? "choice" : "choices"} restored.`);
+    }
     return { skipped: true, reason: "workflows unchanged since last deploy" };
   }
 
