@@ -16,6 +16,44 @@
   text-rendering: optimizeLegibility;
 }
 
+.agent-card,
+.chat-header,
+.agent-dialog {
+  --agent-accent: #6d4aff;
+  --agent-ink: #4b2ecc;
+  --agent-tint: #f4f2fa;
+}
+
+[data-agent-id="project-manager"] {
+  --agent-accent: #6d4aff;
+  --agent-ink: #4b2ecc;
+  --agent-tint: #f1edff;
+}
+
+[data-agent-id="sales"] {
+  --agent-accent: #0c8478;
+  --agent-ink: #0b6f66;
+  --agent-tint: #e6f6f4;
+}
+
+[data-agent-id="marketing"] {
+  --agent-accent: #b26a0c;
+  --agent-ink: #8a5410;
+  --agent-tint: #fdf3e4;
+}
+
+[data-agent-id="investment"] {
+  --agent-accent: #14804a;
+  --agent-ink: #136b3a;
+  --agent-tint: #e9f6ee;
+}
+
+[data-agent-id="bookkeeping"] {
+  --agent-accent: #c4364e;
+  --agent-ink: #9b2740;
+  --agent-tint: #fdecef;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -140,14 +178,14 @@ textarea:focus-visible,
   height: 2.8rem;
 }
 
-.brand__mark--photo,
-.mobile-mark.brand__mark--photo {
+.brand__mark--photo {
   background-position: center;
   background-size: cover;
   color: transparent;
 }
 
-.profile-dialog .paste-dialog__card {
+.profile-dialog .paste-dialog__card,
+.agent-dialog .paste-dialog__card {
   max-height: min(86vh, 60rem);
   overflow-y: auto;
 }
@@ -155,7 +193,8 @@ textarea:focus-visible,
 /* The paste dialog wants one very tall box; this form wants many short ones,
    so let each textarea's own rows attribute decide its height. Both class
    names are needed to outrank ".paste-dialog textarea" further down. */
-.paste-dialog.profile-dialog textarea {
+.paste-dialog.profile-dialog textarea,
+.paste-dialog.agent-dialog textarea {
   min-height: 0;
   max-height: none;
 }
@@ -337,97 +376,165 @@ textarea:focus-visible,
   margin-top: 0.7rem;
 }
 
-.agent-row {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-}
-
-/* .agent-button sets width:100%, which inside a flex row would size it to the
-   whole row and push the cog outside the panel. */
-.agent-row > .agent-button {
-  flex: 1 1 auto;
-  width: auto;
-  min-width: 0;
-}
-
-.agent-settings {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  width: 2.1rem;
-  height: 2.1rem;
-  padding: 0;
-  border: 1px solid rgb(83 62 135 / 10%);
-  border-radius: 50%;
-  background: rgb(255 255 255 / 54%);
-  color: #6c6480;
-  cursor: pointer;
-}
-
-.agent-settings:hover:not(:disabled),
-.agent-settings:focus-visible {
-  border-color: color-mix(in srgb, var(--brand-primary) 34%, transparent);
-  background: white;
-  color: var(--brand-primary);
-}
-
-.agent-settings:disabled {
-  cursor: not-allowed;
-  opacity: 0.45;
-}
-
-.agent-settings svg {
-  width: 1.15rem;
-  height: 1.15rem;
-}
-
-.agent-button {
+.agent-card {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 0.15rem 0.5rem;
+  gap: 0.18rem 0.55rem;
   width: 100%;
-  padding: 0.72rem 0.78rem;
-  border: 1px solid rgb(83 62 135 / 10%);
-  border-radius: 0.8rem;
-  background: rgb(255 255 255 / 54%);
-  color: #5f586f;
+  padding: 0.78rem 0.8rem 0.78rem 1rem;
+  overflow: visible;
+  border: 1px solid color-mix(in srgb, var(--agent-accent) 18%, #e4dfeb);
+  border-radius: 0.9rem;
+  background: color-mix(in srgb, var(--agent-tint) 68%, white);
+  color: var(--ink);
   cursor: pointer;
   text-align: left;
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    transform 150ms ease;
 }
 
-.agent-button[aria-pressed="true"] {
-  border-color: color-mix(in srgb, var(--brand-primary) 30%, transparent);
+.agent-card::before {
+  position: absolute;
+  top: 0.5rem;
+  bottom: 0.5rem;
+  left: 0.42rem;
+  width: 0.2rem;
+  border-radius: 999px;
+  background: var(--agent-accent);
+  content: "";
+}
+
+.agent-card:hover,
+.agent-card:focus-visible {
+  z-index: 4;
+  border-color: color-mix(in srgb, var(--agent-accent) 42%, #e4dfeb);
+  box-shadow: 0 0.45rem 1.1rem rgb(45 37 65 / 8%);
+  transform: translateY(-1px);
+}
+
+.agent-card[aria-current="true"] {
+  border-color: color-mix(in srgb, var(--agent-accent) 48%, #e4dfeb);
   background: white;
-  box-shadow: 0 0.35rem 1rem rgb(45 37 65 / 6%);
-  color: var(--brand-primary);
+  box-shadow: 0 0.35rem 1rem rgb(45 37 65 / 7%);
 }
 
-.agent-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.58;
+.agent-card[data-status="coming-soon"] {
+  border-color: color-mix(in srgb, var(--agent-accent) 12%, transparent);
+  background: color-mix(in srgb, var(--agent-tint) 45%, white);
 }
 
-.agent-button__name {
-  font-size: 0.78rem;
+.agent-card[data-status="coming-soon"]::before {
+  background: color-mix(in srgb, var(--agent-accent) 45%, white);
+}
+
+.agent-card__name {
+  color: var(--agent-ink);
+  font-size: 0.8rem;
   font-weight: 800;
 }
 
-.agent-button__status {
-  color: #8b8495;
+.agent-card__status {
+  color: var(--agent-ink);
   font-size: 0.58rem;
   font-weight: 800;
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
-.agent-button__description {
+.agent-card__description {
   grid-column: 1 / -1;
   margin-top: 0.15rem;
-  color: #746e7d;
+  color: #655e70;
   font-size: 0.66rem;
   line-height: 1.35;
+}
+
+.agent-card__skills {
+  position: relative;
+  display: flex;
+  grid-column: 1 / -1;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-top: 0.4rem;
+}
+
+.agent-card__skills:empty {
+  display: none;
+}
+
+.agent-card__skill {
+  display: grid;
+  width: 1.65rem;
+  height: 1.65rem;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--agent-accent) 26%, transparent);
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--agent-accent) 10%, white);
+  color: var(--agent-ink);
+}
+
+.agent-card__skill svg {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+.agent-card__skill::after {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 0.35rem);
+  right: 0;
+  left: 0;
+  padding: 0.55rem 0.6rem;
+  border: 1px solid color-mix(in srgb, var(--agent-accent) 18%, #ded8e7);
+  border-radius: 0.58rem;
+  background: #272331;
+  box-shadow: 0 0.55rem 1.25rem rgb(32 25 46 / 18%);
+  color: white;
+  content: attr(data-tooltip);
+  font-size: 0.62rem;
+  font-weight: 600;
+  line-height: 1.45;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-0.18rem);
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease;
+}
+
+.agent-card__skill:hover::after,
+.agent-card__skill:focus::after {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.workspace-settings-button {
+  width: 100%;
+  margin-top: 0.65rem;
+  padding: 0.62rem 0.75rem;
+  border: 1px solid rgb(83 62 135 / 13%);
+  border-radius: 0.75rem;
+  background: rgb(255 255 255 / 55%);
+  color: #5e5376;
+  cursor: pointer;
+  font-size: 0.72rem;
+  font-weight: 780;
+}
+
+.workspace-settings-button:hover,
+.workspace-settings-button:focus-visible {
+  border-color: color-mix(in srgb, var(--brand-primary) 32%, #ded8e7);
+  background: white;
+  color: var(--brand-primary);
+}
+
+@media (hover: none), (pointer: coarse) {
+  .agent-card__skill::after {
+    display: none;
+  }
 }
 
 .history-panel {
@@ -640,10 +747,19 @@ textarea:focus-visible,
 }
 
 .mobile-mark {
-  display: none;
+  display: inline-grid;
   width: 2.45rem;
   height: 2.45rem;
   border-radius: 0.7rem;
+}
+
+.chat-header .mobile-mark {
+  background: var(--agent-accent);
+  box-shadow: 0 0.6rem 1.4rem color-mix(in srgb, var(--agent-accent) 22%, transparent);
+}
+
+.chat-header .chat-header__kicker {
+  color: var(--agent-ink);
 }
 
 .chat-header h2 {
@@ -932,6 +1048,22 @@ textarea:focus-visible,
 
 .message__download:hover {
   text-decoration-thickness: 0.14em;
+}
+
+.message__connect {
+  display: inline-block;
+  margin: 0.25rem 0;
+  padding: 0.5rem 0.9rem;
+  border-radius: 999px;
+  background: var(--brand-primary);
+  color: #fff;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.message__connect:hover,
+.message__connect:focus-visible {
+  filter: brightness(0.92);
 }
 
 .message--user .message__copy {
@@ -1397,6 +1529,116 @@ textarea:focus-visible,
   min-width: auto;
   min-height: 2.5rem;
   padding: 0.55rem 0.8rem;
+}
+
+.agent-dialog .paste-dialog__card {
+  border-top: 0.3rem solid var(--agent-accent);
+}
+
+.agent-dialog__heading h2 {
+  color: var(--agent-ink);
+}
+
+.agent-dialog__section {
+  display: grid;
+  gap: 0.55rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #ebe7f0;
+}
+
+.agent-dialog__section h3 {
+  margin: 0;
+  color: #4e4858;
+  font-size: 0.75rem;
+  font-weight: 820;
+}
+
+.agent-dialog__skills {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.agent-dialog__skills li {
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr);
+  align-items: start;
+  gap: 0.65rem;
+  padding: 0.6rem;
+  border-radius: 0.7rem;
+  background: var(--agent-tint);
+}
+
+.agent-dialog__skills li > span:last-child {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.agent-dialog__skills strong {
+  color: var(--agent-ink);
+  font-size: 0.72rem;
+}
+
+.agent-dialog__skills li span span {
+  color: #655f6e;
+  font-size: 0.66rem;
+  line-height: 1.4;
+}
+
+.agent-dialog__skill-icon {
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--agent-accent) 24%, transparent);
+  border-radius: 0.55rem;
+  background: white;
+  color: var(--agent-ink);
+}
+
+.agent-dialog__skill-icon svg {
+  width: 1.05rem;
+  height: 1.05rem;
+}
+
+.agent-dialog__skills .agent-dialog__empty {
+  display: block;
+  color: #6d6676;
+  font-size: 0.7rem;
+}
+
+.agent-dialog__fields {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.agent-dialog__field {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.agent-dialog__hint {
+  color: #77707f;
+  font-size: 0.65rem;
+}
+
+.agent-dialog__sync {
+  padding: 0.6rem 0.7rem;
+  border-radius: 0.65rem;
+  background: color-mix(in srgb, var(--agent-tint) 75%, white);
+  color: var(--agent-ink) !important;
+  font-weight: 700;
+}
+
+.agent-dialog .send-button {
+  background: var(--agent-accent);
+  box-shadow: 0 0.65rem 1.5rem color-mix(in srgb, var(--agent-accent) 18%, transparent);
+}
+
+.agent-dialog [hidden] {
+  display: none;
 }
 
 .composer {

@@ -14,6 +14,7 @@
       "Show me the highest-priority work in my local project",
     ],
   };
+  const WORKSPACE_NAME = "My AI Agent";
   const DEFAULT_AGENTS = [
     {
       id: "project-manager",
@@ -21,58 +22,189 @@
       description:
         "Plans projects, analyses meetings, and turns decisions into safe next actions.",
       status: "active",
+      accentColour: "violet",
       examplePrompts: DEFAULT_CONFIG.examplePrompts,
+      settingsFields: [
+        {
+          id: "teamMembers",
+          label: "Who is usually in your meetings",
+          description: "Names and roles you refer to often.",
+          kind: "line",
+          maxLength: 300,
+        },
+        {
+          id: "taskConventions",
+          label: "How you word and time your to-dos",
+          description: "Preferred task style, timing, and ownership conventions.",
+          kind: "block",
+          maxLength: 800,
+        },
+      ],
+      skills: [],
+      syncRequired: true,
     },
     {
       id: "sales",
       name: "Sales",
       description: "Researches prospects, drafts replies, and turns calls into proposals.",
       status: "active",
+      accentColour: "teal",
       examplePrompts: [
         "Draft a reply to this enquiry that just came in",
         "Turn these call notes into a recap and a proposal",
         "Write a cold email to this person",
       ],
+      settingsFields: [
+        {
+          id: "idealCustomer",
+          label: "Who you sell to",
+          description: "Sector, job titles, and company size.",
+          kind: "line",
+          maxLength: 300,
+        },
+        {
+          id: "outreachTone",
+          label: "How your outreach should sound",
+          description: "Tone, structure, and words to avoid.",
+          kind: "block",
+          maxLength: 800,
+        },
+      ],
+      skills: [],
+      syncRequired: true,
     },
     {
       id: "marketing",
       name: "Marketing",
       description: "Plans campaigns and creates grounded content from supplied or researched evidence.",
       status: "active",
+      accentColour: "amber",
       examplePrompts: [
         "Turn these customer notes into three grounded content themes",
         "Build a practical campaign plan from this brief",
         "Review this draft and identify unsupported claims",
       ],
+      settingsFields: [
+        {
+          id: "websiteDomain",
+          label: "Your website address",
+          description: "The main public domain for your business.",
+          kind: "line",
+          maxLength: 300,
+        },
+        {
+          id: "contentVoice",
+          label: "How your content should sound, and words to avoid",
+          description: "Content-specific voice and language boundaries.",
+          kind: "block",
+          maxLength: 800,
+        },
+      ],
+      skills: [],
+      syncRequired: true,
     },
     {
       id: "investment",
       name: "Investment",
       description: "Reviews grants, funding evidence, and business updates without making financial decisions.",
       status: "active",
+      accentColour: "emerald",
       examplePrompts: [
         "Compare these two funding opportunities from the supplied documents",
         "Turn this grant brief into eligibility questions and deadlines",
         "Draft a factual investor update from these notes",
       ],
+      settingsFields: [
+        {
+          id: "eligibilityFacts",
+          label: "Where your business is registered and what stage it is at",
+          description: "Location, structure, stage, and other eligibility facts.",
+          kind: "line",
+          maxLength: 300,
+        },
+        {
+          id: "updateAudience",
+          label: "Who reads your monthly update and what they want to hear",
+          description: "Audience, detail level, and sensitive topics to leave out.",
+          kind: "block",
+          maxLength: 800,
+        },
+      ],
+      skills: [],
+      syncRequired: true,
     },
     {
       id: "bookkeeping",
       name: "Bookkeeping",
       description: "Prepares coding-review suggestions and questions for the user to complete in their accounting system.",
       status: "active",
+      accentColour: "rose",
       examplePrompts: [
         "Review these transactions and suggest coding categories with confidence",
         "List the questions I should take to my bookkeeper from this statement",
         "Summarise the unpaid invoices in this document",
       ],
+      settingsFields: [
+        {
+          id: "commonSuppliers",
+          label: "Your regular suppliers and what each spend is for",
+          description: "One supplier and its usual purpose per line.",
+          kind: "block",
+          maxLength: 800,
+        },
+        {
+          id: "accountRules",
+          label: "Accounts or categories you use, and how you split personal from business",
+          description: "Your own coding rules; suggestions still require human review.",
+          kind: "block",
+          maxLength: 800,
+        },
+      ],
+      skills: [],
+      syncRequired: true,
     },
   ];
+  const SKILL_ICONS = {
+    checklist: "M4 7h9M4 12h9M4 17h6m6-9 2 2 4-4M16 17l2 2 4-4",
+    profile: "M12 12a3.6 3.6 0 1 0 0-7.2 3.6 3.6 0 0 0 0 7.2ZM5 20a7 7 0 0 1 14 0",
+    search: "M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14Zm5.2-1.8L21 21",
+    globe: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM3 12h18M12 3c2.5 2.6 2.5 15 0 18-2.5-3-2.5-15.4 0-18Z",
+    article: "M6 3h9l4 4v14H6V3Zm9 0v4h4M9 12h7M9 16h5",
+    grant: "M12 3 4 7v5c0 4.6 3.3 8.3 8 9 4.7-.7 8-4.4 8-9V7l-8-4Zm-2.6 8.6 2 2 3.8-4",
+    calendar: "M5 6h14v14H5V6Zm0 4h14M9 3v4m6-4v4m-4 8h4",
+    ledger: "M5 4h11l3 3v13H5V4Zm3 5h6M8 13h8M8 17h5",
+  };
+  const SKILL_ICON_BY_ID = {
+    "project-assistant": "checklist",
+    "meeting-analysis": "checklist",
+    "task-capture": "checklist",
+    "weekly-status": "calendar",
+    "linkedin-profile-lookup": "profile",
+    "linkedin-prospect-search": "search",
+    "domain-research": "globe",
+    "paid-domain-research": "globe",
+    "seo-article-writer": "article",
+    "funding-radar": "grant",
+    "monthly-update": "calendar",
+    "xero-coding-review": "ledger",
+  };
   const STORAGE_KEY = "ai-solopreneur-chat-session";
   const MAX_DOCUMENTS = 3;
   const LARGE_PASTE_THRESHOLD = 4_000;
 
   const elements = {
+    agentDialog: document.querySelector("#agent-dialog"),
+    agentDialogChat: document.querySelector("#agent-dialog-chat"),
+    agentDialogClose: document.querySelector("#agent-dialog-close"),
+    agentDialogDescription: document.querySelector("#agent-dialog-description"),
+    agentDialogFields: document.querySelector("#agent-dialog-fields"),
+    agentDialogForm: document.querySelector("#agent-dialog-form"),
+    agentDialogKicker: document.querySelector("#agent-dialog-kicker"),
+    agentDialogSave: document.querySelector("#agent-dialog-save"),
+    agentDialogSkills: document.querySelector("#agent-dialog-skills"),
+    agentDialogStatus: document.querySelector("#agent-dialog-status"),
+    agentDialogSync: document.querySelector("#agent-dialog-sync"),
+    agentDialogTitle: document.querySelector("#agent-dialog-title"),
     agentPanel: document.querySelector(".agent-panel"),
     agentInitials: document.querySelector("#agent-initials"),
     agentList: document.querySelector("#agent-list"),
@@ -81,6 +213,7 @@
     attachmentMenu: document.querySelector("#attachment-menu"),
     attachmentMenuButton: document.querySelector("#attachment-menu-button"),
     characterCount: document.querySelector("#character-count"),
+    chatHeader: document.querySelector(".chat-header"),
     conversation: document.querySelector("#conversation"),
     conversationAgentName: document.querySelector("#conversation-agent-name"),
     conversationTitleText: document.querySelector("#conversation-title-text"),
@@ -98,6 +231,7 @@
     historyStatus: document.querySelector("#history-status"),
     input: document.querySelector("#message-input"),
     mobileAgentInitials: document.querySelector("#mobile-agent-initials"),
+    myBusinessButton: document.querySelector("#my-business-button"),
     pasteButton: document.querySelector("#paste-button"),
     pasteCancel: document.querySelector("#paste-cancel"),
     pasteDialog: document.querySelector("#paste-dialog"),
@@ -147,6 +281,9 @@
   let activeConversationTitle = "New conversation";
   let pendingRefreshTimer = null;
   let articleRefreshTimer = null;
+  let agentSettings = null;
+  let agentDialogAgentId = "";
+  let agentDialogReturnFocus = null;
   const narrowLayout = window.matchMedia("(max-width: 50rem)");
 
   function cleanText(value, fallback, maximumLength) {
@@ -205,16 +342,13 @@
     );
   }
 
-  function displayAgentName() {
-    // A name saved through the settings form wins over both the registry and
-    // agent.config.js, so renaming the agent needs no file editing.
+  function workspaceName() {
     const saved = profile?.agentName ?? "";
-    if (saved.length > 0) {
-      return saved;
-    }
-    return activeAgentId === "project-manager"
-      ? config.name
-      : activeAgent()?.name ?? config.name;
+    return saved.length > 0 ? saved : WORKSPACE_NAME;
+  }
+
+  function displayAgentName() {
+    return activeAgent()?.name ?? config.name;
   }
 
   function getInitials(name) {
@@ -260,43 +394,34 @@
 
   function applyAgentIdentity() {
     const name = displayAgentName();
-    const description =
-      activeAgentId === "project-manager"
-        ? config.subtitle
-        : activeAgent()?.description ?? config.subtitle;
-    document.title = `${name} · Local agent`;
+    const workspace = workspaceName();
+    document.title = `${workspace} · ${name}`;
     document.documentElement.style.setProperty(
       "--brand-primary",
       config.primaryColour,
     );
-    elements.agentName.textContent = name;
-    elements.agentSubtitle.textContent = description;
+    elements.agentName.textContent = workspace;
+    elements.agentSubtitle.textContent = config.subtitle;
     elements.conversationAgentName.textContent = name;
     elements.conversationTitleText.textContent = activeConversationTitle;
     elements.input.setAttribute("aria-label", `Message ${name}`);
-    // "the Project Manager" reads well; "the Coombe Studio" does not, so drop
-    // the article once the learner has named the agent themselves.
-    elements.input.placeholder =
-      (profile?.agentName ?? "").length > 0
-        ? `What should ${name} do?`
-        : `What should the ${name} do?`;
+    elements.input.placeholder = `What should ${name} do?`;
+    elements.chatHeader.dataset.agentId = activeAgent()?.id ?? "project-manager";
 
-    const initials = getInitials(name);
-    elements.agentInitials.textContent = initials;
-    elements.mobileAgentInitials.textContent = initials;
+    elements.agentInitials.textContent =
+      (profile?.agentName ?? "").length > 0 ? getInitials(workspace) : "AI";
+    elements.mobileAgentInitials.textContent = getInitials(name);
     applySavedAvatar();
   }
 
   function applySavedAvatar() {
     const avatar = profile?.avatarDataUrl ?? "";
-    for (const mark of [elements.agentInitials, elements.mobileAgentInitials]) {
-      if (avatar.length > 0) {
-        mark.style.backgroundImage = `url("${avatar}")`;
-        mark.classList.add("brand__mark--photo");
-      } else {
-        mark.style.removeProperty("background-image");
-        mark.classList.remove("brand__mark--photo");
-      }
+    if (avatar.length > 0) {
+      elements.agentInitials.style.backgroundImage = `url("${avatar}")`;
+      elements.agentInitials.classList.add("brand__mark--photo");
+    } else {
+      elements.agentInitials.style.removeProperty("background-image");
+      elements.agentInitials.classList.remove("brand__mark--photo");
     }
   }
 
@@ -382,19 +507,108 @@
     return attachment;
   }
 
+  // Google's callback lands in a different tab, so the chat finds out by
+  // asking. Polling starts only once a connect link has actually been shown,
+  // and stops as soon as the answer is yes.
+  let gmailConnectOffered = false;
+  let gmailWatchTimer = null;
+
+  function stopGmailConnectionWatch() {
+    if (gmailWatchTimer !== null) {
+      clearInterval(gmailWatchTimer);
+      gmailWatchTimer = null;
+    }
+  }
+
+  function startGmailConnectionWatch() {
+    if (gmailWatchTimer !== null) {
+      return;
+    }
+    gmailWatchTimer = setInterval(async () => {
+      if (document.hidden || requestInProgress) {
+        return;
+      }
+      let status;
+      try {
+        const response = await fetch("/api/gmail/status", { headers: { Accept: "application/json" } });
+        if (!response.ok) {
+          return;
+        }
+        status = await response.json();
+      } catch {
+        return;
+      }
+      if (status?.connected !== true) {
+        return;
+      }
+      stopGmailConnectionWatch();
+      if (!gmailConnectOffered) {
+        return;
+      }
+      gmailConnectOffered = false;
+      const mailbox = typeof status.emailAddress === "string" && status.emailAddress !== ""
+        ? ` as ${status.emailAddress}`
+        : "";
+      // Sent as the learner, and shown in the transcript, so the handover is
+      // visible rather than something that happened behind their back.
+      void sendMessage(
+        `I have connected Gmail${mailbox}. Please start the monthly update now.`,
+        true,
+      );
+    }, 2_500);
+  }
+
+  // Agent replies are plain text. Two local paths, and only these two, become
+  // links: an article download, and the Gmail connect route. Nothing else is
+  // linkified — an agent that reads a stranger's email must never be able to
+  // turn a URL from that email into something clickable.
+  const SAFE_LINKS = [
+    {
+      pattern: /\/api\/seo-article\/download\/[A-Za-z0-9_-]{40,60}\.md/g,
+      build(href) {
+        const link = document.createElement("a");
+        link.className = "message__download";
+        link.href = href;
+        link.download = "";
+        link.textContent = "Download the article (.md)";
+        return link;
+      },
+    },
+    {
+      pattern: /(?:http:\/\/localhost:\d{2,5})?\/api\/gmail\/connect\b/g,
+      build() {
+        const link = document.createElement("a");
+        link.className = "message__connect";
+        // A new tab, so the conversation is still here when they come back.
+        link.href = "/api/gmail/connect";
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        link.textContent = "Connect Gmail (read-only)";
+        gmailConnectOffered = true;
+        startGmailConnectionWatch();
+        return link;
+      },
+    },
+  ];
+
   function appendSafeMessageText(element, text) {
-    const localDownload = /\/api\/seo-article\/download\/[A-Za-z0-9_-]{40,60}\.md/g;
+    const matches = [];
+    for (const { pattern, build } of SAFE_LINKS) {
+      pattern.lastIndex = 0;
+      for (const match of text.matchAll(pattern)) {
+        matches.push({ index: match.index ?? 0, length: match[0].length, href: match[0], build });
+      }
+    }
+    matches.sort((left, right) => left.index - right.index);
+
     let offset = 0;
-    for (const match of text.matchAll(localDownload)) {
-      const index = match.index ?? 0;
-      element.append(document.createTextNode(text.slice(offset, index)));
-      const link = document.createElement("a");
-      link.className = "message__download";
-      link.href = match[0];
-      link.download = "";
-      link.textContent = "Download the article (.md)";
-      element.append(link);
-      offset = index + match[0].length;
+    for (const match of matches) {
+      if (match.index < offset) {
+        continue;
+      }
+      element.append(document.createTextNode(text.slice(offset, match.index)));
+      element.append(match.build(match.href));
+      offset = match.index + match.length;
     }
     element.append(document.createTextNode(text.slice(offset)));
   }
@@ -766,11 +980,19 @@
         "The local agent list could not be loaded.",
       );
       if (
+        body?.schemaVersion === 2 &&
         body &&
         Array.isArray(body.agents) &&
         body.agents.some((agent) => agent?.status === "active")
       ) {
-        agents = body.agents;
+        agents = body.agents.map((agent) => ({
+          ...agent,
+          settingsFields: Array.isArray(agent.settingsFields)
+            ? agent.settingsFields
+            : [],
+          skills: Array.isArray(agent.skills) ? agent.skills : [],
+          syncRequired: agent.syncRequired !== false,
+        }));
         activeAgentId =
           agents.find((agent) => agent.id === activeAgentId)?.status === "active"
             ? activeAgentId
@@ -779,6 +1001,20 @@
     } catch {
       agents = DEFAULT_AGENTS;
     }
+  }
+
+  async function loadAgentSettings() {
+    const response = await fetch("/api/agent-settings", {
+      headers: { Accept: "application/json" },
+    });
+    const body = await parseResponse(
+      response,
+      "Agent settings could not be loaded.",
+    );
+    if (body?.schemaVersion !== 1 || typeof body.settings !== "object") {
+      throw new Error("Agent settings returned an unexpected response.");
+    }
+    agentSettings = body.settings;
   }
 
   function relativeTime(value) {
@@ -809,12 +1045,13 @@
   }
 
   function setHistoryOpen(isOpen) {
+    const focusWasInPanel = elements.agentPanel.contains(document.activeElement);
     elements.agentPanel.classList.toggle("agent-panel--open", isOpen);
     elements.historyButton.setAttribute("aria-expanded", String(isOpen));
     syncHistoryPanelAccess();
     if (isOpen) {
       elements.historySearchInput.focus();
-    } else if (document.activeElement === elements.historyClose) {
+    } else if (focusWasInPanel) {
       elements.historyButton.focus();
     }
   }
@@ -1123,82 +1360,220 @@
     renderHistoryList(Array.isArray(body.results) ? body.results : [], true);
   }
 
+  function skillIcon(skillId) {
+    const namespace = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(namespace, "svg");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("aria-hidden", "true");
+    const path = document.createElementNS(namespace, "path");
+    const iconName = SKILL_ICON_BY_ID[skillId] ?? "checklist";
+    path.setAttribute("d", SKILL_ICONS[iconName]);
+    path.setAttribute("fill", "none");
+    path.setAttribute("stroke", "currentColor");
+    path.setAttribute("stroke-linecap", "round");
+    path.setAttribute("stroke-linejoin", "round");
+    path.setAttribute("stroke-width", "1.7");
+    svg.append(path);
+    return svg;
+  }
+
+  function agentStatusLabel(agent) {
+    const availability =
+      agent.status === "active"
+        ? agent.id === activeAgentId
+          ? "Active"
+          : "Available"
+        : "Coming soon";
+    return agent.syncRequired ? `${availability} · Sync needed` : availability;
+  }
+
   function renderAgentList() {
     elements.agentList.replaceChildren();
     for (const agent of agents) {
-      const button = document.createElement("button");
-      button.className = "agent-button";
-      button.type = "button";
-      button.disabled =
-        agent.status !== "active" ||
-        requestInProgress ||
-        documentRequestInProgress;
-      button.setAttribute("role", "listitem");
-      button.setAttribute(
-        "aria-pressed",
-        String(agent.id === activeAgentId),
+      const card = document.createElement("button");
+      card.className = "agent-card";
+      card.type = "button";
+      card.dataset.agentId = agent.id;
+      card.dataset.status = agent.status;
+      card.dataset.syncRequired = String(agent.syncRequired === true);
+      card.setAttribute(
+        "aria-current",
+        agent.id === activeAgentId ? "true" : "false",
       );
+      card.setAttribute("aria-haspopup", "dialog");
 
       const name = document.createElement("span");
-      name.className = "agent-button__name";
+      name.className = "agent-card__name";
       name.textContent = agent.name;
 
       const status = document.createElement("span");
-      status.className = "agent-button__status";
-      status.textContent =
-        agent.status === "active"
-          ? agent.id === activeAgentId
-            ? "Active"
-            : "Available"
-          : "Coming soon";
+      status.className = "agent-card__status";
+      status.textContent = agentStatusLabel(agent);
 
       const description = document.createElement("span");
-      description.className = "agent-button__description";
+      description.className = "agent-card__description";
       description.textContent = agent.description;
 
-      button.append(name, status, description);
-      if (agent.status === "active") {
-        button.addEventListener("click", () => {
-          if (agent.id === activeAgentId) {
-            return;
-          }
-          activeAgentId = agent.id;
-          applyAgentIdentity();
-          renderAgentList();
-          renderSuggestions();
-          void createConversation(agent.id);
-        });
+      const skills = document.createElement("span");
+      skills.className = "agent-card__skills";
+      const installedSkills = Array.isArray(agent.skills) ? agent.skills : [];
+      for (const skill of installedSkills) {
+        const chip = document.createElement("span");
+        chip.className = "agent-card__skill";
+        chip.setAttribute("aria-hidden", "true");
+        chip.dataset.tooltip = `${skill.name}: ${skill.description}${
+          agent.syncRequired
+            ? " Run npm run sync-skills before relying on this skill in chat."
+            : ""
+        }`;
+        chip.append(skillIcon(skill.id));
+        skills.append(chip);
       }
 
-      // A cog cannot live inside the chip button, so the chip becomes a row
-      // holding the selector button and its own settings control.
-      const row = document.createElement("div");
-      row.className = "agent-row";
-      row.append(button);
+      const summary = document.createElement("span");
+      summary.className = "visually-hidden";
+      summary.textContent =
+        installedSkills.length > 0
+          ? `Skills: ${installedSkills.map((skill) => skill.name).join(", ")}.`
+          : "No skills installed yet.";
 
-      if (agent.status === "active") {
-        const settings = document.createElement("button");
-        settings.className = "agent-settings";
-        settings.type = "button";
-        settings.disabled = requestInProgress || documentRequestInProgress;
-        settings.title = `Edit what ${agent.name} knows about you`;
-        settings.innerHTML =
-          '<svg viewBox="0 0 24 24" aria-hidden="true">' +
-          '<circle cx="12" cy="12" r="3.2" fill="none" stroke="currentColor" stroke-width="1.7" />' +
-          '<path d="M12 2.6v2.2M12 19.2v2.2M21.4 12h-2.2M4.8 12H2.6m14.7-6.6-1.6 1.6M8.1 15.9l-1.6 1.6m10.8 0-1.6-1.6M8.1 8.1 6.5 6.5" ' +
-          'fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.7" />' +
-          "</svg>";
-        const label = document.createElement("span");
-        label.className = "visually-hidden";
-        label.textContent = `Edit what ${agent.name} knows about you`;
-        settings.append(label);
-        settings.addEventListener("click", () => {
-          void openProfileDialog();
-        });
-        row.append(settings);
+      card.append(name, status, description, skills, summary);
+      card.addEventListener("click", () => {
+        void openAgentDialog(agent, card);
+      });
+      elements.agentList.append(card);
+    }
+  }
+
+  function renderAgentDialog(agent, settingsAvailable = true) {
+    agentDialogAgentId = agent.id;
+    elements.agentDialog.dataset.agentId = agent.id;
+    elements.agentDialogKicker.textContent =
+      agent.status === "active" ? "Agent" : "Coming soon";
+    elements.agentDialogTitle.textContent = agent.name;
+    elements.agentDialogDescription.textContent =
+      agent.status === "active"
+        ? agent.description
+        : `${agent.description} You cannot chat with this one yet.`;
+
+    elements.agentDialogSkills.replaceChildren();
+    const skills = Array.isArray(agent.skills) ? agent.skills : [];
+    if (skills.length === 0) {
+      const empty = document.createElement("li");
+      empty.className = "agent-dialog__empty";
+      empty.textContent = "No skills are installed for this agent yet.";
+      elements.agentDialogSkills.append(empty);
+    } else {
+      for (const skill of skills) {
+        const item = document.createElement("li");
+        const icon = document.createElement("span");
+        icon.className = "agent-dialog__skill-icon";
+        icon.setAttribute("aria-hidden", "true");
+        icon.append(skillIcon(skill.id));
+        const copy = document.createElement("span");
+        const name = document.createElement("strong");
+        name.textContent = skill.name;
+        const description = document.createElement("span");
+        description.textContent = skill.description;
+        copy.append(name, description);
+        item.append(icon, copy);
+        elements.agentDialogSkills.append(item);
       }
+    }
 
-      elements.agentList.append(row);
+    elements.agentDialogFields.replaceChildren();
+    const fields = Array.isArray(agent.settingsFields)
+      ? agent.settingsFields
+      : [];
+    const savedValues = agentSettings?.[agent.id] ?? {};
+    for (const field of fields) {
+      const group = document.createElement("div");
+      group.className = "agent-dialog__field";
+      const id = `agent-field-${agent.id}-${field.id}`;
+      const label = document.createElement("label");
+      label.htmlFor = id;
+      label.textContent = field.label;
+      const control =
+        field.kind === "line"
+          ? document.createElement("input")
+          : document.createElement("textarea");
+      control.id = id;
+      control.dataset.agentField = field.id;
+      control.maxLength = field.maxLength;
+      control.value = savedValues[field.id] ?? "";
+      control.disabled = !settingsAvailable;
+      if (control instanceof HTMLTextAreaElement) {
+        control.rows = 3;
+      }
+      group.append(label);
+      if (field.description) {
+        const hint = document.createElement("p");
+        hint.className = "agent-dialog__hint";
+        hint.id = `${id}-hint`;
+        hint.textContent = field.description;
+        control.setAttribute("aria-describedby", hint.id);
+        group.append(hint);
+      }
+      group.append(control);
+      elements.agentDialogFields.append(group);
+    }
+
+    elements.agentDialogSync.textContent = agent.syncRequired
+      ? "Sync required: run npm run sync-skills before relying on these details in chat."
+      : "This agent's instructions are synced.";
+    elements.agentDialogChat.textContent = `Chat with ${agent.name}`;
+    elements.agentDialogChat.hidden =
+      agent.status !== "active" || agent.id === activeAgentId;
+    elements.agentDialogChat.disabled =
+      requestInProgress || documentRequestInProgress;
+    elements.agentDialogSave.hidden = fields.length === 0;
+    elements.agentDialogSave.disabled = !settingsAvailable;
+  }
+
+  async function openAgentDialog(agent, origin) {
+    agentDialogReturnFocus = origin;
+    let settingsAvailable = true;
+    elements.agentDialogStatus.textContent = "";
+    if (agentSettings === null) {
+      try {
+        await loadAgentSettings();
+      } catch (error) {
+        settingsAvailable = false;
+        elements.agentDialogStatus.textContent =
+          error instanceof Error
+            ? error.message
+            : "Agent settings could not be loaded.";
+      }
+    }
+    renderAgentDialog(agent, settingsAvailable);
+    elements.agentDialog.showModal();
+    const firstField = elements.agentDialogFields.querySelector(
+      "input:not(:disabled), textarea:not(:disabled)",
+    );
+    (firstField ?? elements.agentDialogClose).focus();
+  }
+
+  async function selectAgent(agent) {
+    agentDialogReturnFocus = null;
+    elements.agentDialog.close();
+    if (agent.id === activeAgentId) {
+      elements.input.focus();
+      return;
+    }
+    activeAgentId = agent.id;
+    applyAgentIdentity();
+    renderAgentList();
+    renderSuggestions();
+    elements.input.focus();
+    try {
+      await createConversation(agent.id);
+    } catch (error) {
+      addError(
+        error instanceof Error
+          ? error.message
+          : `A ${agent.name} conversation could not be started.`,
+      );
+      elements.input.focus();
     }
   }
 
@@ -1285,7 +1660,7 @@
     elements.requestStatus.textContent = isBusy
       ? `${displayAgentName()} is working on your request…`
       : "Press Enter to send · Shift + Enter for a new line";
-    renderAgentList();
+    elements.agentDialogChat.disabled = controlsBusy;
     renderDocuments();
   }
 
@@ -1632,7 +2007,7 @@
     } else {
       elements.profileAvatarButton.style.removeProperty("background-image");
       elements.profileAvatarInitials.textContent = getInitials(
-        elements.profileAgentName.value || displayAgentName(),
+        elements.profileAgentName.value || WORKSPACE_NAME,
       );
     }
   }
@@ -1698,10 +2073,89 @@
     elements.profileDialog.close();
   });
 
+  elements.myBusinessButton.addEventListener("click", () => {
+    void openProfileDialog();
+  });
+
+  elements.agentDialogClose.addEventListener("click", () => {
+    elements.agentDialog.close();
+  });
+
+  elements.agentDialogChat.addEventListener("click", () => {
+    const agent = agents.find((candidate) => candidate.id === agentDialogAgentId);
+    if (agent?.status === "active") {
+      void selectAgent(agent);
+    }
+  });
+
+  elements.agentDialog.addEventListener("close", () => {
+    const returnTarget = agentDialogReturnFocus;
+    agentDialogReturnFocus = null;
+    if (returnTarget?.isConnected) {
+      returnTarget.focus();
+    }
+  });
+
+  elements.agentDialogForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    void (async () => {
+      const agent = agents.find((candidate) => candidate.id === agentDialogAgentId);
+      if (!agent) {
+        return;
+      }
+      const values = {};
+      for (const control of elements.agentDialogFields.querySelectorAll(
+        "[data-agent-field]",
+      )) {
+        values[control.dataset.agentField] = control.value;
+      }
+      elements.agentDialogSave.disabled = true;
+      elements.agentDialogStatus.textContent = "Saving...";
+      try {
+        const response = await fetch("/api/agent-settings", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ agentId: agent.id, values }),
+        });
+        const body = await parseResponse(
+          response,
+          `${agent.name} settings could not be saved.`,
+        );
+        agentSettings = agentSettings ?? {};
+        agentSettings[agent.id] = body.values ?? values;
+        agent.syncRequired = true;
+        elements.agentDialogSync.textContent =
+          "Sync required: run npm run sync-skills before relying on these details in chat.";
+        elements.agentDialogStatus.textContent =
+          "Saved locally. Run npm run sync-skills to send these details to your agent.";
+        if (agentDialogReturnFocus?.isConnected) {
+          agentDialogReturnFocus.dataset.syncRequired = "true";
+          const status = agentDialogReturnFocus.querySelector(
+            ".agent-card__status",
+          );
+          if (status) {
+            status.textContent = agentStatusLabel(agent);
+          }
+        }
+      } catch (error) {
+        elements.agentDialogStatus.textContent =
+          error instanceof Error
+            ? error.message
+            : `${agent.name} settings could not be saved.`;
+      } finally {
+        elements.agentDialogSave.disabled = false;
+      }
+    })();
+  });
+
   // A <dialog> backdrop is painted by the dialog itself, so a click on it
   // reports the dialog as the target. Anything inside the card reports that
   // card instead, which is what separates "outside" from "inside".
-  for (const dialog of [elements.profileDialog, elements.pasteDialog]) {
+  for (const dialog of [
+    elements.profileDialog,
+    elements.pasteDialog,
+    elements.agentDialog,
+  ]) {
     dialog.addEventListener("click", (event) => {
       if (event.target === dialog) {
         dialog.close();
@@ -1740,7 +2194,7 @@
           "Your agent details could not be saved.",
         );
         profile = body.profile ?? null;
-        applySavedAvatar();
+        applyAgentIdentity();
         const articlePanel = elements.conversation.querySelector(".article-panel");
         if (articlePanel?.dataset.briefId) {
           const updateResponse = await fetch("/api/seo-article/briefs", {
@@ -1784,10 +2238,18 @@
       setAttachmentMenuOpen(false);
       elements.attachmentMenuButton.focus();
     }
+    if (event.key === "Escape" && elements.agentDialog.open) {
+      event.preventDefault();
+      elements.agentDialog.close();
+      return;
+    }
     if (
       event.key === "Escape" &&
       elements.agentPanel.classList.contains("agent-panel--open")
     ) {
+      if (document.querySelector("dialog[open]")) {
+        return;
+      }
       event.preventDefault();
       setHistoryOpen(false);
     }
