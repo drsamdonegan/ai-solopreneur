@@ -540,6 +540,51 @@ function seedSkills() {
   return seeded;
 }
 
+/**
+ * Fills in metadata keys that a volume's skills predate.
+ *
+ * Seeding above deliberately never overwrites a learner's skill folder. That is
+ * right for their edits, and wrong for a key that only became required later:
+ * when skills gained an owning agent, every deployment that already existed had
+ * skill.yaml files without one, and the agent then refused to start while
+ * naming a file inside a volume the learner cannot open.
+ *
+ * So copy across just the missing line, from the version that shipped in this
+ * image. Everything the learner wrote is left exactly as it is.
+ */
+function migrateSkillMetadata() {
+  if (!existsSync(paths.skillsDir) || !existsSync(paths.repoSkillsDir)) {
+    return [];
+  }
+  const migrated = [];
+  for (const entry of readdirSync(paths.skillsDir, { withFileTypes: true })) {
+    if (!entry.isDirectory()) {
+      continue;
+    }
+    const saved = join(paths.skillsDir, entry.name, "skill.yaml");
+    const shipped = join(paths.repoSkillsDir, entry.name, "skill.yaml");
+    if (!existsSync(saved) || !existsSync(shipped)) {
+      continue;
+    }
+    const current = readFileSync(saved, "utf8");
+    if (/^agent:/m.test(current)) {
+      continue;
+    }
+    const line = readFileSync(shipped, "utf8").match(/^agent:.*$/m);
+    if (!line) {
+      continue;
+    }
+    // Straight after the id, so the file still reads the way it shipped.
+    const updated = /^id:.*$/m.test(current)
+      ? current.replace(/^(id:.*)$/m, `$1\n${line[0]}`)
+      : `${line[0]}\n${current}`;
+    writeFileSync(saved, updated);
+    migrated.push(entry.name);
+  }
+  return migrated;
+}
+
+
 // ---------------------------------------------------------------------------
 // Process supervision
 // ---------------------------------------------------------------------------
@@ -767,6 +812,10 @@ async function main() {
   const seeded = seedSkills();
   if (seeded.length > 0) {
     print(`  Installed skills for the first time: ${seeded.join(", ")}`);
+  }
+  const migrated = migrateSkillMetadata();
+  if (migrated.length > 0) {
+    print(`  Updated saved skills to the current format: ${migrated.join(", ")}`);
   }
 
   const cfg = config();
