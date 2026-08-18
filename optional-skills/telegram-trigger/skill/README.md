@@ -29,11 +29,15 @@ as your bot.
 
 1. Open your **workshop** address.
 2. **Credentials → New → Telegram**.
-3. Paste the token into **Access Token** and name the credential
-   `Telegram bot`.
-4. Open the workflow **70 - TRIGGER - Telegram message**.
-5. Select that credential on all three Telegram nodes.
-6. Save, then set the toggle at the top right to **Published**.
+3. Paste the token into **Access Token** and name the credential exactly
+   `Telegram bot`. The name matters: the workflow already refers to a
+   credential by that name, so getting it right connects all three of its
+   Telegram steps at once.
+4. Open the workflow **70 - TRIGGER - Telegram message**, and set the toggle at
+   the top right to **Published**.
+
+If publishing complains that a node is missing a credential, the name did not
+match. Open each Telegram step and choose your credential from its dropdown.
 
 An unpublished workflow is the most common reason nothing happens.
 
