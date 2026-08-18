@@ -382,19 +382,99 @@
     return attachment;
   }
 
+  // Google's callback lands in a different tab, so the chat finds out by
+  // asking. Polling starts only once a connect link has actually been shown,
+  // and stops as soon as the answer is yes.
+  let gmailConnectOffered = false;
+  let gmailWatchTimer = null;
+
+  function startGmailConnectionWatch() {
+    if (gmailWatchTimer !== null) {
+      return;
+    }
+    gmailWatchTimer = setInterval(async () => {
+      if (document.hidden || requestInProgress) {
+        return;
+      }
+      let status;
+      try {
+        const response = await fetch("/api/gmail/status", { headers: { Accept: "application/json" } });
+        if (!response.ok) {
+          return;
+        }
+        status = await response.json();
+      } catch {
+        return;
+      }
+      if (status?.connected !== true) {
+        return;
+      }
+      clearInterval(gmailWatchTimer);
+      gmailWatchTimer = null;
+      if (!gmailConnectOffered) {
+        return;
+      }
+      gmailConnectOffered = false;
+      const mailbox = typeof status.emailAddress === "string" && status.emailAddress !== ""
+        ? ` as ${status.emailAddress}`
+        : "";
+      // Sent as the learner, and shown in the transcript, so the handover is
+      // visible rather than something that happened behind their back.
+      void sendMessage(`I have connected Gmail${mailbox}. Please start the monthly update now.`, true);
+    }, 2_500);
+  }
+
+  // Agent replies are plain text. Two local paths, and only these two, become
+  // links: an article download, and the Gmail connect route. Nothing else is
+  // linkified — an agent that reads a stranger's email must never be able to
+  // turn a URL from that email into something clickable.
+  const SAFE_LINKS = [
+    {
+      pattern: /\/api\/seo-article\/download\/[A-Za-z0-9_-]{40,60}\.md/g,
+      build(href) {
+        const link = document.createElement("a");
+        link.className = "message__download";
+        link.href = href;
+        link.download = "";
+        link.textContent = "Download the article (.md)";
+        return link;
+      },
+    },
+    {
+      pattern: /(?:http:\/\/localhost:\d{2,5})?\/api\/gmail\/connect\b/g,
+      build() {
+        const link = document.createElement("a");
+        link.className = "message__connect";
+        // A new tab, so the conversation is still here when they come back.
+        link.href = "/api/gmail/connect";
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        link.textContent = "Connect Gmail (read-only)";
+        gmailConnectOffered = true;
+        startGmailConnectionWatch();
+        return link;
+      },
+    },
+  ];
+
   function appendSafeMessageText(element, text) {
-    const localDownload = /\/api\/seo-article\/download\/[A-Za-z0-9_-]{40,60}\.md/g;
+    const matches = [];
+    for (const { pattern, build } of SAFE_LINKS) {
+      pattern.lastIndex = 0;
+      for (const match of text.matchAll(pattern)) {
+        matches.push({ index: match.index ?? 0, length: match[0].length, href: match[0], build });
+      }
+    }
+    matches.sort((left, right) => left.index - right.index);
+
     let offset = 0;
-    for (const match of text.matchAll(localDownload)) {
-      const index = match.index ?? 0;
-      element.append(document.createTextNode(text.slice(offset, index)));
-      const link = document.createElement("a");
-      link.className = "message__download";
-      link.href = match[0];
-      link.download = "";
-      link.textContent = "Download the article (.md)";
-      element.append(link);
-      offset = index + match[0].length;
+    for (const match of matches) {
+      if (match.index < offset) {
+        continue;
+      }
+      element.append(document.createTextNode(text.slice(offset, match.index)));
+      element.append(match.build(match.href));
+      offset = match.index + match.length;
     }
     element.append(document.createTextNode(text.slice(offset)));
   }

@@ -934,6 +934,22 @@ textarea:focus-visible,
   text-decoration-thickness: 0.14em;
 }
 
+.message__connect {
+  display: inline-block;
+  margin: 0.25rem 0;
+  padding: 0.5rem 0.9rem;
+  border-radius: 999px;
+  background: var(--brand-primary);
+  color: #fff;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.message__connect:hover,
+.message__connect:focus-visible {
+  filter: brightness(0.92);
+}
+
 .message--user .message__copy {
   border-color: transparent;
   border-radius: 1rem 0.25rem 1rem 1rem;

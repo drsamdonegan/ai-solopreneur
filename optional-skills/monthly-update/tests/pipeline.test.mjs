@@ -306,41 +306,52 @@ check(flagged.status === "partial", "a failed verification did not mark the run 
 check(flagged.updateText.includes("Before you send this"), "the review section is missing");
 check(flagged.updateText.includes("No email states the contract value"), "the unsupported claim was not named");
 
-// -------------------------------------------- 68/65: Gmail connection probe
+// ------------------------------------- 69/65: Gmail connection, via the chat
+// The probe now asks the chat gateway, not Gmail: the gateway owns the OAuth
+// connection and knows the difference between "no Google client configured",
+// "configured but nobody has connected", and "connected but Google stopped
+// renewing it". Those need different advice.
 const probe = (input) => runNode(connection, "Read Gmail Probe", { input: [input], nodes: {} })[0];
+const status = (body) => probe({ statusCode: 200, body });
 
-const live = probe({ statusCode: 200, body: { emailAddress: "founder@acme.com", messagesTotal: 40213 } });
-check(live.connected === true && live.state === "connected", "a working Gmail connection was not recognised");
-check(live.emailAddress === "founder@acme.com", "the connected mailbox was not reported");
+const live = status({ configured: true, connected: true, emailAddress: "founder@acme.com", lastError: "" });
+check(live.connected === true && live.state === "connected", "a working connection was not recognised");
+check(live.message.includes("founder@acme.com"), "the connected mailbox was not named");
 
-const expired = probe({ statusCode: 401, body: { error: { message: "Invalid Credentials" } } });
-check(expired.connected === false && expired.state === "needs_reauth", `401 gave state "${expired.state}"`);
-check(/Testing/.test(expired.message), "the seven-day Testing-mode cause was not explained");
+const unconfigured = status({ configured: false, connected: false });
+check(unconfigured.state === "not_configured", `no OAuth client gave "${unconfigured.state}"`);
+check(/\.env/.test(unconfigured.message), "the missing-client message does not mention .env");
 
-// No credential selected: n8n fails the node, so there is no status at all.
-const absent = probe({ error: { message: "Credentials not found for type googleOAuth2Api" } });
-check(absent.connected === false && absent.state === "not_connected", `a missing credential gave "${absent.state}"`);
+const unconnected = status({ configured: true, connected: false });
+check(unconnected.state === "not_connected", `configured-but-unconnected gave "${unconnected.state}"`);
+check(/one click/i.test(unconnected.message), "the not-connected message does not say it is one click");
 
-const flaky = probe({ statusCode: 503, body: {} });
-check(flaky.connected === false && flaky.state === "unknown", `a 503 gave "${flaky.state}"`);
-check(!/reconfigure/i.test(flaky.message), "a transient failure told the user to reconfigure");
+const stale = status({ configured: true, connected: true, emailAddress: "a@b.com", lastError: "invalid_grant" });
+check(stale.state === "needs_reauth", `a dead refresh token gave "${stale.state}"`);
+check(/Testing/.test(stale.message), "the seven-day Testing-mode cause was not explained");
 
-for (const result of [live, expired, absent, flaky]) {
+const gatewayDown = probe({ statusCode: 0, body: {} });
+check(gatewayDown.state === "unknown", `an unreachable gateway gave "${gatewayDown.state}"`);
+check(!/reconfigure|\.env/i.test(gatewayDown.message), "a transient failure told the user to reconfigure");
+
+// The chat only linkifies this exact path, so every state has to carry it and
+// the agent has to be told to reproduce it verbatim.
+for (const result of [live, unconfigured, unconnected, stale, gatewayDown]) {
+  check(result.connectUrl === "/api/gmail/connect", "the probe lost the connect path");
+  check(result.linkInstruction.includes("/api/gmail/connect"), "the probe lost the link instruction");
   check(result.scope === "https://www.googleapis.com/auth/gmail.readonly", "the probe reports the wrong scope");
-  check(/localhost:5678/.test(result.n8nUrl), "the probe lost the n8n address");
 }
 
 // Starting a run without Gmail must refuse rather than queue and burn money.
 const startRefused = runNode(start, "Shape Auth Needed", {
-  input: [absent],
+  input: [unconnected],
   nodes: {
     "Decide Run": [{ sessionId: "s", requestId: "r", runId: "mu-x", monthLabel: "July 2026", proposedInput: {} }],
-    "Read Gmail Probe": [absent],
+    "Read Gmail Probe": [unconnected],
   },
 })[0];
 check(startRefused.response.ok === false, "a missing Gmail connection still reported success");
-check(startRefused.response.error.code === "GMAIL_NOT_CONNECTED", `error code was ${startRefused.response.error.code}`);
-check(/cannot open it from this chat/.test(startRefused.response.nextStep), "the refusal does not tell the agent it cannot open the window");
+check(startRefused.response.connectUrl === "/api/gmail/connect", "the refusal does not carry the connect link");
 
 const startNodes = new Set(start.nodes.map((n) => n.name));
 check(startNodes.has("Probe Gmail"), "start_monthly_update has no Gmail pre-flight check");
@@ -350,22 +361,20 @@ const queueSources = Object.entries(start.connections)
 check(queueSources.length === 1 && queueSources[0] === "Gmail Ready?",
   `the background run is reachable from ${queueSources.join(", ") || "nothing"} rather than only the Gmail check`);
 
-// ----------------------------------------------- 74: Slack delivery failure
-const slackNode = run.nodes.find((node) => node.name === "Post To Slack");
-check(slackNode?.credentials?.httpHeaderAuth?.name === "Slack bot token",
-  "monthly Slack delivery has no named Header Auth credential");
-const slackFailure = runNode(run, "Read Slack Delivery", {
-  input: [{ statusCode: 200, body: { ok: false, error: "channel_not_found" } }],
-  nodes: { "Render Update": [{ runId: "mu-slack", errorSummary: "one email failed" }] },
-});
-check(slackFailure.length === 1 && slackFailure[0].runId === "mu-slack",
-  "a failed monthly Slack delivery did not identify its run");
-check(slackFailure[0].errorSummary.includes("channel_not_found"),
-  "a failed monthly Slack delivery did not record Slack's error");
-check(runNode(run, "Read Slack Delivery", {
-  input: [{ statusCode: 200, body: { ok: true } }],
-  nodes: { "Render Update": [{ runId: "mu-slack", errorSummary: "" }] },
-}).length === 0, "a successful monthly Slack delivery was recorded as a failure");
+// No workflow may still carry an n8n Google credential, and every Gmail call
+// must take its token from the gateway.
+for (const [name, wf] of [["74", run], ["75", thread], ["65", start], ["69", connection]]) {
+  for (const node of wf.nodes) {
+    check(!("googleOAuth2Api" in (node.credentials ?? {})),
+      `${name}: "${node.name}" still uses the n8n Google credential`);
+    const url = String(node.parameters?.url ?? "");
+    if (url.includes("gmail.googleapis.com")) {
+      const headers = node.parameters?.headerParameters?.parameters ?? [];
+      check(headers.some((h) => h.name === "Authorization" && h.value.includes("Get Gmail Token")),
+        `${name}: "${node.name}" calls Gmail without the gateway token`);
+    }
+  }
+}
 
 console.log("\n--- rendered update ---\n");
 console.log(rendered.updateText);

@@ -22,14 +22,38 @@
         "inputSource": "workflowInputs",
         "workflowInputs": {
           "values": [
-            { "name": "runId", "type": "string" },
-            { "name": "threadId", "type": "string" },
-            { "name": "profileJson", "type": "string" },
-            { "name": "monthLabel", "type": "string" },
-            { "name": "monthBucket", "type": "string" },
-            { "name": "windowStart", "type": "string" },
-            { "name": "windowEnd", "type": "string" },
-            { "name": "classifierReason", "type": "string" }
+            {
+              "name": "runId",
+              "type": "string"
+            },
+            {
+              "name": "threadId",
+              "type": "string"
+            },
+            {
+              "name": "profileJson",
+              "type": "string"
+            },
+            {
+              "name": "monthLabel",
+              "type": "string"
+            },
+            {
+              "name": "monthBucket",
+              "type": "string"
+            },
+            {
+              "name": "windowStart",
+              "type": "string"
+            },
+            {
+              "name": "windowEnd",
+              "type": "string"
+            },
+            {
+              "name": "classifierReason",
+              "type": "string"
+            }
           ]
         }
       },
@@ -45,8 +69,6 @@
     {
       "parameters": {
         "url": "=https://gmail.googleapis.com/gmail/v1/users/me/threads/{{ $json.threadId }}",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "googleOAuth2Api",
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
@@ -64,6 +86,15 @@
               "neverError": true
             }
           }
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Bearer ' + $('Get Gmail Token').first().json.body.accessToken }}"
+            }
+          ]
         }
       },
       "type": "n8n-nodes-base.httpRequest",
@@ -74,12 +105,6 @@
       ],
       "id": "95660000-0000-4000-8000-000000000011",
       "name": "Fetch Thread",
-      "credentials": {
-        "googleOAuth2Api": {
-          "id": "phase16GmailReadonly",
-          "name": "Gmail (read-only)"
-        }
-      },
       "onError": "continueRegularOutput"
     },
     {
@@ -220,30 +245,126 @@
       ],
       "id": "95660000-0000-4000-8000-000000000017",
       "name": "Return Thread Failure"
+    },
+    {
+      "parameters": {
+        "url": "http://127.0.0.1:3000/api/gmail/token",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-requested-by",
+              "value": "monthly-update"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -540,
+        40
+      ],
+      "id": "95660000-0000-4000-8000-000000000050",
+      "name": "Get Gmail Token",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
     }
   ],
   "pinData": {},
   "connections": {
     "Thread Input": {
-      "main": [[{ "node": "Fetch Thread", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Get Gmail Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Fetch Thread": {
-      "main": [[{ "node": "Compact Thread", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Compact Thread",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Compact Thread": {
-      "main": [[{ "node": "Thread Is Usable?", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Thread Is Usable?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Thread Is Usable?": {
       "main": [
-        [{ "node": "Build Extraction Request", "type": "main", "index": 0 }],
-        [{ "node": "Return Thread Failure", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Build Extraction Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Return Thread Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Build Extraction Request": {
-      "main": [[{ "node": "Extract With Claude", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Extract With Claude",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Extract With Claude": {
-      "main": [[{ "node": "Shape Extraction", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Shape Extraction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Gmail Token": {
+      "main": [
+        [
+          {
+            "node": "Fetch Thread",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "active": false,

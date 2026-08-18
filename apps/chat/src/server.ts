@@ -11,6 +11,7 @@ import { ChatStore } from "./chat-store.js";
 import { DocumentStore } from "./documents.js";
 import { ProfileStore } from "./profile.js";
 import { AgentSettingsStore } from "./agent-settings.js";
+import { GmailOAuthStore } from "./gmail-oauth.js";
 
 const DEFAULT_PORT = 3_000;
 const DEFAULT_TIMEOUT_MS = 120_000;
@@ -50,6 +51,9 @@ const profileDataDirectory =
 const skillsDirectory =
   process.env.SKILLS_DIRECTORY ??
   fileURLToPath(new URL("../../../skills", import.meta.url));
+const gmailDataDirectory =
+  process.env.GMAIL_DATA_DIRECTORY ??
+  fileURLToPath(new URL("../../../data/gmail", import.meta.url));
 
 try {
   new URL(upstreamUrl);
@@ -89,6 +93,11 @@ const documentStore = new DocumentStore(
 await documentStore.cleanupExpired();
 const chatStore = new ChatStore(join(chatDataDirectory, "chat.sqlite"));
 const profileStore = new ProfileStore(profileDataDirectory);
+const gmailOAuthStore = new GmailOAuthStore(gmailDataDirectory, {
+  // Google must be told this exact address, so it is derived from the port the
+  // gateway actually listens on rather than hardcoded.
+  defaultRedirectUri: `http://localhost:${port}/api/gmail/callback`,
+});
 const agentSettingsStore = new AgentSettingsStore(
   profileDataDirectory,
   agents.map((agent) => ({
@@ -105,6 +114,7 @@ const server = createChatServer({
   documentStore,
   profileStore,
   agentSettingsStore,
+  gmailOAuthStore,
   skillsDirectory,
   profileDirectory: profileDataDirectory,
   publicDirectory,
@@ -120,6 +130,11 @@ server.listen(port, listenAddress, () => {
   );
   console.log(
     `Chat history ready with schema ${chatStore.health().schemaVersion}.`,
+  );
+  console.log(
+    gmailOAuthStore.configured
+      ? `Gmail: read-only OAuth ready. Google redirect URI: ${gmailOAuthStore.redirectUri}`
+      : "Gmail: no Google OAuth client set (add GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET to .env).",
   );
   console.log(
     accessGate === undefined

@@ -53,6 +53,12 @@ import {
   ProfileValidationError,
   type AgentProfile,
 } from "./profile.js";
+import {
+  callbackPage,
+  GmailOAuthError,
+  GmailOAuthStore,
+  GMAIL_READONLY_SCOPE,
+} from "./gmail-oauth.js";
 import { fetchPublicDomainPage, fetchPublicWebPages } from "./public-web.js";
 import { validateSeoArticleResult } from "./seo-article.js";
 
@@ -97,6 +103,7 @@ type ErrorCode =
   | "DOCUMENT_SERVICE_UNAVAILABLE"
   | "DOCUMENT_TEXT_TOO_LARGE"
   | "FILE_TOO_LARGE"
+  | "GMAIL_ERROR"
   | "INVALID_REQUEST"
   | "MESSAGE_TOO_LONG"
   | "RATE_LIMITED"
@@ -152,6 +159,7 @@ export interface ChatGatewayOptions {
   chatStore?: ChatStore;
   profileStore?: ProfileStore;
   agentSettingsStore?: AgentSettingsStore;
+  gmailOAuthStore?: GmailOAuthStore;
   skillsDirectory?: string;
   profileDirectory?: string;
   /**
@@ -203,6 +211,16 @@ function sendMarkdown(
     "Content-Type": "text/markdown; charset=utf-8",
   });
   response.end(markdown);
+}
+
+function sendHtml(response: ServerResponse, status: number, html: string): void {
+  response.writeHead(status, {
+    ...SECURITY_HEADERS,
+    "Cache-Control": "no-store",
+    "Content-Length": Buffer.byteLength(html).toString(),
+    "Content-Type": "text/html; charset=utf-8",
+  });
+  response.end(html);
 }
 
 function sendError(response: ServerResponse, error: PublicError): void {
@@ -2209,6 +2227,98 @@ export function createChatHandler(options: ChatGatewayOptions): RequestListener 
               ),
             );
           }
+        }
+        return;
+      }
+
+      if (url.pathname.startsWith("/api/gmail/")) {
+        const gmail = options.gmailOAuthStore;
+        if (gmail === undefined) {
+          sendJson(response, 404, {
+            error: { code: "NOT_FOUND", message: "Gmail connection is not available on this install." },
+          });
+          return;
+        }
+        try {
+          if (url.pathname === "/api/gmail/status" && request.method === "GET") {
+            sendJson(response, 200, { schemaVersion: 1, ...(await gmail.status()) });
+            return;
+          }
+
+          if (url.pathname === "/api/gmail/connect" && request.method === "GET") {
+            const destination = gmail.authorizationUrl();
+            response.writeHead(302, {
+              ...SECURITY_HEADERS,
+              "Cache-Control": "no-store",
+              Location: destination,
+            });
+            response.end();
+            return;
+          }
+
+          if (url.pathname === "/api/gmail/callback" && request.method === "GET") {
+            const status = await gmail.completeCallback(
+              url.searchParams.get("code") ?? "",
+              url.searchParams.get("state") ?? "",
+            );
+            sendHtml(response, 200, callbackPage({
+              ok: true,
+              heading: "Gmail connected, read-only",
+              detail: status.emailAddress === ""
+                ? "Your agent can now read your mail to write the update. It cannot send, reply, or delete."
+                : `Connected as ${status.emailAddress}. Your agent can read this mailbox to write the update. It cannot send, reply, or delete.`,
+            }));
+            return;
+          }
+
+          // n8n workflows call this from this same machine when they need to
+          // read mail. It returns a short-lived access token and never the
+          // refresh token. The custom header forces a CORS preflight, so a web
+          // page on another origin cannot quietly fetch it.
+          if (url.pathname === "/api/gmail/token" && request.method === "GET") {
+            if ((request.headers["x-requested-by"] ?? "") !== "monthly-update") {
+              sendJson(response, 403, {
+                error: { code: "FORBIDDEN", message: "This endpoint is for local workflows." },
+              });
+              return;
+            }
+            sendJson(response, 200, {
+              schemaVersion: 1,
+              accessToken: await gmail.accessToken(),
+              scope: GMAIL_READONLY_SCOPE,
+            });
+            return;
+          }
+
+          if (url.pathname === "/api/gmail/disconnect" && request.method === "POST") {
+            await gmail.disconnect();
+            sendJson(response, 200, { schemaVersion: 1, ...(await gmail.status()) });
+            return;
+          }
+
+          sendJson(response, 404, {
+            error: { code: "NOT_FOUND", message: "Unknown Gmail endpoint." },
+          });
+        } catch (error) {
+          if (error instanceof GmailOAuthError) {
+            if (url.pathname === "/api/gmail/callback") {
+              sendHtml(response, error.status, callbackPage({
+                ok: false,
+                heading: "Gmail was not connected",
+                detail: error.publicMessage,
+              }));
+              return;
+            }
+            sendJson(response, error.status, {
+              error: { code: error.code, message: error.publicMessage },
+            });
+            return;
+          }
+          options.logError?.("Could not complete the Gmail connection", error);
+          sendError(
+            response,
+            new PublicError(500, "GMAIL_ERROR", "The Gmail connection is not available right now."),
+          );
         }
         return;
       }
