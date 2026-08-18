@@ -1,0 +1,449 @@
+{
+  "name": "14 - SETUP - Funding Data",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Run this once\n\nSelect **Execute workflow** below. It creates three local tables:\n\n- `funding_profile` — the facts about your business that decide what you can apply for\n- `funding_opportunities` — every program the search has ever found\n- `funding_runs` — a copy of each report, and what that search cost\n\nNothing leaves your computer. All three start empty.\n\nRunning this again is safe and changes nothing.",
+        "height": 380,
+        "width": 420,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -660,
+        -260
+      ],
+      "id": "95500000-0000-4000-8000-000000000001",
+      "name": "Sticky Start Here"
+    },
+    {
+      "parameters": {
+        "content": "## Then tell your agent about your business\n\nThe search does nothing until a profile exists, because eligibility is\ndecided by things this project does not otherwise know: where you are\nregistered, how many staff you have, and roughly what you turn over.\n\nOpen the chat and say it in plain words, for example:\n\n> We're a Pty Ltd in Melbourne, four staff, about $600k a year, trading three years.\n\nThe agent saves it and reads it back to you.",
+        "height": 380,
+        "width": 420,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -200,
+        -260
+      ],
+      "id": "95500000-0000-4000-8000-000000000002",
+      "name": "Sticky Next Step"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -660,
+        180
+      ],
+      "id": "95500000-0000-4000-8000-000000000010",
+      "name": "Run Setup Once"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "setup-funding-data",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -660,
+        320
+      ],
+      "id": "95500000-0000-4000-8000-000000000015",
+      "name": "Temporary Setup Webhook"
+    },
+    {
+      "parameters": {
+        "resource": "table",
+        "operation": "create",
+        "tableName": "funding_profile",
+        "columns": {
+          "column": [
+            {
+              "name": "profileId",
+              "type": "string"
+            },
+            {
+              "name": "updatedAt",
+              "type": "date"
+            },
+            {
+              "name": "legalName",
+              "type": "string"
+            },
+            {
+              "name": "entityType",
+              "type": "string"
+            },
+            {
+              "name": "country",
+              "type": "string"
+            },
+            {
+              "name": "region",
+              "type": "string"
+            },
+            {
+              "name": "city",
+              "type": "string"
+            },
+            {
+              "name": "industry",
+              "type": "string"
+            },
+            {
+              "name": "industryCode",
+              "type": "string"
+            },
+            {
+              "name": "headcount",
+              "type": "number"
+            },
+            {
+              "name": "annualRevenue",
+              "type": "number"
+            },
+            {
+              "name": "yearsTrading",
+              "type": "number"
+            },
+            {
+              "name": "registeredForGst",
+              "type": "string"
+            },
+            {
+              "name": "doesRnd",
+              "type": "string"
+            },
+            {
+              "name": "exports",
+              "type": "string"
+            },
+            {
+              "name": "employsApprentices",
+              "type": "string"
+            },
+            {
+              "name": "priorGrants",
+              "type": "string"
+            },
+            {
+              "name": "interests",
+              "type": "string"
+            },
+            {
+              "name": "sourceDomains",
+              "type": "string"
+            },
+            {
+              "name": "beats",
+              "type": "string"
+            },
+            {
+              "name": "deliverTo",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {
+          "createIfNotExists": true
+        }
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -420,
+        180
+      ],
+      "id": "95500000-0000-4000-8000-000000000011",
+      "name": "Create Profile Table"
+    },
+    {
+      "parameters": {
+        "resource": "table",
+        "operation": "create",
+        "tableName": "funding_opportunities",
+        "columns": {
+          "column": [
+            {
+              "name": "fingerprint",
+              "type": "string"
+            },
+            {
+              "name": "firstSeenAt",
+              "type": "date"
+            },
+            {
+              "name": "lastSeenAt",
+              "type": "date"
+            },
+            {
+              "name": "reportedAt",
+              "type": "date"
+            },
+            {
+              "name": "programName",
+              "type": "string"
+            },
+            {
+              "name": "administeredBy",
+              "type": "string"
+            },
+            {
+              "name": "officialUrl",
+              "type": "string"
+            },
+            {
+              "name": "sourceTrust",
+              "type": "string"
+            },
+            {
+              "name": "kind",
+              "type": "string"
+            },
+            {
+              "name": "amountText",
+              "type": "string"
+            },
+            {
+              "name": "whatItFunds",
+              "type": "string"
+            },
+            {
+              "name": "opensAt",
+              "type": "string"
+            },
+            {
+              "name": "closesAt",
+              "type": "string"
+            },
+            {
+              "name": "status",
+              "type": "string"
+            },
+            {
+              "name": "eligibilitySummary",
+              "type": "string"
+            },
+            {
+              "name": "verdict",
+              "type": "string"
+            },
+            {
+              "name": "verdictReason",
+              "type": "string"
+            },
+            {
+              "name": "deciderCriterion",
+              "type": "string"
+            },
+            {
+              "name": "effort",
+              "type": "string"
+            },
+            {
+              "name": "contentHash",
+              "type": "string"
+            },
+            {
+              "name": "dismissed",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {
+          "createIfNotExists": true
+        }
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -180,
+        180
+      ],
+      "id": "95500000-0000-4000-8000-000000000012",
+      "name": "Create Opportunities Table"
+    },
+    {
+      "parameters": {
+        "resource": "table",
+        "operation": "create",
+        "tableName": "funding_runs",
+        "columns": {
+          "column": [
+            {
+              "name": "runId",
+              "type": "string"
+            },
+            {
+              "name": "ranAt",
+              "type": "date"
+            },
+            {
+              "name": "status",
+              "type": "string"
+            },
+            {
+              "name": "beatsAttempted",
+              "type": "number"
+            },
+            {
+              "name": "beatsSucceeded",
+              "type": "number"
+            },
+            {
+              "name": "candidatesFound",
+              "type": "number"
+            },
+            {
+              "name": "newCount",
+              "type": "number"
+            },
+            {
+              "name": "changedCount",
+              "type": "number"
+            },
+            {
+              "name": "closingSoonCount",
+              "type": "number"
+            },
+            {
+              "name": "searchCount",
+              "type": "number"
+            },
+            {
+              "name": "inputTokens",
+              "type": "number"
+            },
+            {
+              "name": "outputTokens",
+              "type": "number"
+            },
+            {
+              "name": "reportText",
+              "type": "string"
+            },
+            {
+              "name": "errorSummary",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {
+          "createIfNotExists": true
+        }
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        60,
+        180
+      ],
+      "id": "95500000-0000-4000-8000-000000000013",
+      "name": "Create Runs Table"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "return [{ json: {\n  ok: true,\n  message: 'The three funding tables are ready. Next: tell your agent about your business, then ask it to look for funding you can apply for.'\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        300,
+        180
+      ],
+      "id": "95500000-0000-4000-8000-000000000014",
+      "name": "Confirm Setup"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Run Setup Once": {
+      "main": [
+        [
+          {
+            "node": "Create Profile Table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Profile Table": {
+      "main": [
+        [
+          {
+            "node": "Create Opportunities Table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Opportunities Table": {
+      "main": [
+        [
+          {
+            "node": "Create Runs Table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Runs Table": {
+      "main": [
+        [
+          {
+            "node": "Confirm Setup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Temporary Setup Webhook": {
+      "main": [
+        [
+          {
+            "node": "Create Profile Table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "executionTimeout": 60
+  },
+  "versionId": "95500000-0000-4000-8000-000000000100",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "phase": 15,
+    "testedWithN8n": "2.30.5"
+  },
+  "id": "phase15FundingSetup",
+  "tags": [
+    {
+      "id": "tagSetupOnce",
+      "name": "Set up once"
+    }
+  ]
+}

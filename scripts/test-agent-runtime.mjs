@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { AGENT_IDS } from "./compile-skills.mjs";
 import {
@@ -116,11 +116,44 @@ assert.equal(unknown.valid, false);
 assert.equal(unknown.errorCode, "INVALID_REQUEST");
 
 const fixtureWorkflow = structuredClone(workflow);
+
+/**
+ * Which agent owns each connected tool.
+ *
+ * The base tools are listed because they ship with the agent. Everything else
+ * is read from the installed skills, because a hand-written map goes stale the
+ * moment a learner installs a skill that adds a tool — and it goes stale as a
+ * failing release check rather than as anything a learner could act on.
+ */
 const ownership = new Map([
   ["list_tasks", "project-manager"],
   ["create_task", "project-manager"],
   ["update_task_status", "project-manager"],
 ]);
+
+const optionalSkillsDir = fileURLToPath(new URL("../optional-skills", import.meta.url));
+const installedSkillsDir = fileURLToPath(new URL("../skills", import.meta.url));
+for (const entry of await readdir(optionalSkillsDir, { withFileTypes: true })) {
+  if (!entry.isDirectory() || entry.name.startsWith("_")) {
+    continue;
+  }
+  try {
+    // A skill counts as installed once its instructions are in skills/.
+    await readFile(`${installedSkillsDir}/${entry.name}/skill.yaml`, "utf8");
+  } catch {
+    continue;
+  }
+  const manifest = JSON.parse(
+    await readFile(`${optionalSkillsDir}/${entry.name}/manifest.json`, "utf8"),
+  );
+  for (const tool of manifest.agentTools ?? []) {
+    assert.ok(
+      manifest.agent,
+      `${entry.name} wires tools into the agent but declares no owning agent`,
+    );
+    ownership.set(tool.name, manifest.agent);
+  }
+}
 for (const agentId of AGENT_IDS) {
   const toolName = `mock_tool_${agentId.replaceAll("-", "_")}`;
   fixtureWorkflow.nodes.push({ name: toolName, type: "test.tool" });

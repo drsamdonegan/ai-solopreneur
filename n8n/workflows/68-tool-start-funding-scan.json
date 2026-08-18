@@ -1,0 +1,535 @@
+{
+  "name": "68 - TOOL - start_funding_scan",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Go and look for funding now\n\nStarts the search and answers straight away, because the search itself\ntakes minutes and your agent gives up after about two.\n\nThe answer is not the result. It says the search has started; the report\narrives in `funding_runs` a few minutes later, and `get_funding_report`\nreads it back.\n\nIt refuses to start a second search while one is running, and refuses to\nstart at all until a funding profile exists.",
+        "height": 340,
+        "width": 480,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -700,
+        -280
+      ],
+      "id": "95550000-0000-4000-8000-000000000001",
+      "name": "Start tool explanation"
+    },
+    {
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "sessionId",
+              "type": "string"
+            },
+            {
+              "name": "requestId",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -700,
+        60
+      ],
+      "id": "95550000-0000-4000-8000-000000000010",
+      "name": "Tool Input"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const sessionId = typeof $json.sessionId === 'string' ? $json.sessionId.trim() : '';\nconst requestId = typeof $json.requestId === 'string' ? $json.requestId.trim() : '';\nconst uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;\nlet error = null;\nif (!uuidPattern.test(sessionId) || !uuidPattern.test(requestId)) {\n  error = { code: 'INVALID_SESSION', message: 'Starting a funding search needs a valid conversation and request ID.' };\n}\nconst runId = `run-${new Date().toISOString().replace(/[^0-9]/g, '').slice(0, 14)}-${String(requestId).slice(0, 8)}`;\nconst proposedInput = { sessionId, requestId };\nreturn { json: { valid: error === null, sessionId, requestId, runId, proposedInput, ...(error ? { response: { ok: false, error } } : {}) } };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -460,
+        60
+      ],
+      "id": "95550000-0000-4000-8000-000000000011",
+      "name": "Validate Start Input"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "funding_runs",
+          "mode": "name"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": []
+        },
+        "returnAll": false,
+        "limit": 10,
+        "orderBy": true,
+        "orderByColumn": "ranAt",
+        "orderByDirection": "DESC"
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -220,
+        60
+      ],
+      "id": "95550000-0000-4000-8000-000000000012",
+      "name": "Read Recent Runs",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const input = $('Validate Start Input').first().json;\nconst rows = $input.all().map((item) => item.json).filter((row) => row && row.runId);\n\nif (!input.valid) {\n  return [{ json: { ...input, shouldQueue: false } }];\n}\n\nconst minutesSince = (value) => {\n  const parsed = Date.parse(String(value ?? ''));\n  if (Number.isNaN(parsed)) return null;\n  return (Date.now() - parsed) / 60000;\n};\n\n// A scan takes a few minutes and costs about a dollar. Someone who does not\n// see an instant answer will ask again, so an in-flight run is reported\n// rather than started twice. Anything older than 20 minutes is treated as\n// dead rather than running, so one crashed run cannot block the tool forever.\nconst running = rows\n  .filter((row) => String(row.status ?? '') === 'running')\n  .find((row) => {\n    const age = minutesSince(row.ranAt);\n    return age !== null && age < 20;\n  });\n\nif (running) {\n  return [{ json: { ...input, shouldQueue: false, response: {\n    ok: true,\n    status: 'already-running',\n    runId: running.runId,\n    message: 'A funding search is already running. Tell the user it takes a few minutes and to ask again shortly. Do not start another one.'\n  } } }];\n}\n\nreturn [{ json: { ...input, shouldQueue: true } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        20,
+        60
+      ],
+      "id": "95550000-0000-4000-8000-000000000013",
+      "name": "Decide Run"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "funding_profile",
+          "mode": "name"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "profileId",
+              "condition": "eq",
+              "keyValue": "default"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 1,
+        "orderBy": false
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        260,
+        60
+      ],
+      "id": "95550000-0000-4000-8000-000000000014",
+      "name": "Read Funding Profile",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const decided = $('Decide Run').first().json;\nif (!decided.shouldQueue) return [{ json: decided }];\n\nconst profile = $input.all().map((item) => item.json).find((row) => row && row.profileId === 'default');\n\n// Starting a search with no profile spends real money to produce 'tell me\n// about your business'. Ask first instead.\nif (!profile || !profile.country) {\n  return [{ json: { ...decided, shouldQueue: false, response: {\n    ok: false,\n    error: {\n      code: 'NO_PROFILE',\n      message: 'There is no funding profile saved yet, and a search without one cannot judge eligibility. Ask the user what kind of entity the business is, which country and state it is registered in, how many people work there and roughly what it turns over, then save that with set_funding_profile before searching.'\n    }\n  } } }];\n}\n\nlet beats = [];\ntry { beats = JSON.parse(profile.beats ?? '[]'); } catch {}\nreturn [{ json: { ...decided, beatCount: Array.isArray(beats) ? beats.length : 0 } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        500,
+        60
+      ],
+      "id": "95550000-0000-4000-8000-000000000015",
+      "name": "Check Profile Exists"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "95550000-0000-4000-8000-000000000016-c1",
+              "leftValue": "={{ $json.shouldQueue }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        740,
+        60
+      ],
+      "id": "95550000-0000-4000-8000-000000000016",
+      "name": "Should Start?"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "phase15RunFundingScan",
+          "mode": "list",
+          "cachedResultName": "71 - RUN - Funding Scan"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "runId": "={{ $json.runId }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "runId",
+              "displayName": "runId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": false
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        980,
+        -40
+      ],
+      "id": "95550000-0000-4000-8000-000000000017",
+      "name": "Start Search In Background",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const input = $('Check Profile Exists').first().json;\n\nreturn [{ json: { ...input, response: {\n  ok: true,\n  status: 'started',\n  runId: input.runId,\n  message: [\n    'I am looking now. It takes a few minutes: I search the official funding sources for this business, open each new program on its own page to check the amount and the dates, and then work out what the criteria say.',\n    'Ask me for it again in a few minutes and I will read it back.',\n  ].join(' '),\n} } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1220,
+        -40
+      ],
+      "id": "95550000-0000-4000-8000-000000000018",
+      "name": "Shape Start Result"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const input = $('Validate Start Input').first().json;\nconst response = $json.response ?? { ok: false, error: { code: 'TOOL_FAILED', message: 'The tool did not return a result.' } };\nreturn { json: {\n  occurredAt: new Date().toISOString(),\n  sessionId: input.sessionId,\n  requestId: input.requestId,\n  toolName: 'start_funding_scan',\n  proposedInput: JSON.stringify(input.proposedInput ?? {}),\n  result: JSON.stringify(response),\n  error: response.ok === false ? String(response.error?.message ?? 'Tool failed') : '',\n  response\n} };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1460,
+        60
+      ],
+      "id": "95550000-0000-4000-8000-000000000090",
+      "name": "Prepare Audit"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "value": "tool_audit",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "occurredAt": "={{ $json.occurredAt }}",
+            "sessionId": "={{ $json.sessionId }}",
+            "requestId": "={{ $json.requestId }}",
+            "toolName": "={{ $json.toolName }}",
+            "proposedInput": "={{ $json.proposedInput }}",
+            "result": "={{ $json.result }}",
+            "error": "={{ $json.error }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "occurredAt",
+              "displayName": "occurredAt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "sessionId",
+              "displayName": "sessionId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "requestId",
+              "displayName": "requestId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "toolName",
+              "displayName": "toolName",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "proposedInput",
+              "displayName": "proposedInput",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "result",
+              "displayName": "result",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "error",
+              "displayName": "error",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1700,
+        60
+      ],
+      "id": "95550000-0000-4000-8000-000000000091",
+      "name": "Write Tool Audit",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const prepared = $('Prepare Audit').item.json;\nconst response = { ...prepared.response };\nif (!Number.isInteger($json.id)) {\n  response.auditWarning = 'The tool result could not be written to the local audit table.';\n}\nreturn { json: response };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1940,
+        60
+      ],
+      "id": "95550000-0000-4000-8000-000000000092",
+      "name": "Return Tool Result"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Tool Input": {
+      "main": [
+        [
+          {
+            "node": "Validate Start Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Start Input": {
+      "main": [
+        [
+          {
+            "node": "Read Recent Runs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Recent Runs": {
+      "main": [
+        [
+          {
+            "node": "Decide Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decide Run": {
+      "main": [
+        [
+          {
+            "node": "Read Funding Profile",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Funding Profile": {
+      "main": [
+        [
+          {
+            "node": "Check Profile Exists",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Profile Exists": {
+      "main": [
+        [
+          {
+            "node": "Should Start?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Should Start?": {
+      "main": [
+        [
+          {
+            "node": "Start Search In Background",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start Search In Background": {
+      "main": [
+        [
+          {
+            "node": "Shape Start Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shape Start Result": {
+      "main": [
+        [
+          {
+            "node": "Prepare Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Audit": {
+      "main": [
+        [
+          {
+            "node": "Write Tool Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Tool Audit": {
+      "main": [
+        [
+          {
+            "node": "Return Tool Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "executionTimeout": 60
+  },
+  "versionId": "95550000-0000-4000-8000-000000000100",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "phase": 15,
+    "testedWithN8n": "2.30.5",
+    "toolRisk": "bounded_external_read_and_local_write",
+    "authorization": "explicit-current-user-request",
+    "externalWrite": "none",
+    "externalRead": "official-funding-sources-and-anthropic-api"
+  },
+  "id": "phase15StartFundingScan",
+  "tags": [
+    {
+      "id": "tagAgentCanDo",
+      "name": "What your agent can do"
+    }
+  ]
+}

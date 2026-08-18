@@ -43,7 +43,20 @@
       "workflows": [
         "10-setup-local-task-data.json",
         "11-setup-sync-enabled-skills.json",
-        "90-debug-agent-health.json"
+        "90-debug-agent-health.json",
+        "14-setup-funding-data.json"
+      ]
+    },
+    {
+      "id": "skill-free-money",
+      "name": "6. Money you can apply for",
+      "description": "Grants, rebates, tax incentives, and credit programs your business could apply for: going and looking for them, reading back what was found, and saving the business facts that decide what you are eligible for.",
+      "workflows": [
+        "63-tool-get-funding-report.json",
+        "64-tool-set-funding-profile.json",
+        "68-tool-start-funding-scan.json",
+        "71-run-funding-scan.json",
+        "72-run-funding-beat.json"
       ]
     }
   ]
