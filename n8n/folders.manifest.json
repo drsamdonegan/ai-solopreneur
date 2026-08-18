@@ -48,6 +48,14 @@
       ]
     },
     {
+      "id": "skill-triggers",
+      "name": "5. Ways your agent gets started",
+      "description": "Entry points that let something outside your computer start your agent: a Telegram message today, an inbox or a schedule later.",
+      "workflows": [
+        "70-trigger-telegram-message.json"
+      ]
+    },
+    {
       "id": "skill-free-money",
       "name": "6. Money you can apply for",
       "description": "Grants, rebates, tax incentives, and credit programs your business could apply for: going and looking for them, reading back what was found, and saving the business facts that decide what you are eligible for.",
