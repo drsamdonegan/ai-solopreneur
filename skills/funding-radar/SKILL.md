@@ -40,6 +40,8 @@ Call `get_funding_report` whenever the user asks what was found, what is new, or
 - `running: true` means a search is still going. Say so and offer to check again shortly.
 - `hasRun: false` means nothing has finished yet. Offer to run one.
 
+The report is only ever read out here, in the chat. Nothing is sent anywhere else, so if the user wants it somewhere they can act on it later, they have to copy it themselves.
+
 ## How to write about funding
 
 The chat window renders plain text. Markdown tables, `#` headings, `**bold**` and `---` rules arrive as raw characters. Write short plain lines and `-` lists.

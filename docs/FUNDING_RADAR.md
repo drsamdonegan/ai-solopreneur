@@ -81,6 +81,7 @@ To spend less, drop a beat. A search covers national sources, your state, and no
 - **It never says you are eligible.** It says what the published criteria say, and names the one thing you have to check yourself. Only the body running the program can decide.
 - **It never applies for anything, and never contacts anyone.** Grant conditions are legal commitments; that decision stays with you.
 - **It never searches on its own.** Every search is one you asked for.
+- **It never sends the report anywhere.** No Slack, no email, no phone. It is saved on your agent and read back in the chat when you ask.
 
 ## Running it on a schedule
 
@@ -103,7 +104,7 @@ The report tells you, in a NOTES section at the bottom. It is written to name ga
 | The agent asks for your business details | Step 2 has not happened, or the profile has no country. |
 | "A funding search is already running" | One is in flight. It takes a few minutes; ask again shortly. |
 
-If a search fails completely, no Slack message is sent. A cheerful message about a search that did not happen is worse than silence.
+A failed search still writes its run, so `What did you find?` tells you it failed rather than going quiet.
 
 ## Where it looks
 

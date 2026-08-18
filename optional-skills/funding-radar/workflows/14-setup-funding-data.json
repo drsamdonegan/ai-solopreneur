@@ -146,10 +146,6 @@
             {
               "name": "beats",
               "type": "string"
-            },
-            {
-              "name": "deliverTo",
-              "type": "string"
             }
           ]
         },
