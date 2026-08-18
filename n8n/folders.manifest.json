@@ -56,7 +56,8 @@
         "64-tool-set-funding-profile.json",
         "68-tool-start-funding-scan.json",
         "71-run-funding-scan.json",
-        "72-run-funding-beat.json"
+        "72-run-funding-beat.json",
+        "76-trigger-daily-funding-scan.json"
       ]
     }
   ]

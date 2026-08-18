@@ -60,6 +60,85 @@
         "operation": "get",
         "dataTableId": {
           "__rl": true,
+          "value": "funding_runs",
+          "mode": "name"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": []
+        },
+        "returnAll": false,
+        "limit": 10,
+        "orderBy": true,
+        "orderByColumn": "ranAt",
+        "orderByDirection": "DESC"
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -1140,
+        440
+      ],
+      "id": "95540000-0000-4000-8000-000000000047",
+      "name": "Read In-Flight Runs",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const input = $('Run Input').first().json ?? {};\nconst rows = $input.all().map((item) => item.json).filter((row) => row && row.runId);\nconst running = rows.find((row) => {\n  if (String(row.status ?? '') !== 'running') return false;\n  const started = Date.parse(String(row.ranAt ?? ''));\n  return !Number.isNaN(started) && Date.now() - started < 20 * 60 * 1000;\n});\n\nreturn [{ json: {\n  ...input,\n  allowed: !running,\n  blockingRunId: running ? String(running.runId) : '',\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -920,
+        440
+      ],
+      "id": "95540000-0000-4000-8000-000000000048",
+      "name": "Guard In-Flight Run"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "95540000-0000-4000-8000-000000000049-c1",
+              "leftValue": "={{ $json.allowed }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -700,
+        440
+      ],
+      "id": "95540000-0000-4000-8000-000000000049",
+      "name": "No Scan Running?"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
           "value": "funding_profile",
           "mode": "name"
         },
@@ -1281,11 +1360,45 @@
       "main": [
         [
           {
-            "node": "Load Funding Profile",
+            "node": "Read In-Flight Runs",
             "type": "main",
             "index": 0
           }
         ]
+      ]
+    },
+    "Read In-Flight Runs": {
+      "main": [
+        [
+          {
+            "node": "Guard In-Flight Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guard In-Flight Run": {
+      "main": [
+        [
+          {
+            "node": "No Scan Running?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "No Scan Running?": {
+      "main": [
+        [
+          {
+            "node": "Load Funding Profile",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
       ]
     },
     "Load Funding Profile": {

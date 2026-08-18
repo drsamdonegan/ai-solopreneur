@@ -6,6 +6,12 @@ const workflow = JSON.parse(
     "utf8",
   ),
 );
+const dailyTrigger = JSON.parse(
+  await readFile(
+    new URL("../workflows/76-trigger-daily-funding-scan.json", import.meta.url),
+    "utf8",
+  ),
+);
 const failures = [];
 const check = (condition, message) => {
   if (!condition) failures.push(message);
@@ -73,8 +79,57 @@ check(
   "funding Slack failures are not written back to the matching run",
 );
 
+const schedule = dailyTrigger.nodes.find(
+  (entry) => entry.type === "n8n-nodes-base.scheduleTrigger",
+);
+const interval = schedule?.parameters?.rule?.interval?.[0];
+check(dailyTrigger.active === false, "daily funding trigger must ship inactive");
+check(
+  interval?.field === "days" &&
+    interval?.daysInterval === 1 &&
+    interval?.triggerAtHour === 8 &&
+    interval?.triggerAtMinute === 0,
+  "daily funding trigger is not scheduled for 08:00",
+);
+check(
+  dailyTrigger.nodes.some(
+    (entry) =>
+      entry.name === "Run Funding Scan" &&
+      entry.parameters?.workflowId?.value === "phase15RunFundingScan",
+  ),
+  "daily trigger does not call the shared funding scan workflow",
+);
+
+const recentRun = runNode("Guard In-Flight Run", {
+  input: [{ runId: "already-running", status: "running", ranAt: new Date().toISOString() }],
+  nodes: { "Run Input": [{ runId: "new-run" }] },
+});
+check(
+  recentRun[0]?.allowed === false &&
+    recentRun[0]?.blockingRunId === "already-running",
+  "shared scan path did not block an in-flight run",
+);
+const staleRun = runNode("Guard In-Flight Run", {
+  input: [
+    {
+      runId: "stale-run",
+      status: "running",
+      ranAt: new Date(Date.now() - 21 * 60 * 1000).toISOString(),
+    },
+  ],
+  nodes: { "Run Input": [{ runId: "new-run" }] },
+});
+check(staleRun[0]?.allowed === true, "a stale run blocked funding forever");
+check(
+  workflow.connections?.["Run Input"]?.main?.[0]?.[0]?.node ===
+    "Read In-Flight Runs" &&
+    workflow.connections?.["No Scan Running?"]?.main?.[0]?.[0]?.node ===
+      "Load Funding Profile",
+  "concurrency guard is not in the shared run path",
+);
+
 if (failures.length > 0) {
   for (const failure of failures) console.error(`- ${failure}`);
   process.exit(1);
 }
-console.log("Funding Slack delivery checks passed.");
+console.log("Funding delivery, daily schedule, and concurrency checks passed.");
