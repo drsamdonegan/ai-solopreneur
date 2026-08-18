@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "telegram-trigger",
-  "agent": "project-manager",
+  "agent": "marketing",
   "name": "Telegram Trigger",
   "requires": [],
   "agentTools": [],
