@@ -102,7 +102,8 @@ The report tells you, in a NOTES section at the bottom. It is written to name ga
 | "N more programs are waiting to be checked" | More was found than the four-per-search verification budget. The next search picks them up. |
 | "I could not assess eligibility this morning" | The final pass failed, so the verdicts are placeholders. The programs and links are still good. |
 | The agent asks for your business details | Step 2 has not happened, or the profile has no country. |
-| "A funding search is already running" | One is in flight. It takes a few minutes; ask again shortly. |
+| "A funding search is already running" | One is in flight. It tells you how long it has been going; ask again shortly, or tell it to search again anyway. |
+| "That search never reported back" | The agent restarted while a search was working — a deploy does this. Nothing was saved. Ask for a fresh one. |
 
 A failed search still writes its run, so `What did you find?` tells you it failed rather than going quiet.
 

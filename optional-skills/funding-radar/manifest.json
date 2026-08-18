@@ -7,7 +7,7 @@
   "agentTools": [
     {
       "parameters": {
-        "description": "Goes out and searches for funding this business could apply for: grants, rebates, tax incentives, vouchers, and credit programs. Use it whenever the user asks you to look for funding, find grants, or check what is available. Start it straight away: it fills in anything it does not know with sensible starting assumptions and tells you which ones it used, so never ask the user questions before calling it. It answers immediately and the search itself takes a few minutes, so read the result back later with get_funding_report rather than waiting. It refuses to start a second search while one is running.",
+        "description": "Goes out and searches for funding this business could apply for: grants, rebates, tax incentives, vouchers, and credit programs. Use it whenever the user asks you to look for funding, find grants, or check what is available. Start it straight away: it fills in anything it does not know with sensible starting assumptions and tells you which ones it used, so never ask the user questions before calling it. It answers immediately and the search itself takes a few minutes, so read the result back later with get_funding_report rather than waiting. If a search is already running it says how long that one has been going rather than starting a second; if the user then asks you to search again anyway, call this tool again with force set to true.",
         "source": "database",
         "workflowId": {
           "__rl": true,
@@ -20,7 +20,8 @@
           "value": {
             "sessionId": "={{ $('Validate and Normalise').first().json.sessionId }}",
             "requestId": "={{ $('Validate and Normalise').first().json.requestId }}",
-            "domain": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('domain', `The business's website domain when one is known, such as mlai.au, so the search can work out what the business does. Empty string when the user has not given one.`, 'string') }}"
+            "domain": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('domain', `The business's website domain when one is known, such as mlai.au, so the search can work out what the business does. Empty string when the user has not given one.`, 'string') }}",
+            "force": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('force', `Set this to true only after the user has been told a search is already running and has asked you to search again anyway. Leave it empty every other time.`, 'string') }}"
           },
           "matchingColumns": [],
           "schema": [
@@ -45,6 +46,15 @@
             {
               "id": "domain",
               "displayName": "domain",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "force",
+              "displayName": "force",
               "required": false,
               "defaultMatch": false,
               "display": true,
@@ -383,7 +393,8 @@
   ],
   "unavailableCapabilities": [],
   "tests": [
-    "tests/chat-only-delivery.test.mjs"
+    "tests/chat-only-delivery.test.mjs",
+    "tests/run-state.test.mjs"
   ],
   "setup": "Two steps:\n  1. Run the '14 - SETUP - Funding Data' workflow once in n8n.\n  2. Tell your agent about your business in the chat, so it can save a funding profile. Searching does nothing until one exists.\nThen just ask: 'go and find funding I could apply for'.\nSee docs/FUNDING_RADAR.md for the whole walkthrough, including what it costs.",
   "folders": [
