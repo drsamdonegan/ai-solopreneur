@@ -17,6 +17,11 @@ import {
   type AgentDefinition,
 } from "./agents.js";
 import {
+  AgentSettingsStore,
+  AgentSettingsValidationError,
+} from "./agent-settings.js";
+import { buildAgentCardDefinitions } from "./skills.js";
+import {
   DocumentStore,
   DocumentStoreError,
   MAX_FILE_BYTES,
@@ -146,6 +151,9 @@ export interface ChatGatewayOptions {
   documentStore?: DocumentStore;
   chatStore?: ChatStore;
   profileStore?: ProfileStore;
+  agentSettingsStore?: AgentSettingsStore;
+  skillsDirectory?: string;
+  profileDirectory?: string;
   /**
    * Guards every route except /health. Omitted on a learner's own computer,
    * where the gateway is only reachable from that computer; required before
@@ -1334,10 +1342,21 @@ export function createChatHandler(options: ChatGatewayOptions): RequestListener 
           );
           return;
         }
-        sendJson(response, 200, {
-          schemaVersion: 1,
-          agents: publicAgentDefinitions(agents),
-        });
+        const publicAgents =
+          options.skillsDirectory !== undefined &&
+          options.profileDirectory !== undefined
+            ? await buildAgentCardDefinitions(
+                agents,
+                options.skillsDirectory,
+                options.profileDirectory,
+                (message) => options.logError?.(message),
+              )
+            : publicAgentDefinitions(agents).map((agent) => ({
+                ...agent,
+                skills: [],
+                syncRequired: true,
+              }));
+        sendJson(response, 200, { schemaVersion: 2, agents: publicAgents });
         return;
       }
 
@@ -1410,6 +1429,82 @@ export function createChatHandler(options: ChatGatewayOptions): RequestListener 
                 "Your agent details could not be saved.",
               ),
             );
+          }
+        }
+        return;
+      }
+
+      if (url.pathname === "/api/agent-settings") {
+        if (options.agentSettingsStore === undefined) {
+          sendJson(response, 503, {
+            error: {
+              code: "AGENT_UNAVAILABLE",
+              message: "Agent settings are not available.",
+            },
+          });
+          return;
+        }
+        try {
+          if (request.method === "GET") {
+            const saved = await options.agentSettingsStore.readAll();
+            sendJson(response, 200, { schemaVersion: 1, ...saved });
+            return;
+          }
+          if (request.method === "PUT") {
+            const body = await readRequestBody(request, MAX_REQUEST_BYTES);
+            if (
+              typeof body !== "object" ||
+              body === null ||
+              Array.isArray(body)
+            ) {
+              throw new AgentSettingsValidationError(
+                "Agent settings must be an object.",
+              );
+            }
+            const candidate = body as Record<string, unknown>;
+            if (typeof candidate.agentId !== "string") {
+              throw new AgentSettingsValidationError(
+                "Choose an agent before saving settings.",
+              );
+            }
+            const saved = await options.agentSettingsStore.write(
+              candidate.agentId,
+              candidate.values,
+            );
+            sendJson(response, 200, {
+              schemaVersion: 1,
+              ...saved,
+              syncRequired: true,
+            });
+            return;
+          }
+          sendJson(
+            response,
+            405,
+            {
+              error: {
+                code: "INVALID_REQUEST",
+                message: "That method is not supported.",
+              },
+            },
+            { Allow: "GET, PUT" },
+          );
+        } catch (error) {
+          if (error instanceof AgentSettingsValidationError) {
+            sendJson(response, 400, {
+              error: {
+                code: "INVALID_REQUEST",
+                message: error.message,
+              },
+            });
+          } else {
+            options.logError?.("Could not manage agent settings", error);
+            sendJson(response, 500, {
+              error: {
+                code: "AGENT_UNAVAILABLE",
+                message: "Agent settings could not be saved.",
+              },
+            });
           }
         }
         return;

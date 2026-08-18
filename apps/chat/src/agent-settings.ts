@@ -1,7 +1,7 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
-export type AgentSettingKind = "text" | "block";
+export type AgentSettingKind = "line" | "block";
 
 export interface AgentSettingFieldDefinition {
   id: string;
@@ -34,6 +34,7 @@ interface AgentSettingsFile {
 }
 
 const ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const FIELD_ID_PATTERN = /^[a-z][a-zA-Z0-9]*$/;
 
 export class AgentSettingsValidationError extends Error {}
 
@@ -53,7 +54,7 @@ function normaliseValue(
       `${field.label} must be ${field.maxLength.toLocaleString("en-GB")} characters or fewer.`,
     );
   }
-  return field.kind === "text"
+  return field.kind === "line"
     ? normalised.replace(/\s*\n+\s*/g, " ")
     : normalised;
 }
@@ -110,10 +111,10 @@ export class AgentSettingsStore {
       const fieldIds = new Set<string>();
       for (const field of definition.fields) {
         if (
-          !ID_PATTERN.test(field.id) ||
+          !FIELD_ID_PATTERN.test(field.id) ||
           fieldIds.has(field.id) ||
           field.label.trim().length === 0 ||
-          (field.kind !== "text" && field.kind !== "block") ||
+          (field.kind !== "line" && field.kind !== "block") ||
           !Number.isSafeInteger(field.maxLength) ||
           field.maxLength < 1 ||
           field.maxLength > 4_000
@@ -148,6 +149,22 @@ export class AgentSettingsStore {
       values,
       updatedAt: typeof stored?.updatedAt === "string" ? stored.updatedAt : "",
     };
+  }
+
+  async readAll(): Promise<{
+    settings: Record<string, Record<string, string>>;
+    updatedAt: string;
+  }> {
+    const settings: Record<string, Record<string, string>> = {};
+    let updatedAt = "";
+    for (const agentId of this.#definitions.keys()) {
+      const record = await this.read(agentId);
+      settings[agentId] = record.values;
+      if (record.updatedAt > updatedAt) {
+        updatedAt = record.updatedAt;
+      }
+    }
+    return { settings, updatedAt };
   }
 
   async write(

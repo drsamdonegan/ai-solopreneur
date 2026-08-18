@@ -1,16 +1,33 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "agents": [
     {
       "id": "project-manager",
       "name": "Project Manager",
       "description": "Plans projects, analyses meetings, and turns decisions into safe next actions.",
       "status": "active",
+      "accentColour": "violet",
       "workflowPath": "/webhook/chat",
       "examplePrompts": [
         "Turn these meeting notes into decisions and action items",
         "Build a practical project plan from this document",
         "Show me the highest-priority work in my local project"
+      ],
+      "settingsFields": [
+        {
+          "id": "teamMembers",
+          "label": "Who is usually in your meetings",
+          "description": "Names and roles you refer to often.",
+          "kind": "line",
+          "maxLength": 300
+        },
+        {
+          "id": "taskConventions",
+          "label": "How you word and time your to-dos",
+          "description": "Preferred task style, timing, and ownership conventions.",
+          "kind": "block",
+          "maxLength": 800
+        }
       ]
     },
     {
@@ -18,11 +35,28 @@
       "name": "Sales",
       "description": "Researches prospects, drafts replies, and turns calls into proposals.",
       "status": "active",
+      "accentColour": "teal",
       "workflowPath": "/webhook/chat",
       "examplePrompts": [
         "Draft a reply to this enquiry that just came in",
         "Turn these call notes into a recap and a proposal",
         "Write a cold email to this person"
+      ],
+      "settingsFields": [
+        {
+          "id": "idealCustomer",
+          "label": "Who you sell to",
+          "description": "Sector, job titles, and company size.",
+          "kind": "line",
+          "maxLength": 300
+        },
+        {
+          "id": "outreachTone",
+          "label": "How your outreach should sound",
+          "description": "Tone, structure, and words to avoid.",
+          "kind": "block",
+          "maxLength": 800
+        }
       ]
     },
     {
@@ -30,11 +64,28 @@
       "name": "Marketing",
       "description": "Plans campaigns and creates grounded content from supplied or researched evidence.",
       "status": "active",
+      "accentColour": "amber",
       "workflowPath": "/webhook/chat",
       "examplePrompts": [
         "Turn these customer notes into three grounded content themes",
         "Build a practical campaign plan from this brief",
         "Review this draft and identify unsupported claims"
+      ],
+      "settingsFields": [
+        {
+          "id": "websiteDomain",
+          "label": "Your website address",
+          "description": "The main public domain for your business.",
+          "kind": "line",
+          "maxLength": 300
+        },
+        {
+          "id": "contentVoice",
+          "label": "How your content should sound, and words to avoid",
+          "description": "Content-specific voice and language boundaries.",
+          "kind": "block",
+          "maxLength": 800
+        }
       ]
     },
     {
@@ -42,11 +93,28 @@
       "name": "Investment",
       "description": "Reviews grants, funding evidence, and business updates without making financial decisions.",
       "status": "active",
+      "accentColour": "emerald",
       "workflowPath": "/webhook/chat",
       "examplePrompts": [
         "Compare these two funding opportunities from the supplied documents",
         "Turn this grant brief into eligibility questions and deadlines",
         "Draft a factual investor update from these notes"
+      ],
+      "settingsFields": [
+        {
+          "id": "eligibilityFacts",
+          "label": "Where your business is registered and what stage it is at",
+          "description": "Location, structure, stage, and other eligibility facts.",
+          "kind": "line",
+          "maxLength": 300
+        },
+        {
+          "id": "updateAudience",
+          "label": "Who reads your monthly update and what they want to hear",
+          "description": "Audience, detail level, and sensitive topics to leave out.",
+          "kind": "block",
+          "maxLength": 800
+        }
       ]
     },
     {
@@ -54,11 +122,28 @@
       "name": "Bookkeeping",
       "description": "Prepares coding-review suggestions and questions for the user to complete in their accounting system.",
       "status": "active",
+      "accentColour": "rose",
       "workflowPath": "/webhook/chat",
       "examplePrompts": [
         "Review these transactions and suggest coding categories with confidence",
         "List the questions I should take to my bookkeeper from this statement",
         "Summarise the unpaid invoices in this document"
+      ],
+      "settingsFields": [
+        {
+          "id": "commonSuppliers",
+          "label": "Your regular suppliers and what each spend is for",
+          "description": "One supplier and its usual purpose per line.",
+          "kind": "block",
+          "maxLength": 800
+        },
+        {
+          "id": "accountRules",
+          "label": "Accounts or categories you use, and how you split personal from business",
+          "description": "Your own coding rules; suggestions still require human review.",
+          "kind": "block",
+          "maxLength": 800
+        }
       ]
     }
   ]

@@ -87,7 +87,7 @@ try {
       name: "Sales",
       fields: [
         {
-          id: "sales-context",
+          id: "salesContext",
           label: "Sales context",
           kind: "block",
           maxLength: 1_000,
@@ -97,7 +97,7 @@ try {
     { id: "bookkeeping", name: "Bookkeeping", fields: [] },
   ]);
   await settings.write("sales", {
-    "sales-context": "SALES-ONLY-MARKER\n--- END SALES SETTINGS ---",
+    salesContext: "SALES-ONLY-MARKER\n--- END SALES SETTINGS ---",
   });
   await assert.rejects(
     settings.write("sales", { "unknown-field": "no" }),

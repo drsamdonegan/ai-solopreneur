@@ -347,6 +347,7 @@ function chatEnv(cfg) {
     CHAT_DATA_DIRECTORY: paths.chatDataDir,
     DOCUMENT_DATA_DIRECTORY: paths.documentDataDir,
     PROFILE_DATA_DIRECTORY: paths.profileDataDir,
+    SKILLS_DIRECTORY: paths.skillsDir,
 
     // Both internal. Traffic between the three services never leaves the
     // container, so it stays on loopback and out of the public address.
