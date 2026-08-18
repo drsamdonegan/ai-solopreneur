@@ -23,6 +23,11 @@
 import { readFile, writeFile, readdir, mkdir, copyFile, access, rm } from "node:fs/promises";
 import { dirname, join, resolve, relative } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  AGENT_IDS,
+  parseSkillMetadata,
+} from "../../scripts/compile-skills.mjs";
+import { AGENT_NODE_BY_ID } from "../../scripts/agent-runtime-contract.mjs";
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const optionalSkillsDirectory = join(projectRoot, "optional-skills");
@@ -36,7 +41,6 @@ const policyPath = join(projectRoot, "tools", "policy.json");
 const folderManifestPath = join(projectRoot, "n8n", "folders.manifest.json");
 const enabledPath = join(projectRoot, "skills", "enabled.txt");
 
-const AGENT_NODE = "Project Partner Agent";
 const CONTEXT_NODE = "Build Agent Context";
 // Optional tool nodes sit on their own row under the core task tools.
 const TOOL_ROW_Y = 680;
@@ -101,7 +105,11 @@ function nextToolPosition(workflow) {
   return [nextX, TOOL_ROW_Y];
 }
 
-function addToolNode(workflow, toolNode) {
+function addToolNode(workflow, toolNode, agentId) {
+  const agentNode = AGENT_NODE_BY_ID[agentId];
+  if (!agentNode || !workflow.nodes.some((node) => node.name === agentNode)) {
+    throw new Error(`The agent workflow has no reviewed route for "${agentId}".`);
+  }
   if (workflow.nodes.some((node) => node.name === toolNode.name)) {
     note(skipped, `Agent tool "${toolNode.name}" is already wired in`);
     return;
@@ -109,19 +117,23 @@ function addToolNode(workflow, toolNode) {
 
   workflow.nodes.push({ ...toolNode, position: nextToolPosition(workflow) });
   workflow.connections[toolNode.name] = {
-    ai_tool: [[{ node: AGENT_NODE, type: "ai_tool", index: 0 }]],
+    ai_tool: [[{ node: agentNode, type: "ai_tool", index: 0 }]],
   };
-  note(done, `Wired the "${toolNode.name}" tool into the agent`);
+  note(done, `Wired the "${toolNode.name}" tool into ${agentNode}`);
 }
 
-// The base agent instructions live as a template string inside the
-// "Build Agent Context" code node. New tool rules go immediately before the
-// line listing what the agent can never do, so that line stays last.
-const UNAVAILABLE_ANCHOR = "- Delete, archive, bulk changes,";
+function toolRuleAnchor(agentId) {
+  return `/* INSTALL ${agentId} TOOL RULES */`;
+}
 
 function patchBasePolicy(
   workflow,
-  { policyRules = [], unavailableCapabilities = [], policyReplacements = [] },
+  {
+    agent,
+    policyRules = [],
+    unavailableCapabilities = [],
+    policyReplacements = [],
+  },
 ) {
   if (
     policyRules.length === 0 &&
@@ -137,6 +149,13 @@ function patchBasePolicy(
   }
 
   let code = contextNode.parameters.jsCode;
+  const anchor = toolRuleAnchor(agent);
+  if (!code.includes(anchor)) {
+    throw new Error(
+      `Could not find the reviewed tool-policy anchor for "${agent}". ` +
+        "Re-import the current base workflow before adding this skill.",
+    );
+  }
 
   for (const replacement of policyReplacements) {
     if (code.includes(replacement.replace)) {
@@ -152,40 +171,20 @@ function patchBasePolicy(
     note(done, "Broadened a base instruction to cover this skill");
   }
 
-  for (const rule of policyRules) {
-    // basePolicy is a template literal, so a backtick would end it early.
-    const encoded = rule.replace(/\\/g, "\\\\").replace(/`/g, "\\`");
+  const scopedRules = [
+    ...policyRules,
+    ...unavailableCapabilities.map(
+      (capability) => `- ${capability} is unavailable for this role.`,
+    ),
+  ];
+  for (const rule of scopedRules) {
+    const encoded = JSON.stringify(rule);
     if (code.includes(encoded)) {
-      note(skipped, "A tool rule was already in the agent instructions");
+      note(skipped, `A ${agent} tool rule was already in the agent instructions`);
       continue;
     }
-    const anchorIndex = code.indexOf(UNAVAILABLE_ANCHOR);
-    if (anchorIndex === -1) {
-      throw new Error(
-        "Could not find the capability line in the base agent instructions.",
-      );
-    }
-    code = `${code.slice(0, anchorIndex)}${encoded}\n${code.slice(anchorIndex)}`;
-    note(done, "Added a tool rule to the agent instructions");
-  }
-
-  for (const capability of unavailableCapabilities) {
-    const anchorIndex = code.indexOf(UNAVAILABLE_ANCHOR);
-    const lineEnd = code.indexOf("\n", anchorIndex);
-    const line = code.slice(anchorIndex, lineEnd);
-    if (line.includes(capability)) {
-      note(skipped, `"${capability}" is already listed as unavailable`);
-      continue;
-    }
-    const updated = line.replace(
-      ", SQL, shell, and filesystem capabilities are unavailable.",
-      `, ${capability}, SQL, shell, and filesystem capabilities are unavailable.`,
-    );
-    if (updated === line) {
-      throw new Error("Could not extend the list of unavailable capabilities.");
-    }
-    code = code.slice(0, anchorIndex) + updated + code.slice(lineEnd);
-    note(done, `Listed "${capability}" as unavailable`);
+    code = code.replace(anchor, `${encoded},\n      ${anchor}`);
+    note(done, `Added a ${agent} tool rule to the agent instructions`);
   }
 
   contextNode.parameters.jsCode = code;
@@ -380,6 +379,26 @@ async function addSkill(id) {
   }
 
   const manifest = await readJson(join(skillDirectory, "manifest.json"));
+  if (
+    manifest.id !== id ||
+    !AGENT_IDS.includes(manifest.agent) ||
+    typeof manifest.name !== "string"
+  ) {
+    throw new Error(
+      `optional-skills/${id}/manifest.json has an invalid id, name, or agent.`,
+    );
+  }
+  const metadataPath = join(skillDirectory, "skill", "skill.yaml");
+  const metadata = parseSkillMetadata(
+    await readFile(metadataPath, "utf8"),
+    metadataPath,
+  );
+  if (metadata.id !== id || metadata.agent !== manifest.agent) {
+    throw new Error(
+      `The manifest assigns "${id}" to ${manifest.agent}, but skill.yaml ` +
+        `declares ${metadata.id} for ${metadata.agent}.`,
+    );
+  }
 
   for (const required of manifest.requires ?? []) {
     if (!(await exists(join(projectRoot, "skills", required)))) {
@@ -388,6 +407,23 @@ async function addSkill(id) {
           `Run: node optional-skills/_installer/add-skill.mjs ${required}`,
       );
     }
+  }
+
+  // Validate and prepare every shared-file edit before copying anything. An
+  // old base workflow therefore fails cleanly instead of leaving half a skill.
+  const workflow = await readJson(agentWorkflowPath);
+  for (const toolNode of manifest.agentTools ?? []) {
+    addToolNode(workflow, toolNode, manifest.agent);
+  }
+  patchBasePolicy(workflow, manifest);
+
+  const policy = await readJson(policyPath);
+  addPolicyEntries(policy, manifest.policyEntries ?? []);
+
+  let folderManifest = null;
+  if ((manifest.folders ?? []).length > 0) {
+    folderManifest = await readJson(folderManifestPath);
+    addFolderPlacements(folderManifest, manifest.folders);
   }
 
   // 1. The skill's own files.
@@ -399,24 +435,12 @@ async function addSkill(id) {
     await copyTree(workflowsDirectory, join(projectRoot, "n8n", "workflows"));
   }
 
-  // 3. The four shared files.
-  const workflow = await readJson(agentWorkflowPath);
-  for (const toolNode of manifest.agentTools ?? []) {
-    addToolNode(workflow, toolNode);
-  }
-  patchBasePolicy(workflow, manifest);
+  // 3. The four shared files, already validated in memory above.
   await writeJson(agentWorkflowPath, workflow);
-
-  const policy = await readJson(policyPath);
-  addPolicyEntries(policy, manifest.policyEntries ?? []);
   await writeJson(policyPath, policy);
-
-  if ((manifest.folders ?? []).length > 0) {
-    const folderManifest = await readJson(folderManifestPath);
-    addFolderPlacements(folderManifest, manifest.folders);
+  if (folderManifest !== null) {
     await writeJson(folderManifestPath, folderManifest);
   }
-
   await enableSkill(id);
 
   return manifest;
@@ -451,7 +475,9 @@ try {
 } catch (error) {
   // A learner should see the problem, not a stack trace.
   process.stderr.write(`\nCould not add "${requested}".\n\n${error.message}\n\n`);
-  process.stderr.write("Nothing else was changed. Fix the above and run it again.\n");
+  process.stderr.write(
+    "Some earlier steps may already be in place. Fix the problem and run the same command again; installation is idempotent.\n",
+  );
   process.exit(1);
 }
 

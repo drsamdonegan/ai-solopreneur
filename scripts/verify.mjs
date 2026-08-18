@@ -62,6 +62,10 @@ async function declaredOptionalTests() {
 }
 
 run("workflow validation", process.execPath, ["scripts/validate-workflows.mjs"]);
+run("agent runtime isolation", process.execPath, ["scripts/test-agent-runtime.mjs"]);
+run("agent-aware optional installer", process.execPath, [
+  "scripts/test-optional-installer.mjs",
+]);
 run("release validation", process.execPath, ["scripts/validate-release.mjs"]);
 run("skill compilation", process.execPath, ["scripts/compile-skills.mjs"]);
 

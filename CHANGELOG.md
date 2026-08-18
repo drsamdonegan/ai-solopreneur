@@ -19,6 +19,11 @@ versioning for local workshop releases.
 
 ### Changed
 
+- Agent selection now changes both prompt context and physical tool
+  connections for Project Manager, Sales, Marketing, Investment, and
+  Bookkeeping. Existing installations must re-import workflows `00` and `11`,
+  then run skill sync; skill sync alone cannot replace the old single-agent
+  graph.
 - Monthly Update and Funding Radar now use an explicitly named outbound-only
   Slack bot credential. Existing learners who already imported either run
   workflow must delete and re-import that workflow, then select the credential

@@ -25,13 +25,15 @@ The reusable pieces are:
 - `skills` — small Markdown behaviour modules;
 - `n8n/workflows` — visual orchestration and reviewed tool connections.
 
-Project Manager is the only active agent. Sales, Marketing, Investment, and
-Bookkeeping are intentionally disabled placeholders in the sidebar.
+Project Manager, Sales, Marketing, Investment, and Bookkeeping are active. They
+share one validated webhook, but the n8n Switch sends each request to a separate
+AI Agent node. Tools are physically connected only to their owning role.
 
-## Add a skill to Project Manager
+## Add a skill to an agent
 
 1. Copy an existing directory below `skills`.
-2. Give the new directory and `skill.yaml` the same lowercase kebab-case ID.
+2. Give the new directory and `skill.yaml` the same lowercase kebab-case ID,
+   and set its reviewed `agent` owner.
 3. Write focused instructions in `SKILL.md`.
 4. Add the ID to `skills/enabled.txt`.
 5. Run `sync-skills.command` on macOS or `sync-skills-windows.cmd` on Windows.
@@ -40,25 +42,26 @@ Bookkeeping are intentionally disabled placeholders in the sidebar.
 The compiler validates metadata, agent ownership, size, duplicate IDs, and each
 agent's instruction limit before n8n receives anything.
 
-## Activate a future agent
+## Add a sixth agent
 
 This is a technical-contributor task. Do not activate a sidebar button until
 its workflow and safety tests are ready.
 
-1. Export a new n8n workflow into `n8n/workflows`.
-2. Give it a unique production webhook, for example `/webhook/sales-chat`.
+1. Extend the five-ID allow-lists in the compiler, workflow validator, runtime
+   contract, and chat registry as one atomic change.
+2. Add one new AI Agent node and Switch output in workflow `00`.
 3. Apply the same request validation, document boundaries, response contract,
-   timeout, and credential rules used by workflow `00`.
-4. Connect only reviewed tools. Reads may be automatic; consequential writes
+   timeout, and credential rules used by the existing five routes.
+4. Connect only that role's reviewed tools. Reads may be automatic; consequential writes
    need an explicit proposal and confirmation design.
 5. Assign every skill to an agent in `skill.yaml`. The schema-v2 bundle keeps
    all five validated groups in one stable `agent_config` row, and the runtime
    selects only the current agent's group.
-6. In `apps/chat/config/agents.json`, set that agent's `workflowPath` and change
-   `status` from `coming-soon` to `active`.
+6. Add the public definition to `apps/chat/config/agents.json` and both safe
+   fallback registries.
 7. Run `node scripts/validate-workflows.mjs`, then manually exercise valid,
    invalid, timeout, and safe-write paths in a throwaway local project.
-8. Restart with `./scripts/run-local.sh restart`.
+8. Restart with `npm run restart`.
 9. Verify the new button starts an isolated conversation and reaches only its
    intended webhook.
 

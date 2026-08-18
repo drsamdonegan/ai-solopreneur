@@ -26,30 +26,46 @@
     {
       id: "sales",
       name: "Sales",
-      description: "Sales research, preparation, and follow-up workflows.",
-      status: "coming-soon",
-      examplePrompts: [],
+      description: "Researches prospects, drafts replies, and turns calls into proposals.",
+      status: "active",
+      examplePrompts: [
+        "Draft a reply to this enquiry that just came in",
+        "Turn these call notes into a recap and a proposal",
+        "Write a cold email to this person",
+      ],
     },
     {
       id: "marketing",
       name: "Marketing",
-      description: "Campaign planning, content, and marketing operations.",
-      status: "coming-soon",
-      examplePrompts: [],
+      description: "Plans campaigns and creates grounded content from supplied or researched evidence.",
+      status: "active",
+      examplePrompts: [
+        "Turn these customer notes into three grounded content themes",
+        "Build a practical campaign plan from this brief",
+        "Review this draft and identify unsupported claims",
+      ],
     },
     {
       id: "investment",
       name: "Investment",
-      description: "Investment research, analysis, and decision preparation.",
-      status: "coming-soon",
-      examplePrompts: [],
+      description: "Reviews grants, funding evidence, and business updates without making financial decisions.",
+      status: "active",
+      examplePrompts: [
+        "Compare these two funding opportunities from the supplied documents",
+        "Turn this grant brief into eligibility questions and deadlines",
+        "Draft a factual investor update from these notes",
+      ],
     },
     {
       id: "bookkeeping",
       name: "Bookkeeping",
-      description: "Bookkeeping preparation, review, and reconciliation support.",
-      status: "coming-soon",
-      examplePrompts: [],
+      description: "Prepares coding-review suggestions and questions for the user to complete in their accounting system.",
+      status: "active",
+      examplePrompts: [
+        "Review these transactions and suggest coding categories with confidence",
+        "List the questions I should take to my bookkeeper from this statement",
+        "Summarise the unpaid invoices in this document",
+      ],
     },
   ];
   const STORAGE_KEY = "ai-solopreneur-chat-session";

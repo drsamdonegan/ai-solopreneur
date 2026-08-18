@@ -28,26 +28,38 @@
     {
       "id": "marketing",
       "name": "Marketing",
-      "description": "Campaign planning, content, and marketing operations.",
-      "status": "coming-soon",
-      "workflowPath": "",
-      "examplePrompts": []
+      "description": "Plans campaigns and creates grounded content from supplied or researched evidence.",
+      "status": "active",
+      "workflowPath": "/webhook/chat",
+      "examplePrompts": [
+        "Turn these customer notes into three grounded content themes",
+        "Build a practical campaign plan from this brief",
+        "Review this draft and identify unsupported claims"
+      ]
     },
     {
       "id": "investment",
       "name": "Investment",
-      "description": "Investment research, analysis, and decision preparation.",
-      "status": "coming-soon",
-      "workflowPath": "",
-      "examplePrompts": []
+      "description": "Reviews grants, funding evidence, and business updates without making financial decisions.",
+      "status": "active",
+      "workflowPath": "/webhook/chat",
+      "examplePrompts": [
+        "Compare these two funding opportunities from the supplied documents",
+        "Turn this grant brief into eligibility questions and deadlines",
+        "Draft a factual investor update from these notes"
+      ]
     },
     {
       "id": "bookkeeping",
       "name": "Bookkeeping",
-      "description": "Bookkeeping preparation, review, and reconciliation support.",
-      "status": "coming-soon",
-      "workflowPath": "",
-      "examplePrompts": []
+      "description": "Prepares coding-review suggestions and questions for the user to complete in their accounting system.",
+      "status": "active",
+      "workflowPath": "/webhook/chat",
+      "examplePrompts": [
+        "Review these transactions and suggest coding categories with confidence",
+        "List the questions I should take to my bookkeeper from this statement",
+        "Summarise the unpaid invoices in this document"
+      ]
     }
   ]
 }

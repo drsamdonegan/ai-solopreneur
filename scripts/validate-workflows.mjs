@@ -2,7 +2,12 @@ import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readFolderManifest } from "./apply-workflow-folders.mjs";
-import { compileSkills } from "./compile-skills.mjs";
+import { AGENT_IDS, compileSkills } from "./compile-skills.mjs";
+import {
+  AGENT_NODE_NAMES,
+  validateAgentRouting,
+  validateAgentToolScopes,
+} from "./agent-runtime-contract.mjs";
 
 const projectRoot = fileURLToPath(new URL("..", import.meta.url));
 const workflowDirectory = join(projectRoot, "n8n", "workflows");
@@ -38,7 +43,7 @@ const basePolicyTuples = [
   ["update_task_status", "write", "confirmation_required"],
 ];
 // Non-sticky nodes in the base agent workflow. Each installed tool adds one.
-const baseAgentNodeCount = 16;
+const baseAgentNodeCount = 21;
 
 async function readOptionalSkills() {
   const optionalRoot = join(projectRoot, "optional-skills");
@@ -109,6 +114,14 @@ const optionalInstructionText = installedSkills.flatMap((skill) => [
   ...(skill.policyRules ?? []),
   ...(skill.policyReplacements ?? []).map((replacement) => replacement.replace),
 ]);
+const toolOwnership = new Map(
+  baseToolNames.map((toolName) => [toolName, "project-manager"]),
+);
+for (const skill of installedSkills) {
+  for (const tool of skill.agentTools ?? []) {
+    toolOwnership.set(tool.name, skill.agent);
+  }
+}
 
 const expectedFiles = [...baseFiles, ...optionalWorkflowFiles].sort();
 const failures = [];
@@ -331,7 +344,7 @@ if (agentWorkflow) {
     "Validation: document count and text-size limits are missing",
   );
   check(
-    /\[\s*'project-manager',\s*'sales'\s*\]\.includes\(agentId\)/.test(
+    /\[\s*'project-manager',\s*'sales',\s*'marketing',\s*'investment',\s*'bookkeeping'\s*\]\.includes\(agentId\)/.test(
       validationCode,
     ),
     "Validation: active agent allow-list check is missing",
@@ -359,33 +372,30 @@ if (agentWorkflow) {
     "Validation false branch must lead to the safe error response",
   );
 
-  const agent = nodeByName(agentWorkflow, "Project Partner Agent");
-  check(
-    agent?.type === "@n8n/n8n-nodes-langchain.agent" &&
-      agent?.typeVersion === 3.1,
-    "Agent: expected AI Agent 3.1",
-  );
-  check(agent?.parameters?.promptType === "define", "Agent: prompt must be explicit");
-  check(
-    agent?.parameters?.text === "={{ $json.message }}",
-    "Agent: must use only the normalised message",
-  );
-  check(
-    agent?.parameters?.options?.systemMessage === "={{ $json.systemMessage }}",
-    "Agent: system instructions must come from the validated context builder",
-  );
-  check(
-    agent?.parameters?.options?.maxIterations === 4,
-    "Agent: maxIterations must remain 4",
-  );
-  check(
-    agent?.parameters?.options?.enableStreaming === false,
-    "Agent: streaming must remain disabled for the synchronous contract",
-  );
-  check(
-    agent?.parameters?.options?.returnIntermediateSteps === false,
-    "Agent: intermediate steps must not be returned",
-  );
+  for (const agentName of AGENT_NODE_NAMES) {
+    const agent = nodeByName(agentWorkflow, agentName);
+    check(
+      agent?.type === "@n8n/n8n-nodes-langchain.agent" &&
+        agent?.typeVersion === 3.1,
+      `Agent: ${agentName} must use AI Agent 3.1`,
+    );
+    check(
+      agent?.parameters?.promptType === "define" &&
+        agent?.parameters?.text === "={{ $json.message }}" &&
+        agent?.parameters?.options?.systemMessage ===
+          "={{ $json.systemMessage }}",
+      `Agent: ${agentName} must use only validated message and system context`,
+    );
+    check(
+      agent?.parameters?.options?.maxIterations === 4 &&
+        agent?.parameters?.options?.enableStreaming === false &&
+        agent?.parameters?.options?.returnIntermediateSteps === false,
+      `Agent: ${agentName} must retain the reviewed cost and response limits`,
+    );
+  }
+  for (const failure of validateAgentRouting(agentWorkflow)) {
+    check(false, `Agent routing: ${failure}`);
+  }
 
   const model = nodeByName(agentWorkflow, "Claude - Sonnet 4.6");
   check(
@@ -401,10 +411,15 @@ if (agentWorkflow) {
     model?.parameters?.options?.maxTokensToSample === 2200,
     "Claude model: output token ceiling must remain 2,200",
   );
+  const modelTargets = connectionTargets(
+    agentWorkflow,
+    "Claude - Sonnet 4.6",
+    "ai_languageModel",
+    0,
+  ).sort();
   check(
-    connectionTargets(agentWorkflow, "Claude - Sonnet 4.6", "ai_languageModel", 0)
-      .includes("Project Partner Agent"),
-    "Claude model must be connected to the agent",
+    JSON.stringify(modelTargets) === JSON.stringify([...AGENT_NODE_NAMES].sort()),
+    "Claude model must be connected to all five and only the five reviewed agents",
   );
 
   const memory = agentWorkflow.nodes.find(
@@ -436,7 +451,7 @@ if (agentWorkflow) {
   );
   check(
     connectionTargets(agentWorkflow, "list_tasks", "ai_tool", 0).includes(
-      "Project Partner Agent",
+      "Project Manager Agent",
     ),
     "Agent: list_tasks must be connected as an AI tool",
   );
@@ -460,8 +475,11 @@ if (agentWorkflow) {
   );
   check(
     optionalToolNames.every((name) => connectedToolNames.includes(name)),
-    "Agent: every tool from an installed skill must be wired to the agent",
+    "Agent: every tool from an installed skill must be wired to its agent",
   );
+  for (const failure of validateAgentToolScopes(agentWorkflow, toolOwnership)) {
+    check(false, `Agent tool scope: ${failure}`);
+  }
 
   const createTool = nodeByName(agentWorkflow, "create_task");
   check(
@@ -1766,6 +1784,16 @@ const installedSkillIds = installedSkills.map((skill) => skill.id);
 
 const skillBundle = await compileSkills(join(projectRoot, "skills"));
 const enabledSkillIds = skillBundle.enabledSkills.map((skill) => skill.id);
+for (const installed of installedSkills) {
+  const compiled = skillBundle.enabledSkills.find(
+    (skill) => skill.id === installed.id,
+  );
+  check(
+    AGENT_IDS.includes(installed.agent) &&
+      compiled?.agent === installed.agent,
+    `Installed skill ${installed.id} must declare the same reviewed agent in manifest.json and skill.yaml`,
+  );
+}
 check(
   baseSkillIds.every((id) => enabledSkillIds.includes(id)),
   "Enabled skill list must contain the base Project Manager skills",
@@ -1778,13 +1806,7 @@ check(
   "Enabled skill list must contain only base or installed optional skills" +
     (unreviewedSkills.length > 0 ? ` (unexpected: ${unreviewedSkills.join(", ")})` : ""),
 );
-const expectedAgentIds = [
-  "project-manager",
-  "sales",
-  "marketing",
-  "investment",
-  "bookkeeping",
-];
+const expectedAgentIds = AGENT_IDS;
 check(
   skillBundle.schemaVersion === 2 &&
     JSON.stringify(Object.keys(skillBundle.agents)) ===

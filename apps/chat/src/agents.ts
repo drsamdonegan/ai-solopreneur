@@ -33,6 +33,57 @@ export const DEFAULT_AGENTS: readonly AgentDefinition[] = Object.freeze([
       "Show me the highest-priority work in my local project",
     ],
   },
+  {
+    id: "sales",
+    name: "Sales",
+    description: "Researches prospects, drafts replies, and turns calls into proposals.",
+    status: "active",
+    workflowPath: "/webhook/chat",
+    examplePrompts: [
+      "Draft a reply to this enquiry that just came in",
+      "Turn these call notes into a recap and a proposal",
+      "Write a cold email to this person",
+    ],
+  },
+  {
+    id: "marketing",
+    name: "Marketing",
+    description:
+      "Plans campaigns and creates grounded content from supplied or researched evidence.",
+    status: "active",
+    workflowPath: "/webhook/chat",
+    examplePrompts: [
+      "Turn these customer notes into three grounded content themes",
+      "Build a practical campaign plan from this brief",
+      "Review this draft and identify unsupported claims",
+    ],
+  },
+  {
+    id: "investment",
+    name: "Investment",
+    description:
+      "Reviews grants, funding evidence, and business updates without making financial decisions.",
+    status: "active",
+    workflowPath: "/webhook/chat",
+    examplePrompts: [
+      "Compare these two funding opportunities from the supplied documents",
+      "Turn this grant brief into eligibility questions and deadlines",
+      "Draft a factual investor update from these notes",
+    ],
+  },
+  {
+    id: "bookkeeping",
+    name: "Bookkeeping",
+    description:
+      "Prepares coding-review suggestions and questions for the user to complete in their accounting system.",
+    status: "active",
+    workflowPath: "/webhook/chat",
+    examplePrompts: [
+      "Review these transactions and suggest coding categories with confidence",
+      "List the questions I should take to my bookkeeper from this statement",
+      "Summarise the unpaid invoices in this document",
+    ],
+  },
 ]);
 
 function isAgentDefinition(value: unknown): value is AgentDefinition {

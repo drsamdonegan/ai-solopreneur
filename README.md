@@ -217,13 +217,13 @@ Reset asks you to type `RESET`. The [operations and recovery guide](docs/LOCAL_O
 - A checksum-verified Node.js 24.18.0 and npm 11.16.0 bootstrap for macOS and Windows, stored only inside `.runtime/` when the computer needs it.
 - The exact pinned n8n release, installed with npm and kept in this project's folder.
 - A TypeScript chat gateway, custom browser interface, and isolated document reader.
-- Twenty-three reviewed n8n workflows, including the visual learner checklist, separate free and paid domain-research paths, and the background SEO article writer.
+- Eleven reviewed base n8n workflows, plus self-contained optional-skill workflows installed only when needed.
 - Durable local SQLite chat history with browsing, full-text search, rename,
   deletion, and restart-safe bounded conversation memory.
 - Four local Data Tables for tasks, audits, pending confirmations, and enabled skills.
-- Editable Markdown skills, including grounded meeting analysis, paid DataForSEO domain research, its free fallback, and SEO article drafting.
-- A central agent registry with Project Manager active and Sales, Marketing,
-  Investment, and Bookkeeping shown as coming soon.
+- Four editable base Markdown skills, with a six-skill optional catalogue.
+- A central registry with Project Manager, Sales, Marketing, Investment, and
+  Bookkeeping active; prompts and tool connections are isolated by role.
 - Local extraction for searchable PDFs, DOCX, TXT, and pasted text.
 - Automatic reads and exact, expiring, single-use confirmation for writes.
 - Local diagnostics, backup, restore, reset, import, export, and skill-sync helpers.

@@ -110,8 +110,9 @@ Open `00 - START HERE - Project Partner`. The sticky notes describe the read, pr
 | **Request Is Valid?** | Ensures only the valid branch can reach the agent |
 | **Route Confirmation** | Recognises only a complete `CONFIRM XXXXXXXX` message |
 | **Load Enabled Skills** | Reads the bundle compiled from `skills/enabled.txt` |
-| **Build Agent Context** | Separates saved history, the current instruction, documents, and enabled skills |
-| **Project Partner Agent** | Runs the Project Manager instructions and controls the number of model steps |
+| **Build Agent Context** | Selects only the requested role's policy, skills, settings, saved history, current instruction, and documents |
+| **Route Selected Agent** | Sends the request to exactly one of five role-specific AI Agent nodes |
+| **Five role agents** | Keep Project Manager, Sales, Marketing, Investment, and Bookkeeping tool connections structurally separate |
 | **Claude - Sonnet 4.6** | Calls Claude using the n8n credential |
 | **list_tasks** | Retrieves task facts through the reviewed read-only subworkflow |
 | **create_task** | Validates and stores a five-minute create proposal without changing tasks |
@@ -189,7 +190,8 @@ flowchart LR
     Gateway --> Validate["n8n validation"]
     Validate --> Route{"Exact confirmation?"}
     Route -- No --> Skills["Enabled skills"]
-    Skills --> Agent["Project Partner Agent"]
+    Skills --> Switch{"Selected role"}
+    Switch --> Agent["One role-specific agent"]
     Model["Claude Sonnet 4.6"] -. model .-> Agent
     Validate -. saved conversation context .-> Agent
     Tasks["Read-only list_tasks tool"] -. local facts .-> Agent
