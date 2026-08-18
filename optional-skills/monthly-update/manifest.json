@@ -1,6 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "monthly-update",
+  "agent": "investment",
   "name": "Monthly Update",
   "requires": [],
   "tests": [

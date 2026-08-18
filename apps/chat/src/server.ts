@@ -46,9 +46,6 @@ const chatDataDirectory =
 const profileDataDirectory =
   process.env.PROFILE_DATA_DIRECTORY ??
   fileURLToPath(new URL("../../../data/profile", import.meta.url));
-const myBusinessSkillDirectory =
-  process.env.MY_BUSINESS_SKILL_DIRECTORY ??
-  fileURLToPath(new URL("../../../skills/my-business", import.meta.url));
 
 try {
   new URL(upstreamUrl);
@@ -87,10 +84,7 @@ const documentStore = new DocumentStore(
 );
 await documentStore.cleanupExpired();
 const chatStore = new ChatStore(join(chatDataDirectory, "chat.sqlite"));
-const profileStore = new ProfileStore(
-  profileDataDirectory,
-  myBusinessSkillDirectory,
-);
+const profileStore = new ProfileStore(profileDataDirectory);
 
 const server = createChatServer({
   accessGate,

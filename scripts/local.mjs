@@ -34,6 +34,7 @@ import net from "node:net";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
+import { writeSkillSyncState } from "./skill-sync-state.mjs";
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const isWindows = process.platform === "win32";
@@ -73,6 +74,7 @@ const paths = {
   agentRegistry: join(projectRoot, "apps", "chat", "config", "agents.json"),
   chatDataDir: join(projectRoot, "data", "chat"),
   chatDatabase: join(projectRoot, "data", "chat", "chat.sqlite"),
+  profileDataDir: join(projectRoot, "data", "profile"),
   documentWorkerDir: join(projectRoot, "services", "document-worker"),
   documentWorkerServer: join(
     projectRoot,
@@ -253,6 +255,7 @@ function chatEnv(cfg) {
     CHAT_REQUEST_TIMEOUT_MS: "120000",
     CHAT_DATA_DIRECTORY: paths.chatDataDir,
     DOCUMENT_DATA_DIRECTORY: paths.documentDataDir,
+    PROFILE_DATA_DIRECTORY: paths.profileDataDir,
     DOCUMENT_WORKER_URL: `http://127.0.0.1:${cfg.documentWorkerPort}`,
     N8N_CHAT_WEBHOOK_URL: `http://127.0.0.1:${cfg.n8nPort}/webhook/chat`,
   };
@@ -1131,7 +1134,9 @@ async function compileSkillBundle() {
   const { compileSkills } = await import(
     new URL("./compile-skills.mjs", import.meta.url)
   );
-  return JSON.stringify(await compileSkills());
+  return compileSkills(join(projectRoot, "skills"), {
+    profileDirectory: paths.profileDataDir,
+  });
 }
 
 // n8n's Overview page is always a flat list of every workflow, so the skill
@@ -1223,12 +1228,16 @@ async function importReviewedWorkflows() {
     }
 
     const bundle = await compileSkillBundle();
-    const skillResponse = await postWebhook("sync-enabled-skills", bundle);
+    const skillResponse = await postWebhook(
+      "sync-enabled-skills",
+      JSON.stringify(bundle),
+    );
     if (!skillResponse.body.includes('"ok":true')) {
       throw new Error(
         `Enabled skill sync returned an unexpected response: ${skillResponse.body}`,
       );
     }
+    await writeSkillSyncState(paths.profileDataDir, bundle.sourceHash);
 
     print("\nGrouping the workflows into skill folders...");
     groupedIntoFolders = applyWorkflowFolders();
@@ -1673,12 +1682,16 @@ async function commandSyncSkills() {
     publishedSync = true;
     await restartN8n();
 
-    const response = await postWebhook("sync-enabled-skills", bundle);
+    const response = await postWebhook(
+      "sync-enabled-skills",
+      JSON.stringify(bundle),
+    );
     if (!response.body.includes('"ok":true')) {
       throw new Error(
         `Enabled skill sync returned an unexpected response: ${response.body}`,
       );
     }
+    await writeSkillSyncState(paths.profileDataDir, bundle.sourceHash);
   } finally {
     if (publishedSync) {
       runN8nCli(["unpublish:workflow", `--id=${workflowIds.skillSync}`], {

@@ -1,4 +1,5 @@
 id: paid-domain-research
+agent: marketing
 name: Paid Domain Research
 version: 1.0.0
 description: Default paid-first domain and SEO research with a free fallback and simple advice.

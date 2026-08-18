@@ -1,6 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "domain-research",
+  "agent": "marketing",
   "name": "Domain Research",
   "requires": [],
   "agentTools": [

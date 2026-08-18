@@ -74,6 +74,9 @@ run("chat TypeScript build", process.execPath, [
   "--project",
   "apps/chat/tsconfig.json",
 ]);
+run("agent-scoped skill bundle", process.execPath, [
+  "scripts/test-agent-scoped-skills.mjs",
+]);
 run("SEO article integration test", process.execPath, [
   "scripts/test-seo-article.mjs",
 ]);

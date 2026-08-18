@@ -1,4 +1,5 @@
 id: domain-research
+agent: marketing
 name: Domain Research Memory
 version: 1.0.0
 description: Free website-only fallback for domain research and saved business memory.

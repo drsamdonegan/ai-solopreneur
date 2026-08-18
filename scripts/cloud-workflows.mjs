@@ -17,6 +17,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { writeSkillSyncState } from "./skill-sync-state.mjs";
 
 const CLI_TIMEOUT_MS = 5 * 60 * 1_000;
 
@@ -315,12 +316,15 @@ export async function primeAgent({ paths, n8nPort, log }) {
   }
 
   const { compileSkills } = await import("./compile-skills.mjs");
-  const bundle = JSON.stringify(await compileSkills(paths.skillsDir));
-  const skills = await post("sync-enabled-skills", bundle);
+  const bundle = await compileSkills(paths.skillsDir, {
+    profileDirectory: paths.profileDataDir,
+  });
+  const skills = await post("sync-enabled-skills", JSON.stringify(bundle));
   if (skills === null || !skills.includes('"ok":true')) {
     log("  Note: your skills did not finish syncing into the agent.");
     return false;
   }
+  await writeSkillSyncState(paths.profileDataDir, bundle.sourceHash);
 
   // Then any skill the learner installed. These are optional by definition, so
   // one that fails is a note rather than a failed boot: the agent still answers,

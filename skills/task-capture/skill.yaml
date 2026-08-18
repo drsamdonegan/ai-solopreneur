@@ -1,4 +1,5 @@
 id: task-capture
+agent: project-manager
 name: Task Capture
 version: 1.0.0
 description: Turn a clear next action into a confirmation-gated local task proposal.

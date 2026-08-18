@@ -224,9 +224,9 @@ The runner refuses to start, with a plain-English explanation, when:
   agent would be open to anyone who found the address.
 
 Skills are seeded onto the volume on first boot only. An existing folder is the
-learner's own and is never overwritten by a deploy — necessary because the
-profile editor writes `my-business/SKILL.md` back to disk, and at its default
-path that would land in the image and be discarded on every redeploy.
+learner's own and is never overwritten by a deploy. Profile and per-agent
+settings are compiled separately under `/data/profile`, so saving business
+facts never edits a tracked skill or writes into the container image.
 
 ## Verified
 

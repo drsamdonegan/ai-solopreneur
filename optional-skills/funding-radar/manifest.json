@@ -1,6 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "funding-radar",
+  "agent": "investment",
   "name": "Funding Radar",
   "requires": [],
   "tests": [

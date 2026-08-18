@@ -37,8 +37,8 @@ Bookkeeping are intentionally disabled placeholders in the sidebar.
 5. Run `sync-skills.command` on macOS or `sync-skills-windows.cmd` on Windows.
 6. Start a new conversation and test normal, ambiguous, and adversarial input.
 
-The compiler validates metadata, size, duplicate IDs, and the combined
-instruction limit before n8n receives anything.
+The compiler validates metadata, agent ownership, size, duplicate IDs, and each
+agent's instruction limit before n8n receives anything.
 
 ## Activate a future agent
 
@@ -51,8 +51,9 @@ its workflow and safety tests are ready.
    timeout, and credential rules used by workflow `00`.
 4. Connect only reviewed tools. Reads may be automatic; consequential writes
    need an explicit proposal and confirmation design.
-5. Decide which skills belong to that workflow. A future workflow may read its
-   own stable `agent_config` row so skill bundles do not leak between roles.
+5. Assign every skill to an agent in `skill.yaml`. The schema-v2 bundle keeps
+   all five validated groups in one stable `agent_config` row, and the runtime
+   selects only the current agent's group.
 6. In `apps/chat/config/agents.json`, set that agent's `workflowPath` and change
    `status` from `coming-soon` to `active`.
 7. Run `node scripts/validate-workflows.mjs`, then manually exercise valid,

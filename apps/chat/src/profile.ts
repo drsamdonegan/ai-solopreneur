@@ -4,11 +4,11 @@ import { dirname, join } from "node:path";
 /**
  * The learner-owned agent profile.
  *
- * Two copies exist on purpose:
+ * Two generated files exist on purpose:
  *   - data/profile/profile.json is the source of truth the form reads back. It
  *     lives under the Git-ignored data folder.
- *   - skills/my-business/SKILL.md is rendered from it so the saved facts reach
- *     Claude through the existing skill-sync pipeline rather than a new n8n path.
+ *   - data/profile/compiled/my-business.md is rendered reference context for
+ *     the skill compiler. Profile saves never dirty a learner's Git checkout.
  */
 
 export interface AgentProfile {
@@ -187,7 +187,10 @@ export function renderSkillMarkdown(profile: AgentProfile): string {
       lines.push(
         "",
         `--- BEGIN WRITING SAMPLE ${index + 1} ---`,
-        sample,
+        sample
+          .split("\n")
+          .map((line) => `> ${line}`)
+          .join("\n"),
         `--- END WRITING SAMPLE ${index + 1} ---`,
       );
     }
@@ -198,11 +201,11 @@ export function renderSkillMarkdown(profile: AgentProfile): string {
 
 export class ProfileStore {
   readonly #profilePath: string;
-  readonly #skillPath: string;
+  readonly #compiledPath: string;
 
-  constructor(profileDirectory: string, skillDirectory: string) {
+  constructor(profileDirectory: string) {
     this.#profilePath = join(profileDirectory, "profile.json");
-    this.#skillPath = join(skillDirectory, "SKILL.md");
+    this.#compiledPath = join(profileDirectory, "compiled", "my-business.md");
   }
 
   async read(): Promise<AgentProfile> {
@@ -217,7 +220,7 @@ export class ProfileStore {
     }
   }
 
-  /** Writes the profile, then regenerates the skill it feeds. */
+  /** Writes the profile, then regenerates its Git-ignored compiler context. */
   async write(input: unknown): Promise<AgentProfile> {
     const profile = normaliseProfile(input);
     const serialised = `${JSON.stringify(profile, null, 2)}\n`;
@@ -225,15 +228,15 @@ export class ProfileStore {
     await mkdir(dirname(this.#profilePath), { recursive: true });
     await this.#atomicWrite(this.#profilePath, serialised);
 
-    await mkdir(dirname(this.#skillPath), { recursive: true });
-    await this.#atomicWrite(this.#skillPath, renderSkillMarkdown(profile));
+    await mkdir(dirname(this.#compiledPath), { recursive: true });
+    await this.#atomicWrite(this.#compiledPath, renderSkillMarkdown(profile));
 
     return profile;
   }
 
   /**
    * Write to a sibling temporary file and rename over the target, so an
-   * interrupted save can never leave a half-written SKILL.md that the skill
+   * interrupted save can never leave a half-written context file that the skill
    * compiler would then reject.
    */
   async #atomicWrite(target: string, contents: string): Promise<void> {

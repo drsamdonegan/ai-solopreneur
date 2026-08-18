@@ -624,7 +624,9 @@ if (agentWorkflow) {
     nodeByName(agentWorkflow, "Build Agent Context")?.parameters?.jsCode ?? "";
   check(
     /enabledSkills/.test(contextCode) &&
-      /combinedInstructions/.test(contextCode) &&
+      /bundle\.agents/.test(contextCode) &&
+      /bundleState === 'v1'/.test(contextCode) &&
+      /syncRequired/.test(contextCode) &&
       /Delete, archive, bulk changes/.test(contextCode) &&
       /untrusted source material/.test(contextCode) &&
       /BEGIN UNTRUSTED DOCUMENT/.test(contextCode),
@@ -772,9 +774,11 @@ if (skillSyncWorkflow) {
     nodeByName(skillSyncWorkflow, "Validate Skill Bundle")?.parameters?.jsCode ??
     "";
   check(
-    /schemaVersion/.test(bundleValidation) &&
+    /body\.schemaVersion !== 2/.test(bundleValidation) &&
       /enabledSkills/.test(bundleValidation) &&
-      /combinedInstructions\.length > 200000/.test(bundleValidation) &&
+      /globalInstructions\.length > 200000/.test(bundleValidation) &&
+      /A skill is assigned to the wrong agent group/.test(bundleValidation) &&
+      /agent\.context\.length <= 200000/.test(bundleValidation) &&
       /\[a-f0-9\]\{64\}/.test(bundleValidation),
     "Skill sync: bundle metadata, size, and source hash must be validated",
   );
@@ -1774,8 +1778,31 @@ check(
   "Enabled skill list must contain only base or installed optional skills" +
     (unreviewedSkills.length > 0 ? ` (unexpected: ${unreviewedSkills.join(", ")})` : ""),
 );
+const expectedAgentIds = [
+  "project-manager",
+  "sales",
+  "marketing",
+  "investment",
+  "bookkeeping",
+];
 check(
-  skillBundle.combinedInstructions.length <= 200_000 &&
+  skillBundle.schemaVersion === 2 &&
+    JSON.stringify(Object.keys(skillBundle.agents)) ===
+      JSON.stringify(expectedAgentIds) &&
+    Object.values(skillBundle.agents).every(
+      (agent) =>
+        agent.instructions.length <= 200_000 &&
+        agent.context.length <= 200_000,
+    ) &&
+    skillBundle.enabledSkills.every((skill) =>
+      skill.agent === "global"
+        ? expectedAgentIds.every((agentId) =>
+            skillBundle.agents[agentId].instructions.includes(
+              `(${skill.id}@${skill.version})`,
+            ),
+          )
+        : skillBundle.agents[skill.agent]?.skillIds.includes(skill.id),
+    ) &&
     /^[a-f0-9]{64}$/.test(skillBundle.sourceHash),
   "Compiled skill bundle must remain bounded and content-addressed",
 );

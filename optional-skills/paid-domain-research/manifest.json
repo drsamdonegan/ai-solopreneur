@@ -1,6 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "paid-domain-research",
+  "agent": "marketing",
   "name": "Paid Domain Research",
   "requires": [
     "domain-research"

@@ -18,7 +18,6 @@ const sessionId = "11111111-1111-4111-8111-111111111111";
 const requestId = "22222222-2222-4222-8222-222222222222";
 
 const profileDirectory = join(temporary, "profile");
-const skillDirectory = join(temporary, "my-business");
 await mkdir(profileDirectory, { recursive: true });
 await writeFile(
   join(profileDirectory, "profile.json"),
@@ -32,7 +31,7 @@ await writeFile(
     updatedAt: "2026-08-01T00:00:00.000Z",
   }),
 );
-const profileStore = new ProfileStore(profileDirectory, skillDirectory);
+const profileStore = new ProfileStore(profileDirectory);
 const migratedProfile = await profileStore.read();
 assert.equal(migratedProfile.schemaVersion, 2);
 assert.equal(migratedProfile.offer, "Bookkeeping support");

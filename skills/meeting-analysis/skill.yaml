@@ -1,4 +1,5 @@
 id: meeting-analysis
+agent: project-manager
 name: Meeting Analysis
 version: 1.0.0
 description: Turn meeting transcripts and notes into grounded summaries, decisions, actions, risks, and open questions.

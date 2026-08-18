@@ -1,6 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "linkedin-profile-lookup",
+  "agent": "sales",
   "name": "LinkedIn Profile Lookup",
   "requires": [],
   "agentTools": [

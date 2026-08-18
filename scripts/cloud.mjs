@@ -348,11 +348,6 @@ function chatEnv(cfg) {
     DOCUMENT_DATA_DIRECTORY: paths.documentDataDir,
     PROFILE_DATA_DIRECTORY: paths.profileDataDir,
 
-    // The profile editor writes SKILL.md back to this folder. Left at its
-    // default it would write into the container image, and every redeploy
-    // would silently discard the learner's own business facts.
-    MY_BUSINESS_SKILL_DIRECTORY: join(paths.skillsDir, "my-business"),
-
     // Both internal. Traffic between the three services never leaves the
     // container, so it stays on loopback and out of the public address.
     DOCUMENT_WORKER_URL: `http://127.0.0.1:${cfg.documentWorkerPort}`,
