@@ -378,6 +378,71 @@ export function restoreCredentials(databasePath, saved, byType) {
   return fixed.size;
 }
 
+/**
+ * Trigger workflows the learner has wired to an outside account.
+ *
+ * Triggers are left alone by MUST_BE_LIVE on purpose: a funding or monthly
+ * trigger with no saved profile should not start itself. But a trigger that
+ * carries a credential is a different thing. Nobody creates a Telegram
+ * credential and binds it to three nodes by accident, and the cost of getting
+ * this wrong in the other direction is a bot that silently answers nobody —
+ * which is exactly the failure this project keeps hitting, because it looks
+ * identical to a bot that is working until someone messages it.
+ *
+ * Only triggers with a credential-bearing node qualify, so the credential-free
+ * triggers stay off, and only when every one of those nodes is actually bound.
+ */
+export function connectedTriggerIds(workflowsDir, databasePath) {
+  if (!existsSync(databasePath)) {
+    return [];
+  }
+  const needsCredential = new Map();
+  for (const { name, workflow } of readWorkflowFiles(workflowsDir)) {
+    if (!/^\d+-trigger-/.test(name) || typeof workflow.id !== "string") {
+      continue;
+    }
+    const nodeNames = (workflow.nodes ?? [])
+      .filter((node) => CREDENTIAL_TYPE_FOR_NODE.has(node?.type))
+      .map((node) => node?.name);
+    if (nodeNames.length > 0) {
+      needsCredential.set(workflow.id, nodeNames);
+    }
+  }
+  if (needsCredential.size === 0) {
+    return [];
+  }
+  const connected = [];
+  try {
+    const db = new DatabaseSync(databasePath, { readOnly: true });
+    try {
+      for (const [id, nodeNames] of needsCredential) {
+        const row = db.prepare("SELECT nodes FROM workflow_entity WHERE id = ?").get(id);
+        if (!row) {
+          continue;
+        }
+        let nodes;
+        try {
+          nodes = JSON.parse(row.nodes);
+        } catch {
+          continue;
+        }
+        const bound = (name) => {
+          const node = (Array.isArray(nodes) ? nodes : []).find((entry) => entry?.name === name);
+          return Boolean(node?.credentials && Object.keys(node.credentials).length > 0);
+        };
+        if (nodeNames.every(bound)) {
+          connected.push(id);
+        }
+      }
+    } finally {
+      db.close();
+    }
+  } catch {
+    return [];
+  }
+  return connected;
+}
+
 function runCli(n8nBin, args, env) {
   return spawnSync(process.execPath, [n8nBin, ...args], {
     env: { ...process.env, ...env },
@@ -437,6 +502,24 @@ export function syncWorkflows({ paths, n8nEnv, log }) {
     if (filled > 0) {
       log(`  ${filled} credential ${filled === 1 ? "choice" : "choices"} restored.`);
     }
+    // A connected trigger that is switched off has to be switched on here too,
+    // not only on the deploys that carry a workflow change. Otherwise the
+    // deploy that ships this repair is itself a deploy that imports nothing,
+    // and the repair does not run until something unrelated changes.
+    const live = new Set(learnerPublishedIds(databasePath));
+    const toStart = connectedTriggerIds(paths.workflowsDir, databasePath).filter(
+      (id) => !live.has(id),
+    );
+    let started = 0;
+    for (const id of toStart) {
+      const result = runCli(paths.n8nBin, ["publish:workflow", `--id=${id}`], n8nEnv);
+      if (!result.error && result.status === 0) {
+        started += 1;
+      }
+    }
+    if (started > 0) {
+      log(`  ${started} connected ${started === 1 ? "trigger is" : "triggers are"} switched back on.`);
+    }
     return { skipped: true, reason: "workflows unchanged since last deploy" };
   }
 
@@ -481,6 +564,9 @@ export function syncWorkflows({ paths, n8nEnv, log }) {
   const toPublish = new Set([
     ...requiredWorkflowIds(paths.workflowsDir),
     ...learnerPublished,
+    // Read after the restore above, so a credential that was just put back --
+    // or bound for the first time -- counts as connected.
+    ...connectedTriggerIds(paths.workflowsDir, databasePath),
   ]);
 
   let published = 0;
