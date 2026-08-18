@@ -273,8 +273,8 @@
         "workflowInputs": {
           "mappingMode": "defineBelow",
           "value": {
-            "sessionId": "={{ $('Validate and Normalise').item.json.sessionId }}",
-            "confirmationText": "={{ $('Validate and Normalise').item.json.message }}"
+            "sessionId": "={{ $('Validate and Normalise').first().json.sessionId }}",
+            "confirmationText": "={{ $('Validate and Normalise').first().json.message }}"
           },
           "matchingColumns": [],
           "schema": [

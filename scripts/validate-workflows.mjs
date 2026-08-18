@@ -682,6 +682,21 @@ if (agentWorkflow) {
       /errorMessage/.test(invalid?.parameters?.responseBody ?? ""),
     "Invalid response must use the stable error contract",
   );
+
+  // $('Node').item walks n8n's paired-item trail back to that node. Running a
+  // tool rewrites the agent node's recorded source to output 0, so the trail
+  // leads to the wrong branch of Route Selected Agent and resolves to nothing:
+  // every agent except the one on output 0 answered with an empty body the
+  // moment it used a tool. $('Node').first() reads the same single item without
+  // needing the trail, so this workflow uses it everywhere.
+  const pairedItemNodes = agentWorkflow.nodes
+    .filter((node) => /\$\('[^']+'\)\.item\b/.test(JSON.stringify(node.parameters ?? {})))
+    .map((node) => node.name);
+  check(
+    pairedItemNodes.length === 0,
+    "Agent workflow must read earlier nodes with .first(), not .item" +
+      (pairedItemNodes.length > 0 ? ` (${pairedItemNodes.join(", ")})` : ""),
+  );
 }
 
 const setupWorkflow = workflows.get("10-setup-local-task-data.json");
