@@ -5,6 +5,8 @@ import { readFile } from "node:fs/promises";
 const url = (name) => new URL(`../workflows/${name}`, import.meta.url);
 const run = JSON.parse(await readFile(url("74-run-monthly-update.json"), "utf8"));
 const thread = JSON.parse(await readFile(url("75-run-thread-extraction.json"), "utf8"));
+const connection = JSON.parse(await readFile(url("69-tool-check-gmail-connection.json"), "utf8"));
+const start = JSON.parse(await readFile(url("65-tool-start-monthly-update.json"), "utf8"));
 
 const jsOf = (workflow, name) => workflow.nodes.find((node) => node.name === name).parameters.jsCode;
 
@@ -303,6 +305,50 @@ const flagged = runNode(run, "Render Update", {
 check(flagged.status === "partial", "a failed verification did not mark the run partial");
 check(flagged.updateText.includes("Before you send this"), "the review section is missing");
 check(flagged.updateText.includes("No email states the contract value"), "the unsupported claim was not named");
+
+// -------------------------------------------- 68/65: Gmail connection probe
+const probe = (input) => runNode(connection, "Read Gmail Probe", { input: [input], nodes: {} })[0];
+
+const live = probe({ statusCode: 200, body: { emailAddress: "founder@acme.com", messagesTotal: 40213 } });
+check(live.connected === true && live.state === "connected", "a working Gmail connection was not recognised");
+check(live.emailAddress === "founder@acme.com", "the connected mailbox was not reported");
+
+const expired = probe({ statusCode: 401, body: { error: { message: "Invalid Credentials" } } });
+check(expired.connected === false && expired.state === "needs_reauth", `401 gave state "${expired.state}"`);
+check(/Testing/.test(expired.message), "the seven-day Testing-mode cause was not explained");
+
+// No credential selected: n8n fails the node, so there is no status at all.
+const absent = probe({ error: { message: "Credentials not found for type googleOAuth2Api" } });
+check(absent.connected === false && absent.state === "not_connected", `a missing credential gave "${absent.state}"`);
+
+const flaky = probe({ statusCode: 503, body: {} });
+check(flaky.connected === false && flaky.state === "unknown", `a 503 gave "${flaky.state}"`);
+check(!/reconfigure/i.test(flaky.message), "a transient failure told the user to reconfigure");
+
+for (const result of [live, expired, absent, flaky]) {
+  check(result.scope === "https://www.googleapis.com/auth/gmail.readonly", "the probe reports the wrong scope");
+  check(/localhost:5678/.test(result.n8nUrl), "the probe lost the n8n address");
+}
+
+// Starting a run without Gmail must refuse rather than queue and burn money.
+const startRefused = runNode(start, "Shape Auth Needed", {
+  input: [absent],
+  nodes: {
+    "Decide Run": [{ sessionId: "s", requestId: "r", runId: "mu-x", monthLabel: "July 2026", proposedInput: {} }],
+    "Read Gmail Probe": [absent],
+  },
+})[0];
+check(startRefused.response.ok === false, "a missing Gmail connection still reported success");
+check(startRefused.response.error.code === "GMAIL_NOT_CONNECTED", `error code was ${startRefused.response.error.code}`);
+check(/cannot open it from this chat/.test(startRefused.response.nextStep), "the refusal does not tell the agent it cannot open the window");
+
+const startNodes = new Set(start.nodes.map((n) => n.name));
+check(startNodes.has("Probe Gmail"), "start_monthly_update has no Gmail pre-flight check");
+const queueSources = Object.entries(start.connections)
+  .filter(([, out]) => (out.main ?? []).some((b) => b.some((target) => target.node === "Queue Background Run")))
+  .map(([source]) => source);
+check(queueSources.length === 1 && queueSources[0] === "Gmail Ready?",
+  `the background run is reachable from ${queueSources.join(", ") || "nothing"} rather than only the Gmail check`);
 
 console.log("\n--- rendered update ---\n");
 console.log(rendered.updateText);

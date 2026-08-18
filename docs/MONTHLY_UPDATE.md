@@ -62,6 +62,18 @@ n8n ships a Gmail node with its own credential. It is one step easier, and it as
 13. Select **Connect my account**, sign in, click through the unverified-app warning, and grant access. Google's consent screen will say the app wants to *view* your email. If it says anything about sending or deleting, the scope field is wrong — go back to step 12.
 14. Save.
 
+### Checking it worked
+
+Ask your agent:
+
+```text
+Is my email connected?
+```
+
+It checks and tells you which mailbox it is connected to. It will also refuse to start an update run while the connection is missing, rather than spending several minutes and a couple of dollars failing.
+
+Your agent cannot connect Gmail for you, and cannot make Google's sign-in window appear — that window is opened by n8n's credential screen, in a different tab. What it can do is talk you through the clicks above, one at a time. It will never ask you for a Google password or a verification code; if anything ever does, something is wrong.
+
 ## Step 3 — tell your agent about your company
 
 Open the chat, start a new conversation, and describe your company in your own words:
@@ -117,6 +129,8 @@ When an update comes back **needing review**, your agent will name the specific 
 
 About **$1.50 to $2.50** a run, so about that much a month with the schedule on. The Gmail API is free; this is all Anthropic usage.
 
+Checking the connection is free: it reads only the mailbox address and message count, and calls no model.
+
 | Stage | Calls | Model |
 | --- | --- | --- |
 | Deciding which emails are worth reading | about 12 | Haiku 4.5 |
@@ -147,7 +161,7 @@ Turning both down gives you a shorter update built on less. Turning `maxThreads`
 
 **"No company profile is saved yet."** Step 3. Describe your company in the chat.
 
-**"Gmail refused the request."** The credential needs reconnecting. Open **Gmail (read-only)** in n8n and select **Connect my account** again. If this happens about a week after setup, the Google consent screen is still in Testing — go back to step 2 and publish the app.
+**"Gmail refused the request."** The credential needs reconnecting. Ask your agent "is my email connected?" for the specific diagnosis, or open **Gmail (read-only)** in n8n and select **Connect my account** again. If this happens about a week after setup, the Google consent screen is still in Testing — go back to step 2 and publish the app.
 
 **"Nothing looked like company news."** Almost always a thin profile. If the scan does not know your customers, investors, or product names, it cannot tell their email apart from everything else. Add more and run it again.
 

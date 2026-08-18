@@ -72,7 +72,8 @@ Then, in order:
 1. Run the setup workflow once. It creates three local tables.
 2. Create the Gmail credential.
 3. Tell your agent about your company, in the chat, in your own words. It saves a profile.
-4. Ask it for last month's update.
+4. Ask it whether Gmail is connected. It checks, and talks you through it if not.
+5. Ask it for last month's update.
 
 The monthly schedule ships switched off. Turn it on once you have seen an update you are happy with.
 
@@ -83,6 +84,8 @@ The connection asks Google for exactly one permission: `gmail.readonly`.
 That is not a promise in a prompt. It is what Google will let this credential do. It **cannot** send, reply, draft, label, archive, or delete, and neither can anything written inside an email it reads. If you ask it to send the update, it will tell you it can't and hand you the text instead.
 
 n8n ships its own Gmail node, which is one step easier to set up and asks Google for full mailbox access including send and delete. This skill deliberately does not use it.
+
+Your agent can tell you whether the connection is working, and will refuse to start a run without it. It cannot connect it for you: Google's sign-in window is opened by n8n's credential screen, and nothing in the chat can reach that. Your agent will talk you through the clicks.
 
 ## What it costs
 
