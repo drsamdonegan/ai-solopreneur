@@ -24,6 +24,7 @@
         "additionalFields": {}
       },
       "id": "a1000000-0000-4000-8000-000000000002",
+      "webhookId": "a1000000-0000-4000-8000-00000000d70a",
       "name": "Telegram Message",
       "type": "n8n-nodes-base.telegramTrigger",
       "typeVersion": 1.2,
