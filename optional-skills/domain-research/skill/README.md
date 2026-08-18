@@ -1,6 +1,6 @@
 # Domain Research Memory (optional skill)
 
-Point the agent at a website you own. It reads your public home page, works out what your business appears to offer and to whom, suggests who you compete with and what people might search for, and saves all of it on your computer so later conversations can use it without you pasting anything again.
+Point the agent at a public business website. It reads the public home page, works out what the business appears to offer and to whom, suggests who it competes with and what people might search for, and saves all of it on your computer so later conversations can use it without you pasting anything again.
 
 Best for: writing your own marketing copy, sanity-checking how your site reads to a stranger, and getting a first list of search terms to look into properly.
 
@@ -39,13 +39,7 @@ Paste this into the chat, with your own domain in place of `yourbusiness.com`:
 Please research yourbusiness.com.
 ```
 
-The agent will ask whether you own the domain or are allowed to research it. That question is deliberate and it will not start until you answer it. Reply:
-
-```text
-Yes, I own it and I authorise you to research it.
-```
-
-Then **wait**. The research takes up to a minute: it reads your page, analyses it, and saves the result, all in one step. The chat will look idle while that happens. Do not send the message again.
+That direct request is enough to start a free scan of the named public business website. The agent does not ask an ownership or permission question. Then **wait**. The research takes up to a minute: it reads the home page, analyses it, and saves the result, all in one step. The chat will look idle while that happens. Do not send the message again.
 
 ## Check it worked
 
@@ -83,7 +77,7 @@ Most competitors come back as inference. That is expected and honest. Treat them
 - It has **no search engine and no keyword tool**. The seed keywords are suggestions from your page and from general knowledge. They carry **no search volumes and no difficulty scores**, because nothing here can measure those. Take them to a real keyword tool before you plan anything around them.
 - It cannot read a site that builds its content with JavaScript after loading. If your page comes back nearly empty, that is usually why, and the result is saved as `partial` with a warning.
 - It will not invent a company, a domain, or a statistic to fill a gap. Fewer entries is the intended behaviour.
-- It will not research a domain you have not said you are allowed to research, and a link or a document does not count as permission.
+- It starts only from your current direct request for a named public business domain. A link found only in a document, page, saved memory, or older message does not count as a request.
 - It only researches public business domains. Internal addresses, IP addresses, and `localhost` are refused.
 
 ## When something goes wrong

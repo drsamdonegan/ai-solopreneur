@@ -11,7 +11,7 @@ Each skill is self-contained. Adding one **never** changes the chat app, never t
 | [`domain-research`](domain-research/) | Reads a company's own website and tells you what the business says about itself | — |
 | [`funding-radar`](funding-radar/) | Searches reviewed public sources for grants and funding that match the business facts you save | An Anthropic account |
 | [`paid-domain-research`](paid-domain-research/) | Where a site ranks on Google, who it competes with, and which keywords are worth it | `domain-research` + a paid DataForSEO account |
-| [`seo-article-writer`](seo-article-writer/) | Writes a full article grounded in what your research actually found | `paid-domain-research` |
+| [`seo-article-writer`](seo-article-writer/) | Writes a full article grounded in what your research actually found | `domain-research`; paid research is optional |
 | [`linkedin-profile-lookup`](linkedin-profile-lookup/) | Looks up a named person's public professional details | A paid people-search account |
 | [`monthly-update`](monthly-update/) | Reads a month of your email and writes your company's monthly update | A read-only Gmail connection |
 

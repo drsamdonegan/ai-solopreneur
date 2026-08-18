@@ -63,6 +63,26 @@ async function snapshot(root) {
 }
 
 try {
+  const freeFirstRoot = await makeScratch("free-first-seo");
+  install(freeFirstRoot, "domain-research");
+  install(freeFirstRoot, "seo-article-writer");
+  await assert.rejects(
+    readFile(
+      join(freeFirstRoot, "skills", "paid-domain-research", "SKILL.md"),
+      "utf8",
+    ),
+    /ENOENT/,
+    "SEO article writing must not install or require paid domain research",
+  );
+  assert.match(
+    await readFile(
+      join(freeFirstRoot, "skills", "seo-article-writer", "SKILL.md"),
+      "utf8",
+    ),
+    /call the free `start_domain_research` tool once/i,
+    "the installed SEO writer must use free domain research first",
+  );
+
   const root = await makeScratch("valid");
   const installed = [
     "linkedin-profile-lookup",

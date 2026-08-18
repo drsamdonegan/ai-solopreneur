@@ -4,11 +4,13 @@ Ask your agent to write a full article that is actually grounded in research, ra
 
 Best for: the moment you have the research and cannot face the blank page.
 
-The difference is where the facts come from. This skill reads what your paid domain research already found — the keywords, the competitors, the pages that rank — and writes against that evidence instead of inventing it.
+The difference is where the facts come from. This skill reads what Domain Research already found and writes against that evidence instead of inventing it. If you have explicitly run the optional paid research upgrade, it can reuse that richer evidence too.
 
 ## Before you start
 
-You need **[Paid Domain Research](../../paid-domain-research/skill/README.md)** installed and you need to have run it at least once for the domain you are writing about. Without that there is nothing to ground the article in, and the skill will tell you so rather than guess.
+You need **[Domain Research](../../domain-research/skill/README.md)** installed. The installer checks this dependency. You can run the free research first, or ask directly for an article and let the agent run the free scan before preparing the draft.
+
+**[Paid Domain Research](../../paid-domain-research/skill/README.md)** is optional. Install and request it only if you want DataForSEO evidence; the article writer never buys paid data itself.
 
 ## Turn it on
 
@@ -16,7 +18,7 @@ You need **[Paid Domain Research](../../paid-domain-research/skill/README.md)** 
 node optional-skills/_installer/add-skill.mjs seo-article-writer
 ```
 
-The installer will stop and tell you if Paid Domain Research is missing.
+The installer will stop and tell you if Domain Research is missing.
 
 Then sync and restart:
 

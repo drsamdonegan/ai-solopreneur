@@ -3,7 +3,7 @@
   "nodes": [
     {
       "parameters": {
-        "content": "## Default paid domain research\nA direct current-user request for a named public business domain starts one standard DataForSEO search without ownership, permission, market-code, language-code, or second payment-confirmation questions. Australia and English are the defaults. An explicit refresh or deep request selects that mode. The workflow checks a 24-hour same-market cache, uses only fixed reviewed DataForSEO endpoints, and never retries a paid call automatically.\n\nEvery component records success, no_results, failed, unavailable, or skipped. Failed attempts are saved without replacing the latest successful company memory.",
+        "content": "## Optional paid domain research\nOnly an explicit current-user request for paid DataForSEO research, or an explicitly selected paid refresh, standard, or deep mode, starts a provider call. A generic request to research a domain uses the free tool. After explicit paid authority, standard research uses Australia and English by default without ownership, permission, market-code, language-code, or second payment-confirmation questions. The workflow checks a 24-hour same-market cache, uses only fixed reviewed DataForSEO endpoints, and never retries a paid call automatically.\n\nEvery component records success, no_results, failed, unavailable, or skipped. Failed attempts are saved without replacing the latest successful company memory.",
         "height": 320,
         "width": 650,
         "color": 4
@@ -1154,7 +1154,7 @@
     "phase": 11,
     "testedWithN8n": "2.30.5",
     "toolRisk": "paid_external_read",
-    "authorization": "direct-current-user-request-with-default-standard-paid-run-or-explicit-depth",
+    "authorization": "explicit-current-user-paid-dataforseo-request-or-named-paid-mode",
     "externalWrite": "none",
     "localWrite": "conversation-bound-paid-snapshot-and-successful-business-memory",
     "externalRead": "dns-safe-same-domain-home-page-gateway-anthropic-and-fixed-dataforseo-endpoints",

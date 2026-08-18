@@ -4,12 +4,12 @@
   "agent": "marketing",
   "name": "SEO Article Writer",
   "requires": [
-    "paid-domain-research"
+    "domain-research"
   ],
   "agentTools": [
     {
       "parameters": {
-        "description": "Prepare or start one grounded SEO article in the background. Use when the current user chooses article 1, 2 or 3, asks you to choose the best saved idea, supplies another topic, or directly asks for a blog article. It uses the saved research plan, makes no new DataForSEO purchase, asks only for missing essentials, and never publishes. If research is missing, run the default paid domain research first and use the free fallback if needed. Never ask about ownership. Pass the selected number exactly; a topic supplied by the user wins. If the tool returns needs_details, ask for all listed details in one short, plain-language question. Never call it twice for one request.",
+        "description": "Prepare or start one grounded SEO article in the background. Use when the current user chooses article 1, 2 or 3, asks you to choose the best saved idea, supplies another topic, or directly asks for a blog article. It uses the saved research plan, makes no new DataForSEO purchase, asks only for missing essentials, and never publishes. If research is missing, run the free start_domain_research tool first. Paid research is an optional installed upgrade and must never be assumed or started unless the current user explicitly asks for it. Never ask about ownership. Pass the selected number exactly; a topic supplied by the user wins. If the tool returns needs_details, ask for all listed details in one short, plain-language question. Never call it twice for one request.",
         "source": "database",
         "workflowId": {
           "__rl": true,

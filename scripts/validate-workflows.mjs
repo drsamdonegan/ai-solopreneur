@@ -497,13 +497,13 @@ if (agentWorkflow) {
   check(
     startResearchTool?.parameters?.workflowId?.value ===
       "phase9StartDomainResearch" &&
-      /free website-only fallback/i.test(
+      /default free website-only tool/i.test(
         startResearchTool?.parameters?.description ?? "",
       ) &&
       /never ask an ownership or permission question/i.test(
         startResearchTool?.parameters?.description ?? "",
       ),
-    "Agent: start_domain_research must be the no-ownership free fallback",
+    "Agent: start_domain_research must be the no-ownership default free path",
   );
   const completeResearchTool = nodeByName(
     agentWorkflow,
@@ -536,16 +536,16 @@ if (agentWorkflow) {
   check(
     startPaidResearchTool?.parameters?.workflowId?.value ===
       "phase11StartPaidDomainResearch" &&
-      /default tool/i.test(
+      /optional paid upgrade/i.test(
         startPaidResearchTool?.parameters?.description ?? "",
       ) &&
-      /standard depth, Australia and English by default/i.test(
+      /explicitly asks for paid DataForSEO research/i.test(
         startPaidResearchTool?.parameters?.description ?? "",
       ) &&
       /free start_domain_research fallback/i.test(
         startPaidResearchTool?.parameters?.description ?? "",
       ),
-    "Agent: start_paid_domain_research must default to paid standard research with a free fallback",
+    "Agent: start_paid_domain_research must require an explicit paid request and retain the free fallback",
   );
   const completePaidResearchTool = nodeByName(
     agentWorkflow,
@@ -597,8 +597,9 @@ if (agentWorkflow) {
     startSeoArticleTool?.parameters?.workflowId?.value === "phase13StartSeoArticle" &&
       /background/i.test(startSeoArticleTool?.parameters?.description ?? "") &&
       /no new DataForSEO purchase/i.test(startSeoArticleTool?.parameters?.description ?? "") &&
+      /free start_domain_research tool first/i.test(startSeoArticleTool?.parameters?.description ?? "") &&
       /never publishes/i.test(startSeoArticleTool?.parameters?.description ?? ""),
-    "Agent: start_seo_article must queue the reviewed no-publish, no-new-paid-search workflow",
+    "Agent: start_seo_article must use free research first and queue the reviewed no-publish workflow",
   );
   const getSeoArticleTool = nodeByName(agentWorkflow, "get_seo_article");
   check(
@@ -1332,7 +1333,7 @@ const startPaidResearchWorkflow = workflows.get(
 if (startPaidResearchWorkflow) {
   check(
     startPaidResearchWorkflow.meta?.toolRisk === "paid_external_read" &&
-      /direct-current-user-request-with-default-standard-paid-run-or-explicit-depth/.test(
+      /explicit-current-user-paid-dataforseo-request-or-named-paid-mode/.test(
         startPaidResearchWorkflow.meta?.authorization ?? "",
       ) &&
       /no-automatic-retry/.test(
@@ -1353,7 +1354,7 @@ if (startPaidResearchWorkflow) {
       /deep:\{limit:\.50,expansionReserve:\.38,serpReserve:\.02/.test(validation) &&
       /locationCode/.test(validation) &&
       /languageCode/.test(validation),
-    "start_paid_domain_research must validate a direct paid-first request, market, language, and reserved caps",
+    "start_paid_domain_research must validate explicit paid authority, market, language, and reserved caps",
   );
   const dataForSeoUrls = [
     "https://api.dataforseo.com/v3/dataforseo_labs/google/ranked_keywords/live",

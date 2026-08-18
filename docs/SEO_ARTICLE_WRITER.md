@@ -4,7 +4,7 @@
 
 ## The simple user journey
 
-1. The user asks to research a website. Paid DataForSEO research runs first; the website-only research is the automatic fallback.
+1. The user asks to research a website. The free website-only research runs by default. Paid DataForSEO research is an optional upgrade used only after an explicit paid request.
 2. The chat shows up to three useful article ideas as large buttons.
 3. The user chooses an idea, asks the agent to choose, or types another topic.
 4. If an essential business detail is missing, the agent asks one short question containing every missing detail.
@@ -32,9 +32,9 @@ Voice is optional. The default is simple, clear, friendly, conversational, and j
 
 ## Running it without prior research
 
-A direct request such as “Write an SEO article for example.com about bookkeeping for freelancers” still works. The agent runs normal paid domain research first, uses the free website-only fallback if needed, and then prepares the article. It never asks the user about ownership, payment, API keys, job IDs, or technical setup.
+A direct request such as “Write an SEO article for example.com about bookkeeping for freelancers” still works. The agent runs the free website-only research first and then prepares the article. It never asks the user about ownership, payment, API keys, job IDs, or technical setup.
 
-The article workflow itself makes no DataForSEO purchase. It uses the exact saved research and business context pinned to the article brief.
+The article workflow itself makes no DataForSEO purchase. It uses the exact saved free or paid research and business context pinned to the article brief. Paid research is used only when it is installed and the current user explicitly asks for paid DataForSEO evidence.
 
 ## Safety and quality
 

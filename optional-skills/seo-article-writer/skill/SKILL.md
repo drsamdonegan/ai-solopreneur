@@ -1,6 +1,6 @@
 ---
 name: seo-article-writer
-description: Draft a complete, evidence-grounded SEO article or blog from saved domain research and optional user sources. Use when the user chooses a research-backed article idea, replies with an article number, asks the agent to choose, supplies another topic, or directly asks to write SEO content; run paid domain research first with the free fallback when saved research is missing.
+description: Draft a complete, evidence-grounded SEO article or blog from saved domain research and optional user sources. Use when the user chooses a research-backed article idea, replies with an article number, asks the agent to choose, supplies another topic, or directly asks to write SEO content; run free domain research first when saved research is missing.
 ---
 
 # SEO Article Writer
@@ -12,7 +12,8 @@ Create one useful review draft in the background. Never publish it automatically
 The user never needs to understand skills, DataForSEO, keywords, snapshots, sources, or job IDs.
 
 - Reuse saved research when available.
-- If research is missing, call `start_paid_domain_research` once with standard Australian English defaults. If it is unavailable or returns no useful paid evidence, call `start_domain_research` once. Do not ask about ownership, payment, codes, or technical setup.
+- If research is missing, call the free `start_domain_research` tool once. Do not ask about ownership, payment, codes, or technical setup.
+- Reuse either free or paid saved research when it is already available. Paid research is an optional installed upgrade: never assume it exists or start it unless the current user explicitly asks for paid DataForSEO evidence.
 - If the user supplies a topic, use it and skip article selection.
 - Otherwise let research show up to three choices. Accept plain `1`, `2`, `3`, `choose for me`, or another topic.
 - Carry over the immediately preceding domain when unambiguous. If several domains are possible, ask only which website.
