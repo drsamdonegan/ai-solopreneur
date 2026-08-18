@@ -99,55 +99,48 @@ const paths = {
   operationLock: join(projectRoot, "data", "run", "operation.lock"),
 };
 
+// Workflows installed from the optional catalogue appear as files in this
+// directory. Derive the publish and export inventories from those files so a
+// newly installed skill cannot be silently omitted by a hand-maintained list.
+const MUST_BE_LIVE = /^\d+-(tool|setup|internal|confirm|run)-/;
+
+function reviewedWorkflowFiles() {
+  return readdirSync(paths.workflowsDir)
+    .filter((name) => name.endsWith(".json"))
+    .sort()
+    .map((name) => {
+      const workflow = JSON.parse(
+        readFileSync(join(paths.workflowsDir, name), "utf8"),
+      );
+      if (typeof workflow.id !== "string" || workflow.id.length === 0) {
+        throw new Error(`${name} has no stable workflow ID.`);
+      }
+      return { name, workflow };
+    });
+}
+
+const reviewedWorkflows = reviewedWorkflowFiles();
 const workflowIds = {
   main: "phase3StartHere",
   health: "phase3AgentHealth",
   checklist: "phase6LearnerChecklist",
   taskSetup: "phase4TaskSetup",
   skillSync: "phase5SyncEnabledSkills",
-  tools: [
-    "phase4ListTasks",
-    "phase4CreateTask",
-    "phase4UpdateTaskStatus",
-    "phase5ProposeCreateTask",
-    "phase5ProposeTaskStatus",
-    "phase5ConfirmTaskWrite",
-    "phase9StartDomainResearch",
-    "phase9CompleteDomainResearch",
-    "phase9GetBusinessMemory",
-    "phase11StartPaidDomainResearch",
-    "phase11CompletePaidDomainResearch",
-    "phase11GetPaidDomainResearch",
-    "phase13StartSeoArticle",
-    "phase13WriteSeoArticle",
-    "phase13GetSeoArticle",
-    "phase12LookupLinkedInProfile",
-  ],
+  tools: reviewedWorkflows
+    .filter(({ name }) => MUST_BE_LIVE.test(name))
+    .map(({ workflow }) => workflow.id)
+    .filter(
+      (id) =>
+        id !== "phase3StartHere" &&
+        id !== "phase4TaskSetup" &&
+        id !== "phase5SyncEnabledSkills",
+    ),
 };
 
-const exportedWorkflowFiles = [
-  ["phase3StartHere", "00-start-here-project-partner.json"],
-  ["phase6LearnerChecklist", "01-start-here-learner-checklist.json"],
-  ["phase4TaskSetup", "10-setup-local-task-data.json"],
-  ["phase5SyncEnabledSkills", "11-setup-sync-enabled-skills.json"],
-  ["phase4ListTasks", "20-tool-list-tasks.json"],
-  ["phase4CreateTask", "21-tool-create-task.json"],
-  ["phase4UpdateTaskStatus", "22-tool-update-task-status.json"],
-  ["phase5ProposeCreateTask", "30-tool-propose-create-task.json"],
-  ["phase5ProposeTaskStatus", "31-tool-propose-update-task-status.json"],
-  ["phase5ConfirmTaskWrite", "40-confirm-task-write.json"],
-  ["phase9StartDomainResearch", "50-tool-start-domain-research.json"],
-  ["phase9CompleteDomainResearch", "51-tool-complete-domain-research.json"],
-  ["phase9GetBusinessMemory", "52-tool-get-business-memory.json"],
-  ["phase11StartPaidDomainResearch", "53-tool-start-paid-domain-research.json"],
-  ["phase11CompletePaidDomainResearch", "54-tool-complete-paid-domain-research.json"],
-  ["phase11GetPaidDomainResearch", "55-tool-get-paid-domain-research.json"],
-  ["phase13StartSeoArticle", "56-tool-start-seo-article.json"],
-  ["phase13WriteSeoArticle", "57-internal-write-seo-article.json"],
-  ["phase13GetSeoArticle", "58-tool-get-seo-article.json"],
-  ["phase12LookupLinkedInProfile", "61-tool-lookup-linkedin-profile.json"],
-  ["phase3AgentHealth", "90-debug-agent-health.json"],
-];
+const exportedWorkflowFiles = reviewedWorkflows.map(({ name, workflow }) => [
+  workflow.id,
+  name,
+]);
 
 // ---------------------------------------------------------------------------
 // Configuration
