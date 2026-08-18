@@ -3,7 +3,7 @@
   "nodes": [
     {
       "parameters": {
-        "content": "## Message your agent from Telegram\n\nYou need one thing: a bot token from @BotFather in Telegram.\n\n1. Open Telegram and message **@BotFather**.\n2. Send `/newbot`, pick a name and a username ending in `bot`.\n3. It replies with a token. Copy it.\n4. In this workshop, open **Credentials \u2192 New \u2192 Telegram**, paste the token,\n   and name it `Telegram bot`.\n5. Click each of the THREE Telegram steps in this workflow \u2014 the trigger, Say\n   We Heard It, and Send The Reply \u2014 and choose that credential on each. All\n   three need it; the trigger alone is not enough.\n6. Set the toggle at the top right to **Published**.\n\nThen message your bot in Telegram. An unpublished workflow is the single most\ncommon reason nothing happens.",
+        "content": "## Message your agent from Telegram\n\nYou need one thing: a bot token from @BotFather in Telegram.\n\n1. Open Telegram and message **@BotFather**.\n2. Send `/newbot`, pick a name and a username ending in `bot`.\n3. It replies with a token. Copy it.\n4. In this workshop, open **Credentials \u2192 New \u2192 Telegram** and paste the token.\n   Whatever n8n calls it is fine.\n5. THREE steps here need that credential picked from their own dropdown: the\n   trigger, **Say We Heard It**, and **Send The Reply**. The trigger alone is\n   not enough \u2014 publishing will refuse and name the two you missed.\n6. Set the toggle at the top right to **Published**.\n\nThen message your bot in Telegram. An unpublished workflow is the single most\ncommon reason nothing happens.",
         "height": 420,
         "width": 460
       },

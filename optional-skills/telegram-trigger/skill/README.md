@@ -29,13 +29,16 @@ as your bot.
 
 1. Open your **workshop** address.
 2. **Credentials → New → Telegram**.
-3. Paste the token into **Access Token** and name the credential
-   `Telegram bot`.
+3. Paste the token into **Access Token** and save. The name n8n gives it does
+   not matter — whatever it is called is what you pick in the next step.
 4. Open the workflow **70 - TRIGGER - Telegram message**.
-5. Click each of the **three** Telegram steps — the trigger at the start, **Say
-   We Heard It**, and **Send The Reply** — and choose that credential on each
-   one. All three need it. Setting only the trigger is the usual mistake, and
-   publishing then refuses with "2 nodes have configuration issues".
+5. There are **three** Telegram steps, and every one needs that credential
+   chosen from its own dropdown:
+   - the trigger at the start,
+   - **Say We Heard It**,
+   - **Send The Reply**.
+   Doing only the trigger is the usual mistake. Publishing then refuses with
+   "2 nodes have configuration issues", naming the two you missed.
 6. Save, then set the toggle at the top right to **Published**.
 
 An unpublished workflow is the most common reason nothing happens.
