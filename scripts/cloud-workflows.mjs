@@ -81,8 +81,21 @@ export function learnerPublishedIds(databasePath) {
   try {
     const db = new DatabaseSync(databasePath, { readOnly: true });
     try {
+      // n8n 2 publishes a version rather than flipping `active`: its own CLI
+      // answers "Please use: publish:workflow" if you try the old way. A
+      // workflow published from the editor therefore has activeVersionId set
+      // and, at least in some paths, active still 0 — so reading only `active`
+      // misses exactly the triggers a learner switched on by hand, and the
+      // deploy quietly leaves them off. Both are read, and older builds without
+      // the column fall back to `active` alone.
+      const hasVersionColumn = db
+        .prepare("SELECT count(*) n FROM pragma_table_info('workflow_entity') WHERE name = 'activeVersionId'")
+        .get().n > 0;
+      const where = hasVersionColumn
+        ? "active = 1 OR activeVersionId IS NOT NULL"
+        : "active = 1";
       return db
-        .prepare("SELECT id FROM workflow_entity WHERE active = 1")
+        .prepare(`SELECT id FROM workflow_entity WHERE ${where}`)
         .all()
         .map((row) => String(row.id))
         .filter((id) => id !== MAIN_WORKFLOW);
