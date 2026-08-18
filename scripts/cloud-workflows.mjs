@@ -183,7 +183,7 @@ function hasAnthropicCredential(databasePath) {
  * two nodes are missing a credential they are certain they set. They set it
  * again, push anything at all, and it happens again.
  */
-function savedCredentials(databasePath) {
+export function savedCredentials(databasePath) {
   const saved = new Map();
   if (!existsSync(databasePath)) {
     return saved;
@@ -215,7 +215,7 @@ function savedCredentials(databasePath) {
 }
 
 /** Every credential the agent holds, grouped by type. */
-function credentialsByType(databasePath) {
+export function credentialsByType(databasePath) {
   const byType = new Map();
   if (!existsSync(databasePath)) {
     return byType;
@@ -250,6 +250,34 @@ const CREDENTIAL_TYPE_FOR_NODE = new Map([
 ]);
 
 /**
+ * Puts one workflow's credential choices back into one stored copy of its
+ * nodes. Returns the "workflowId::nodeName" keys it filled, so that a fix
+ * applied to several stored copies of the same workflow counts as one fix.
+ */
+function fillNodeCredentials(workflowId, nodes, saved, byType) {
+  const filled = [];
+  for (const node of Array.isArray(nodes) ? nodes : []) {
+    if (node?.credentials && Object.keys(node.credentials).length > 0) {
+      continue;
+    }
+    const key = `${workflowId}::${node?.name}`;
+    const remembered = saved.get(key);
+    if (remembered) {
+      node.credentials = remembered;
+      filled.push(key);
+      continue;
+    }
+    const type = CREDENTIAL_TYPE_FOR_NODE.get(node?.type);
+    const candidates = type ? (byType.get(type) ?? []) : [];
+    if (candidates.length === 1) {
+      node.credentials = { [type]: { ...candidates[0] } };
+      filled.push(key);
+    }
+  }
+  return filled;
+}
+
+/**
  * Puts credential choices back after an import, and makes the obvious one where
  * there is no choice to make.
  *
@@ -258,59 +286,96 @@ const CREDENTIAL_TYPE_FOR_NODE = new Map([
  * there is nothing for anyone to decide, and asking them to pick it in three
  * separate places is a puzzle rather than a safeguard. Where there is more than
  * one, nothing is guessed.
+ *
+ * n8n keeps a workflow's nodes in two places: workflow_entity, which is what
+ * the editor shows, and a workflow_history row per version, which is what
+ * Publish validates and what a published workflow actually runs. An import
+ * rewrites both, so both are repaired here. Repairing only the first is how a
+ * learner ends up staring at a credential that is visibly set while Publish
+ * insists it is missing.
  */
-function restoreCredentials(databasePath, saved, byType) {
+export function restoreCredentials(databasePath, saved, byType) {
   if (!existsSync(databasePath)) {
     return 0;
   }
-  let repaired = 0;
+  const fixed = new Set();
   try {
     const db = new DatabaseSync(databasePath);
     try {
-      for (const row of db.prepare("SELECT id, nodes FROM workflow_entity").all()) {
+      const hasColumn = (name) =>
+        db
+          .prepare("SELECT count(*) n FROM pragma_table_info('workflow_entity') WHERE name = ?")
+          .get(name).n > 0;
+      const hasHistoryTable =
+        db
+          .prepare("SELECT count(*) n FROM sqlite_master WHERE type = 'table' AND name = 'workflow_history'")
+          .get().n > 0;
+      const hasVersionId = hasColumn("versionId");
+      const hasActiveVersionId = hasColumn("activeVersionId");
+      const columns = ["id", "nodes"];
+      if (hasVersionId) {
+        columns.push("versionId");
+      }
+      if (hasActiveVersionId) {
+        columns.push("activeVersionId");
+      }
+      for (const row of db.prepare(`SELECT ${columns.join(", ")} FROM workflow_entity`).all()) {
         let nodes;
         try {
           nodes = JSON.parse(row.nodes);
         } catch {
           continue;
         }
-        if (!Array.isArray(nodes)) {
-          continue;
-        }
-        let changed = false;
-        for (const node of nodes) {
-          if (node?.credentials && Object.keys(node.credentials).length > 0) {
-            continue;
-          }
-          const remembered = saved.get(`${row.id}::${node?.name}`);
-          if (remembered) {
-            node.credentials = remembered;
-            changed = true;
-            repaired += 1;
-            continue;
-          }
-          const type = CREDENTIAL_TYPE_FOR_NODE.get(node?.type);
-          const candidates = type ? (byType.get(type) ?? []) : [];
-          if (candidates.length === 1) {
-            node.credentials = { [type]: { ...candidates[0] } };
-            changed = true;
-            repaired += 1;
-          }
-        }
-        if (changed) {
+        const filled = fillNodeCredentials(row.id, nodes, saved, byType);
+        if (filled.length > 0) {
           db.prepare("UPDATE workflow_entity SET nodes = ? WHERE id = ?").run(
             JSON.stringify(nodes),
             row.id,
           );
+          for (const key of filled) {
+            fixed.add(key);
+          }
+        }
+        if (!hasHistoryTable || !hasVersionId) {
+          continue;
+        }
+        // The version the editor's Publish button will validate, and the
+        // version currently published, when there is one. Usually the same
+        // row; after an import, the one row the import just created.
+        const versionIds = new Set(
+          [row.versionId, hasActiveVersionId ? row.activeVersionId : null].filter(Boolean),
+        );
+        for (const versionId of versionIds) {
+          const version = db
+            .prepare("SELECT nodes FROM workflow_history WHERE workflowId = ? AND versionId = ?")
+            .get(row.id, versionId);
+          if (!version) {
+            continue;
+          }
+          let versionNodes;
+          try {
+            versionNodes = JSON.parse(version.nodes);
+          } catch {
+            continue;
+          }
+          const filledVersion = fillNodeCredentials(row.id, versionNodes, saved, byType);
+          if (filledVersion.length > 0) {
+            db.prepare(
+              "UPDATE workflow_history SET nodes = ? WHERE workflowId = ? AND versionId = ?",
+            ).run(JSON.stringify(versionNodes), row.id, versionId);
+            for (const key of filledVersion) {
+              fixed.add(key);
+            }
+          }
         }
       }
     } finally {
       db.close();
     }
   } catch {
-    return repaired;
+    return fixed.size;
   }
-  return repaired;
+  return fixed.size;
 }
 
 function runCli(n8nBin, args, env) {
