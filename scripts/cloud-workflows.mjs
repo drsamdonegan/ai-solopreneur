@@ -160,6 +160,146 @@ function hasAnthropicCredential(databasePath) {
   }
 }
 
+/**
+ * The credential each node was using, keyed by workflow and node name.
+ *
+ * The import replaces every workflow with the repository's copy, and the
+ * repository cannot know the id of a credential the learner made on their own
+ * machine — so those fields are empty in the file and the import empties them
+ * here too. The learner is then told, by a trigger that will not publish, that
+ * two nodes are missing a credential they are certain they set. They set it
+ * again, push anything at all, and it happens again.
+ */
+function savedCredentials(databasePath) {
+  const saved = new Map();
+  if (!existsSync(databasePath)) {
+    return saved;
+  }
+  try {
+    const db = new DatabaseSync(databasePath, { readOnly: true });
+    try {
+      for (const row of db.prepare("SELECT id, nodes FROM workflow_entity").all()) {
+        let nodes;
+        try {
+          nodes = JSON.parse(row.nodes);
+        } catch {
+          continue;
+        }
+        for (const node of Array.isArray(nodes) ? nodes : []) {
+          if (node?.credentials && Object.keys(node.credentials).length > 0) {
+            saved.set(`${row.id}::${node.name}`, node.credentials);
+          }
+        }
+      }
+    } finally {
+      db.close();
+    }
+  } catch {
+    // A database that cannot be read is handled by the caller: nothing is
+    // restored, which is exactly today's behaviour.
+  }
+  return saved;
+}
+
+/** Every credential the agent holds, grouped by type. */
+function credentialsByType(databasePath) {
+  const byType = new Map();
+  if (!existsSync(databasePath)) {
+    return byType;
+  }
+  try {
+    const db = new DatabaseSync(databasePath, { readOnly: true });
+    try {
+      for (const row of db.prepare("SELECT id, name, type FROM credentials_entity").all()) {
+        const list = byType.get(row.type) ?? [];
+        list.push({ id: row.id, name: row.name });
+        byType.set(row.type, list);
+      }
+    } finally {
+      db.close();
+    }
+  } catch {
+    // As above.
+  }
+  return byType;
+}
+
+/**
+ * The credential type a node needs, for the nodes this project ships.
+ *
+ * Kept short and explicit rather than read from n8n's node registry: loading
+ * that here to answer one question would tie this script to n8n's internals for
+ * no gain, and a wrong guess would bind the wrong credential silently.
+ */
+const CREDENTIAL_TYPE_FOR_NODE = new Map([
+  ["n8n-nodes-base.telegram", "telegramApi"],
+  ["n8n-nodes-base.telegramTrigger", "telegramApi"],
+]);
+
+/**
+ * Puts credential choices back after an import, and makes the obvious one where
+ * there is no choice to make.
+ *
+ * Restoring covers the learner who already chose. The single-candidate rule
+ * covers the first time: if the agent holds exactly one Telegram credential,
+ * there is nothing for anyone to decide, and asking them to pick it in three
+ * separate places is a puzzle rather than a safeguard. Where there is more than
+ * one, nothing is guessed.
+ */
+function restoreCredentials(databasePath, saved, byType) {
+  if (!existsSync(databasePath)) {
+    return 0;
+  }
+  let repaired = 0;
+  try {
+    const db = new DatabaseSync(databasePath);
+    try {
+      for (const row of db.prepare("SELECT id, nodes FROM workflow_entity").all()) {
+        let nodes;
+        try {
+          nodes = JSON.parse(row.nodes);
+        } catch {
+          continue;
+        }
+        if (!Array.isArray(nodes)) {
+          continue;
+        }
+        let changed = false;
+        for (const node of nodes) {
+          if (node?.credentials && Object.keys(node.credentials).length > 0) {
+            continue;
+          }
+          const remembered = saved.get(`${row.id}::${node?.name}`);
+          if (remembered) {
+            node.credentials = remembered;
+            changed = true;
+            repaired += 1;
+            continue;
+          }
+          const type = CREDENTIAL_TYPE_FOR_NODE.get(node?.type);
+          const candidates = type ? (byType.get(type) ?? []) : [];
+          if (candidates.length === 1) {
+            node.credentials = { [type]: { ...candidates[0] } };
+            changed = true;
+            repaired += 1;
+          }
+        }
+        if (changed) {
+          db.prepare("UPDATE workflow_entity SET nodes = ? WHERE id = ?").run(
+            JSON.stringify(nodes),
+            row.id,
+          );
+        }
+      }
+    } finally {
+      db.close();
+    }
+  } catch {
+    return repaired;
+  }
+  return repaired;
+}
+
 function runCli(n8nBin, args, env) {
   return spawnSync(process.execPath, [n8nBin, ...args], {
     env: { ...process.env, ...env },
@@ -216,6 +356,8 @@ export function syncWorkflows({ paths, n8nEnv, log }) {
 
   // Read before the import, because the import is what clears it.
   const learnerPublished = learnerPublishedIds(databasePath);
+  const chosenCredentials = savedCredentials(databasePath);
+  const heldCredentials = credentialsByType(databasePath);
 
   const importResult = runCli(
     paths.n8nBin,
@@ -226,6 +368,19 @@ export function syncWorkflows({ paths, n8nEnv, log }) {
     throw new Error(
       `The reviewed workflows could not be updated.\n${lastLines(importResult)}`,
     );
+  }
+
+  // Before publishing anything: an import empties every credential field, so a
+  // trigger the learner had wired up would be published in a state that cannot
+  // run. Putting the choices back first means publish sees the same workflow
+  // they left.
+  const restored = restoreCredentials(
+    databasePath,
+    chosenCredentials,
+    heldCredentials,
+  );
+  if (restored > 0) {
+    log(`  ${restored} credential ${restored === 1 ? "choice" : "choices"} kept.`);
   }
 
   // Imports always land unpublished. In the cloud an unpublished workflow is a
