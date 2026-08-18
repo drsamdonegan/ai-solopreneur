@@ -99,7 +99,22 @@ Tell your agent to deliver to a Slack channel, and give it the channel ID:
 Send my monthly update to Slack channel C01234567 instead of just the chat.
 ```
 
-That needs a Slack bot token in an n8n **Header Auth** credential — [SLACK_TRIGGER.md](SLACK_TRIGGER.md) covers creating one, and the same credential works here.
+That needs one outbound-only Slack credential. It does not need the deleted
+inbound Slack trigger, an Events API request URL, or permission to read any
+channel.
+
+1. Go to [api.slack.com/apps](https://api.slack.com/apps) and choose **Create New App** → **From scratch**.
+2. Under **OAuth & Permissions**, add the bot token scope `chat:write` and no read scopes.
+3. Select **Install to Workspace**, then copy the **Bot User OAuth Token**. It begins `xoxb-`.
+4. In n8n, open **Credentials** → **New** → **Header Auth**.
+5. Name the credential exactly `Slack bot token`.
+6. Set **Name** to `Authorization` and **Value** to `Bearer xoxb-...` — the word `Bearer`, one space, then the token.
+7. Open the monthly-update workflow and confirm **Post To Slack** uses `Slack bot token`.
+
+Keep the token in Slack and n8n. Never paste it into this chat, a skill file,
+or a screenshot. Invite the bot to a private channel before using that
+channel's ID. The workflow only posts the finished update; it cannot read
+messages, mentions, or direct messages.
 
 ## Step 4 — ask for an update
 

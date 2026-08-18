@@ -139,7 +139,7 @@
     {
       "id": "skill-finding-customers",
       "name": "4. Finding customers",
-      "description": "Searching public comments for people describing a problem you solve, and matching one named person to a likely public professional profile.",
+      "description": "Matching one named person to a likely public professional profile after the user explicitly requests a paid lookup.",
       "workflows": [
         "61-tool-lookup-linkedin-profile.json"
       ]

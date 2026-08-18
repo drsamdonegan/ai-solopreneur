@@ -83,8 +83,8 @@ node scripts/validate-workflows.mjs
 A brand-new workflow file also needs a home in `n8n/folders.manifest.json`, which
 decides the skill folder it lands in. Validation fails until it is listed in
 exactly one folder, because an unfiled workflow never appears on the Personal
-project page a learner works from. Add it to `n8n/tools.manifest.json` too if it
-gives the agent a capability a learner should meet.
+project page a learner works from. If it gives the agent a capability, declare
+that tool and its risk in the optional skill manifest and `tools/policy.json`.
 
 Start the local project and manually exercise every affected path with non-secret
 sample input. For a write path, check altered, cross-conversation, expired,

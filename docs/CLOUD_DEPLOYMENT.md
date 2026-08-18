@@ -6,7 +6,7 @@ remaining work is convenience, not safety — see
 
 Running the agent in the cloud gives it one thing the local install can never
 have: a permanent web address that is awake when the learner is not. That is
-what lets Slack, an inbox or a schedule start a workflow on its own.
+what lets an inbox or a schedule start a workflow on its own.
 
 Nothing here changes the local install. `npm start` still runs the same three
 services natively through `scripts/local.mjs`, and **no learner needs Docker
@@ -87,7 +87,7 @@ not merged can point it at their working branch instead of `main`.
 
 `RAILWAY_PUBLIC_DOMAIN` reports only one domain, and a service with two has no
 way to say which. Guessing wrong would give n8n the chat address, and every
-webhook address it prints — the ones learners paste into Slack — would look
+webhook address it prints — the ones learners give to external services — would look
 correct and never fire. The runner therefore asks for `N8N_PUBLIC_URL`
 explicitly and refuses to start without it, rather than starting wrong.
 
@@ -290,34 +290,12 @@ Workflows on a deploy:
 - A workflow edited in the repository and redeployed: picked up, and the change
   visible in the live agent's own database.
 
-The Slack trigger, tested against a running n8n but **not against Slack
-itself** — there is no workspace here to install an app into:
-
-- Slack's `url_verification` challenge is echoed back correctly, which is the
-  check that fails when the app is created before the workflow is published.
-- Bot messages, subtype `bot_message`, empty text and channel joins are all
-  ignored, so the agent cannot answer itself into a loop.
-- Every request is answered in about 26 ms, well inside Slack's 3-second
-  limit, so Slack never retries.
-- Derived ids are valid UUIDs and pass the agent's strict validator. One Slack
-  thread maps to one session, a Slack retry produces the same request id, and
-  20,000 distinct threads produced 20,000 distinct sessions.
-- The workflow imports and publishes through the n8n CLI, and the base release
-  validation still passes with the skill present.
-
-Untested: the Slack OAuth install, and posting a reply with a real bot token.
-
 ## Learner-facing guides
 
 - [Putting your agent in the cloud](CLOUD_RUNBOOK.md) — the deploy walkthrough
   and the triage table for when it goes wrong.
-- [Message your agent from Slack](SLACK_TRIGGER.md) — the first trigger, and
-  the publish-then-create-the-app ordering that everyone gets wrong.
 
 ## Still to do
-- The Slack app manifest, and the ordering rule that the workflow must be
-  active *before* the Slack app is created, because Slack verifies the address
-  at import time.
 - Dropping container privileges. The image runs as root so that a
   platform-mounted volume is always writable; hardening this needs the mount
   chowned first.
@@ -339,5 +317,5 @@ Set a usage limit in the Railway dashboard so a runaway workflow cannot produce
 a surprise bill.
 
 Do not enable serverless sleeping. Railway wakes a slept service on inbound
-traffic but may return 502 on that first request, which is exactly what breaks
-a Slack verification handshake and drops the first webhook of the day.
+traffic but may return 502 on that first request, which can drop the first
+webhook of the day.

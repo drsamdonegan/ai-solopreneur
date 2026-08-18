@@ -19,6 +19,10 @@ versioning for local workshop releases.
 
 ### Changed
 
+- Monthly Update and Funding Radar now use an explicitly named outbound-only
+  Slack bot credential. Existing learners who already imported either run
+  workflow must delete and re-import that workflow, then select the credential
+  named `Slack bot token` before Slack delivery can succeed.
 - The n8n agent now validates contract version 3 history supplied by the
   gateway and no longer uses process-local Simple Memory.
 - Backups explicitly contain plaintext chat transcripts in addition to
@@ -29,6 +33,11 @@ versioning for local workshop releases.
 
 ### Removed
 
+- The inbound Slack trigger optional skill and learner guide. Its archived
+  verification covered the `url_verification` echo, bot/self filtering,
+  approximately 26 ms acknowledgements, deterministic UUID/thread mapping
+  (including 20,000 unique threads), and successful CLI import/publish. A real
+  Slack OAuth install and bot-token post were never verified.
 - GitHub Actions CI/CD, automated test directories, smoke-test scripts, and
   package test commands, at the repository owner's direction after the
   persistence fix was confirmed.

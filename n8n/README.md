@@ -14,20 +14,15 @@ This directory contains portable workflow exports for the local AI agent.
 | `workflows/30-tool-propose-create-task.json` | Model-facing create proposal with no task-table mutation |
 | `workflows/31-tool-propose-update-task-status.json` | Model-facing status proposal with no task-table mutation |
 | `workflows/40-confirm-task-write.json` | Enforces exact session binding, expiry, supersession, and single-use before a write |
-| `workflows/50-tool-start-domain-research.json` | Starts authorised public-domain research and binds its job ID to the current conversation |
-| `workflows/51-tool-complete-domain-research.json` | Reports what one conversation-bound research job saved, without researching again |
-| `workflows/52-tool-get-business-memory.json` | Reads saved company, competitor, keyword, source, and warning data from local memory |
-| `workflows/53-tool-start-paid-domain-research.json` | Runs one consent-gated, cost-bounded DataForSEO research pipeline and saves an evidence snapshot |
-| `workflows/54-tool-complete-paid-domain-research.json` | Reads one exact conversation-bound paid attempt without another provider call |
-| `workflows/55-tool-get-paid-domain-research.json` | Reads the latest successful paid SEO snapshot and historical attempts |
-| `workflows/61-tool-lookup-linkedin-profile.json` | Preserved custom paid lookup for one likely public professional profile |
 | `workflows/90-debug-agent-health.json` | Exposes a safe local health response without secrets |
 
-The workflow exports contain credential references named `Anthropic account` and `DataForSEO API`, but no secrets. After import, create or select the real credentials inside n8n. Workflow `53` uses an HTTP Basic Auth credential for the DataForSEO API login and password. See [PAID_DOMAIN_RESEARCH.md](../docs/PAID_DOMAIN_RESEARCH.md).
+The workflow exports contain a credential reference named `Anthropic account`,
+but no secret. After import, create or select the real credential inside n8n.
+Optional skills document any additional provider credentials they require.
 
 ## Skill folders
 
-`folders.manifest.json` decides how the workflows are grouped in n8n. Twenty numbered workflows read to a beginner as twenty unrelated things, so import files them into five folders named after what the agent can do, and the launcher prints the link to the page that shows them.
+`folders.manifest.json` decides how the workflows are grouped in n8n. Eleven numbered workflows read to a beginner as eleven unrelated things, so import files them into three folders named after what the agent can do, and the launcher prints the link to the page that shows them.
 
 That page is the local owner's **Personal** project. n8n only draws folders inside a project; its **Overview** page is always a flat list of everything and cannot be grouped. Nothing about the agent depends on the folders — they change the list, not the wiring — so a learner who ignores them still has a working agent.
 

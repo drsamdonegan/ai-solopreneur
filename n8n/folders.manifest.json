@@ -8,7 +8,7 @@
     "Every file in n8n/workflows must appear in exactly one folder. A workflow can",
     "only live in one folder, so a plumbing workflow shared by two capabilities",
     "(40-confirm-task-write) sits with the skill it belongs to most.",
-    "Folder IDs are fixed so re-running setup updates the same five folders instead",
+    "Folder IDs are fixed so re-running setup updates the same folders instead",
     "of creating duplicates. Order controls both the number in the name and the",
     "timestamps, so the list reads top to bottom under either n8n sort option.",
     "Names are what a learner reads. Say the skill out loud; no node names, no IDs."

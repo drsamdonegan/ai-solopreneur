@@ -1243,7 +1243,7 @@ async function importReviewedWorkflows() {
   print("Local task tables and three sample tasks are ready.");
   print("Enabled Markdown skills are synced into the agent.");
   if (groupedIntoFolders) {
-    print("The workflows are grouped into five skill folders.");
+    print("The workflows are grouped into the reviewed skill folders.");
   }
   const cfg = config();
   const skills = skillsUrl(cfg);

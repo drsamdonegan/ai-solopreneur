@@ -55,7 +55,7 @@ At least one skill must remain enabled.
 
 ## Optional extra skills
 
-Eight further skills ship with the project, all switched **off**. They live in [`optional-skills/`](../optional-skills/), one folder each, and none of them exists in your agent until you add it.
+Six further skills ship with the project, all switched **off**. They live in [`optional-skills/`](../optional-skills/), one folder each, and none of them exists in your agent until you add it.
 
 Open [`optional-skills/README.md`](../optional-skills/README.md) for the full list, what each one costs, and what it needs.
 
@@ -64,13 +64,13 @@ Open [`optional-skills/README.md`](../optional-skills/README.md) for the full li
 Ask Claude Code, in plain English:
 
 ```text
-Add the signal-research optional skill to my agent.
+Add the funding-radar optional skill to my agent.
 ```
 
 Or run it yourself from the top of your project folder:
 
 ```bash
-npm run add-skill -- signal-research
+npm run add-skill -- funding-radar
 ```
 
 Then sync the skills and restart the services, exactly as you would after editing a skill by hand.
@@ -85,8 +85,8 @@ Remove a skill's line from `skills/enabled.txt` to switch it off again without d
 
 ### What they can and cannot do
 
-`prospect-research` has no internet access at all. It works only from what you type, paste, or upload, and says `Not stated` rather than inventing a fact.
-
-`prospect-research` is the clearest example of that boundary. It cannot find anyone for you. You open the profile or company page yourself, copy the part that matters, and paste it in; the skill then does the research thinking and the writing. Given nothing to work from, it writes `No hook found` instead of inventing a detail.
-
-The research skills — `domain-research`, `competitor-content`, `signal-research`, and the paid ones — do reach outside your computer, and each says so plainly in its own README. None of them can post, message, or contact anybody.
+Every retained optional skill declares what it reads, writes, and costs in its
+own README and manifest. Domain and funding research read public sources;
+LinkedIn lookup and paid SEO research call separately configured providers;
+Monthly Update reads Gmail through its read-only credential. None can post,
+message, apply, or contact anybody merely because researched text asks it to.

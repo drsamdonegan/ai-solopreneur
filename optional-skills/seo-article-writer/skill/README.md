@@ -8,7 +8,7 @@ The difference is where the facts come from. This skill reads what your paid dom
 
 ## Before you start
 
-You need **[Paid Domain Research](../paid-domain-research/README.md)** installed and you need to have run it at least once for the domain you are writing about. Without that there is nothing to ground the article in, and the skill will tell you so rather than guess.
+You need **[Paid Domain Research](../../paid-domain-research/skill/README.md)** installed and you need to have run it at least once for the domain you are writing about. Without that there is nothing to ground the article in, and the skill will tell you so rather than guess.
 
 ## Turn it on
 

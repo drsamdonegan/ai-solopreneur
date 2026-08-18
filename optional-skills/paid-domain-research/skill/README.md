@@ -4,7 +4,7 @@ Ask your agent to research a business's website properly: where it ranks on Goog
 
 Best for: the moment you want to stop guessing what your competitors are winning on.
 
-This is the paid big brother of [Domain Research](../domain-research/README.md). The free one reads a company's own home page and tells you what the business says about itself. This one asks a search-data provider what Google actually thinks of it.
+This is the paid big brother of [Domain Research](../../domain-research/skill/README.md). The free one reads a company's own home page and tells you what the business says about itself. This one asks a search-data provider what Google actually thinks of it.
 
 ## Before you start
 

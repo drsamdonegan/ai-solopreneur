@@ -3,6 +3,9 @@
   "id": "funding-radar",
   "name": "Funding Radar",
   "requires": [],
+  "tests": [
+    "tests/delivery.test.mjs"
+  ],
   "agentTools": [
     {
       "parameters": {
@@ -381,7 +384,7 @@
     }
   ],
   "unavailableCapabilities": [],
-  "setup": "Two steps:\n  1. Run the '14 - SETUP - Funding Data' workflow once in n8n.\n  2. Tell your agent about your business in the chat, so it can save a funding profile. Searching does nothing until one exists.\nThen just ask: 'go and find funding I could apply for'.\nSee docs/FUNDING_RADAR.md for the whole walkthrough, including what it costs.",
+  "setup": "Three steps:\n  1. Run the '14 - SETUP - Funding Data' workflow once in n8n.\n  2. If you want Slack delivery, create the outbound-only Header Auth credential named exactly 'Slack bot token' using the chat:write bot scope. The Slack section in docs/MONTHLY_UPDATE.md has every click.\n  3. Tell your agent about your business in the chat, so it can save a funding profile. Searching does nothing until one exists.\nThen just ask: 'go and find funding I could apply for'.\nSee docs/FUNDING_RADAR.md for the whole walkthrough, including what it costs.",
   "folders": [
     {
       "id": "skill-free-money",

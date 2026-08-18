@@ -902,7 +902,13 @@
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ channel: $('Write Report').first().json.slackChannel, text: $('Write Report').first().json.reportText.slice(0, 3000) }) }}",
         "options": {
-          "timeout": 20000
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
         }
       },
       "type": "n8n-nodes-base.httpRequest",
@@ -913,7 +919,13 @@
       ],
       "id": "95540000-0000-4000-8000-000000000032",
       "name": "Post To Slack",
-      "onError": "continueRegularOutput"
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "phase16SlackBotToken",
+          "name": "Slack bot token"
+        }
+      }
     },
     {
       "parameters": {
@@ -1181,6 +1193,85 @@
       ],
       "id": "95540000-0000-4000-8000-000000000034",
       "name": "Upsert Opportunities",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const raw = $input.first()?.json ?? {};\nconst status = Number(raw.statusCode ?? 0);\nconst body = raw.body ?? raw;\nif (status === 200 && body?.ok === true) return [];\n\nconst source = $('Write Report').first().json;\nconst nodeError = String(raw.error?.message ?? raw.error ?? '').trim();\nconst slackError = String(body?.error ?? body?.message ?? '').trim();\nconst detail = (slackError || nodeError || (status ? 'HTTP ' + status : 'no response')).slice(0, 240);\nconst existing = String(source.errorSummary ?? '').trim();\nconst failure = 'Slack delivery failed: ' + detail;\n\nreturn [{ json: {\n  runId: String(source.runId ?? ''),\n  errorSummary: [existing, failure].filter(Boolean).join(' | ').slice(0, 900),\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3700,
+        0
+      ],
+      "id": "95540000-0000-4000-8000-000000000045",
+      "name": "Read Slack Delivery"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "value": "funding_runs",
+          "mode": "name"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "runId",
+              "condition": "eq",
+              "keyValue": "={{ $json.runId }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "errorSummary": "={{ $json.errorSummary }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "runId",
+              "displayName": "runId",
+              "required": false,
+              "defaultMatch": false,
+              "display": false,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": true
+            },
+            {
+              "id": "errorSummary",
+              "displayName": "errorSummary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "dryRun": false
+        }
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        3920,
+        0
+      ],
+      "id": "95540000-0000-4000-8000-000000000046",
+      "name": "Record Slack Failure",
+      "alwaysOutputData": true,
       "onError": "continueRegularOutput"
     }
   ],
@@ -1471,6 +1562,28 @@
         [
           {
             "node": "Upsert Opportunities",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post To Slack": {
+      "main": [
+        [
+          {
+            "node": "Read Slack Delivery",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Slack Delivery": {
+      "main": [
+        [
+          {
+            "node": "Record Slack Failure",
             "type": "main",
             "index": 0
           }

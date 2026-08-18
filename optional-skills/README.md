@@ -8,14 +8,11 @@ Each skill is self-contained. Adding one **never** changes the chat app, never t
 
 | Skill | What it does | Needs |
 | --- | --- | --- |
-| [`prospect-research`](prospect-research/) | Turns a name and some pasted text into a cold email you send yourself | — |
 | [`domain-research`](domain-research/) | Reads a company's own website and tells you what the business says about itself | — |
-| [`competitor-content`](competitor-content/) | Reads a competitor's public YouTube and blog, and finds their posts that beat their own average | — |
-| [`signal-research`](signal-research/) | Finds people describing your problem in public, in their own words | A free Google API key |
+| [`funding-radar`](funding-radar/) | Searches reviewed public sources for grants and funding that match the business facts you save | An Anthropic account |
 | [`paid-domain-research`](paid-domain-research/) | Where a site ranks on Google, who it competes with, and which keywords are worth it | `domain-research` + a paid DataForSEO account |
 | [`seo-article-writer`](seo-article-writer/) | Writes a full article grounded in what your research actually found | `paid-domain-research` |
 | [`linkedin-profile-lookup`](linkedin-profile-lookup/) | Looks up a named person's public professional details | A paid people-search account |
-| [`linkedin-prospect-search`](linkedin-prospect-search/) | Searches for people matching a description of your ideal customer | `linkedin-profile-lookup` |
 | [`monthly-update`](monthly-update/) | Reads a month of your email and writes your company's monthly update | A read-only Gmail connection |
 
 Open any skill's folder and read its `skill/README.md` before you install it. Each one tells you what it costs, what it can't do, and how to prove it loaded.
@@ -25,13 +22,13 @@ Open any skill's folder and read its `skill/README.md` before you install it. Ea
 Open your project in Claude Code and ask it, in plain English:
 
 ```text
-Add the signal-research optional skill to my agent.
+Add the funding-radar optional skill to my agent.
 ```
 
 If you would rather run it yourself, it is one command from the top of your project folder:
 
 ```bash
-node optional-skills/_installer/add-skill.mjs signal-research
+node optional-skills/_installer/add-skill.mjs funding-radar
 ```
 
 To see everything available and what you already have:
@@ -60,7 +57,7 @@ Some skills need one extra setup step — an API key, or a one-off workflow to c
 You do not need to update your whole project. Open the skill's folder on GitHub, copy the address out of your browser, and hand it over:
 
 ```bash
-npm run add-skill -- https://github.com/drsamdonegan/ai-solopreneur/tree/main/optional-skills/signal-research
+npm run add-skill -- https://github.com/drsamdonegan/ai-solopreneur/tree/main/optional-skills/funding-radar
 ```
 
 That downloads **only that one folder** and installs it. It does not bring the other skills, and it does not touch your chat app, your existing skills, or anything you have customised.

@@ -30,8 +30,8 @@ const CLI_TIMEOUT_MS = 5 * 60 * 1_000;
  * way it is wrong is silent. An unpublished tool is not an error, it is an
  * agent that quietly cannot do the thing it was just given.
  *
- * Triggers are deliberately absent. A Slack trigger with no token, or a funding
- * scan with no business profile, should not start itself. The learner switches
+ * Triggers are deliberately absent. A funding or monthly trigger with no saved
+ * profile should not start itself. The learner switches
  * those on, and learnerPublishedIds below is what makes that survive a deploy.
  */
 const MUST_BE_LIVE = /^\d+-(tool|setup|internal|confirm|run)-/;
@@ -69,8 +69,7 @@ export function requiredWorkflowIds(workflowsDir) {
  * n8n's import deactivates everything it touches — `import:workflow` defaults
  * to `activeState: false`, and the `fromJson` alternative only works in queue
  * mode. So without remembering this first, installing any skill would silently
- * switch off the Slack trigger they set up by hand, and they would find out
- * when a message got no reply.
+ * switch off a schedule the learner set up by hand.
  *
  * The main workflow is excluded because the credential check below owns it.
  */

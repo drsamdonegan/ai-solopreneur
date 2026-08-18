@@ -350,6 +350,23 @@ const queueSources = Object.entries(start.connections)
 check(queueSources.length === 1 && queueSources[0] === "Gmail Ready?",
   `the background run is reachable from ${queueSources.join(", ") || "nothing"} rather than only the Gmail check`);
 
+// ----------------------------------------------- 74: Slack delivery failure
+const slackNode = run.nodes.find((node) => node.name === "Post To Slack");
+check(slackNode?.credentials?.httpHeaderAuth?.name === "Slack bot token",
+  "monthly Slack delivery has no named Header Auth credential");
+const slackFailure = runNode(run, "Read Slack Delivery", {
+  input: [{ statusCode: 200, body: { ok: false, error: "channel_not_found" } }],
+  nodes: { "Render Update": [{ runId: "mu-slack", errorSummary: "one email failed" }] },
+});
+check(slackFailure.length === 1 && slackFailure[0].runId === "mu-slack",
+  "a failed monthly Slack delivery did not identify its run");
+check(slackFailure[0].errorSummary.includes("channel_not_found"),
+  "a failed monthly Slack delivery did not record Slack's error");
+check(runNode(run, "Read Slack Delivery", {
+  input: [{ statusCode: 200, body: { ok: true } }],
+  nodes: { "Render Update": [{ runId: "mu-slack", errorSummary: "" }] },
+}).length === 0, "a successful monthly Slack delivery was recorded as a failure");
+
 console.log("\n--- rendered update ---\n");
 console.log(rendered.updateText);
 console.log("\n-----------------------\n");

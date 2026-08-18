@@ -4,7 +4,7 @@ Your agent currently lives on your computer. That means it is awake only when
 your laptop is, and nothing outside your computer can reach it.
 
 Moving it to the cloud changes one thing: it gets a permanent web address. That
-is what lets a Slack message, an inbox, or a schedule start it while you are
+is what lets an inbox or a schedule start it while you are
 doing something else.
 
 **What it costs.** You can start free. Railway gives new accounts **US$5 of
@@ -144,8 +144,8 @@ from your passcode, and it is only for the workshop.
 
 Anything that needs your agent's web address has to be set up **after** you
 deploy, not before — because before today it did not have an address. That
-means Slack, and it means anything you sign in to with a Google or Microsoft
-button rather than by pasting a key.
+includes anything you sign in to with a Google or Microsoft button rather than
+by pasting a key.
 
 Those you set up once, in your cloud workshop. They are new connections, not
 repeats of something you already did.
