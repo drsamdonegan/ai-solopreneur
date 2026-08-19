@@ -83,6 +83,7 @@ To spend less, drop a beat. A search covers national sources, your state, and no
 - **It never says you are eligible.** It says what the published criteria say, and names the one thing you have to check yourself. Only the body running the program can decide.
 - **It never applies for anything, and never contacts anyone.** Grant conditions are legal commitments; that decision stays with you.
 - **The schedule is off by default.** It searches on its own only after you deliberately switch on the daily trigger.
+- **It never sends the report anywhere.** No Slack, no email, no phone. It is saved on your agent and read back in the chat when you ask.
 
 ## Running it on a schedule
 
@@ -110,9 +111,10 @@ The report tells you, in a NOTES section at the bottom. It is written to name ga
 | "N more programs are waiting to be checked" | More was found than the four-per-search verification budget. The next search picks them up. |
 | "I could not assess eligibility this morning" | The final pass failed, so the verdicts are placeholders. The programs and links are still good. |
 | The agent asks for your business details | Step 2 has not happened, or the profile has no country. |
-| "A funding search is already running" | One is in flight. It takes a few minutes; ask again shortly. |
+| "A funding search is already running" | One is in flight. It tells you how long it has been going; ask again shortly, or tell it to search again anyway. |
+| "That search never reported back" | The agent restarted while a search was working — a deploy does this. Nothing was saved. Ask for a fresh one. |
 
-If a search fails completely, no Slack message is sent. A cheerful message about a search that did not happen is worse than silence.
+A failed search still writes its run, so `What did you find?` tells you it failed rather than going quiet.
 
 ## Where it looks
 

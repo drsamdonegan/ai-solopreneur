@@ -1,0 +1,243 @@
+{
+  "name": "70 - TRIGGER - Telegram message",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Message your agent from Telegram\n\nYou need one thing: a bot token from @BotFather in Telegram.\n\n1. Open Telegram and message **@BotFather**.\n2. Send `/newbot`, pick a name and a username ending in `bot`.\n3. It replies with a token. Copy it.\n4. In this workshop, open **Credentials \u2192 New \u2192 Telegram** and paste the token.\n   Whatever n8n calls it is fine.\n5. THREE steps here need that credential picked from their own dropdown: the\n   trigger, **Say We Heard It**, and **Send The Reply**. The trigger alone is\n   not enough \u2014 publishing will refuse and name the two you missed.\n6. Set the toggle at the top right to **Published**.\n\nThen message your bot in Telegram. An unpublished workflow is the single most\ncommon reason nothing happens.",
+        "height": 420,
+        "width": 460
+      },
+      "id": "a1000000-0000-4000-8000-000000000001",
+      "name": "Read this first",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -560,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {}
+      },
+      "id": "a1000000-0000-4000-8000-000000000002",
+      "webhookId": "a1000000-0000-4000-8000-00000000d70a",
+      "name": "Telegram Message",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Telegram sends every kind of update to one place. Only a human typing text\n// should reach the agent.\n//\n// The chat id is used as the session id, so each person keeps one continuous\n// conversation across messages rather than starting fresh every time.\n\n// The agent will only accept real UUIDs, and it uses the session id to remember\n// a conversation. Deriving them by hand keeps one Telegram chat on one session,\n// so the agent follows the conversation instead of meeting a stranger every\n// message. Node's crypto is not available inside this sandbox, so this is a\n// plain FNV-1a hash spread over the four rounds a UUID needs.\nconst uuidFrom = (seed) => {\n  let hex = '';\n  for (let round = 0; round < 4; round += 1) {\n    let hash = 0x811c9dc5;\n    const salted = `${round}:${seed}`;\n    for (let index = 0; index < salted.length; index += 1) {\n      hash ^= salted.charCodeAt(index);\n      hash = Math.imul(hash, 0x01000193) >>> 0;\n    }\n    hex += hash.toString(16).padStart(8, '0');\n  }\n  return [\n    hex.slice(0, 8),\n    hex.slice(8, 12),\n    `4${hex.slice(13, 16)}`,\n    `8${hex.slice(17, 20)}`,\n    hex.slice(20, 32)\n  ].join('-');\n};\n\nconst message = $json.message && typeof $json.message === 'object' ? $json.message : {};\nconst chat = message.chat && typeof message.chat === 'object' ? message.chat : {};\nconst from = message.from && typeof message.from === 'object' ? message.from : {};\n\nconst text = typeof message.text === 'string' ? message.text.trim() : '';\nconst chatId = chat.id;\n\n// Other bots are ignored for the same reason Slack's trigger ignored them: a\n// reply arriving back as a new message would have the agent answering itself\n// until the credit ran out.\nconst fromBot = from.is_bot === true;\n\nif (fromBot || text.length === 0 || chatId === undefined) {\n  return [{ json: { skip: true } }];\n}\n\n// /start is what Telegram sends when someone first opens a bot, and it is the\n// first thing anybody does. Rather than passing the literal text '/start' to\n// the agent, which it would answer oddly, it becomes a request to introduce\n// itself \u2014 so the very first exchange is a useful one.\nconst asked = text === '/start'\n  ? 'Introduce yourself in two sentences: say what you can help me with, and give me one example of something I could ask you right now.'\n  : text.replace(/^\\/ask\\s+/i, '');\n\n// Derived from the message id, so if Telegram re-sends an update the same\n// request id comes back rather than a second answer.\nconst requestId = uuidFrom(`telegram-request:${String(message.message_id ?? Date.now())}:${String(chatId)}`);\n\nreturn [{\n  json: {\n    skip: false,\n    chatId,\n    requestId,\n    sessionId: uuidFrom(`telegram-session:${String(chatId)}`),\n    message: asked\n  }\n}];"
+      },
+      "id": "a1000000-0000-4000-8000-000000000003",
+      "name": "Read The Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cond-skip",
+              "leftValue": "={{ $json.skip }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a1000000-0000-4000-8000-000000000004",
+      "name": "Something To Answer?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        440,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "=Thinking about that now. It can take up to a minute.",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "a1000000-0000-4000-8000-000000000005",
+      "name": "Say We Heard It",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        660,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:5678/webhook/chat",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ schemaVersion: 3, requestId: $('Read The Message').item.json.requestId, sessionId: $('Read The Message').item.json.sessionId, agentId: 'marketing', message: $('Read The Message').item.json.message, history: [], documents: [] }) }}",
+        "options": {
+          "timeout": 180000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "a1000000-0000-4000-8000-000000000006",
+      "name": "Ask The Agent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Telegram is sent as plain text on purpose. Its Markdown parsers reject an\n// unbalanced asterisk or an unescaped bracket with a 400, which would lose the\n// whole answer over a stray character the agent had no way to predict.\n//\n// The hard limit is 4096 characters; the answer is cut a little short of it so\n// the note about being cut still fits.\nconst reply = String($json.reply ?? $json.errorMessage ?? '').trim();\n\nlet text = reply.length === 0\n  ? 'Your agent did not have an answer for that one.'\n  : reply;\n\nif (text.length > 3900) {\n  text = text.slice(0, 3900) + '\\n\\n[cut short here - open your agent to read the rest]';\n}\n\nreturn [{ json: { chatId: $('Read The Message').item.json.chatId, text } }];"
+      },
+      "id": "a1000000-0000-4000-8000-000000000007",
+      "name": "Shape The Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "={{ $json.text }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "a1000000-0000-4000-8000-000000000008",
+      "name": "Send The Reply",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1320,
+        -120
+      ]
+    }
+  ],
+  "connections": {
+    "Telegram Message": {
+      "main": [
+        [
+          {
+            "node": "Read The Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read The Message": {
+      "main": [
+        [
+          {
+            "node": "Something To Answer?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Something To Answer?": {
+      "main": [
+        [
+          {
+            "node": "Say We Heard It",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Say We Heard It": {
+      "main": [
+        [
+          {
+            "node": "Ask The Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ask The Agent": {
+      "main": [
+        [
+          {
+            "node": "Shape The Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shape The Reply": {
+      "main": [
+        [
+          {
+            "node": "Send The Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "00000000-0000-4000-8000-000000000070",
+  "id": "phase17TelegramTrigger",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "phase": 17,
+    "testedWithN8n": "2.30.5",
+    "toolRisk": "bounded_external_read_and_write",
+    "authorization": "started-by-a-person-messaging-the-bot",
+    "externalWrite": "a-reply-to-the-telegram-chat-that-messaged-it",
+    "externalRead": "telegram-messages-addressed-to-this-bot",
+    "localWrite": "none"
+  },
+  "tags": []
+}

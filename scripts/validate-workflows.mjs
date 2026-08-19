@@ -687,6 +687,48 @@ if (agentWorkflow) {
       /errorMessage/.test(invalid?.parameters?.responseBody ?? ""),
     "Invalid response must use the stable error contract",
   );
+
+  // $('Node').item walks n8n's paired-item trail back to that node. Running a
+  // tool rewrites the agent node's recorded source to output 0, so the trail
+  // leads to the wrong branch of Route Selected Agent and resolves to nothing:
+  // every agent except the one on output 0 answered with an empty body the
+  // moment it used a tool. $('Node').first() reads the same single item without
+  // needing the trail, so this workflow uses it everywhere.
+  // n8n reads a $fromAI call by scanning the raw text, so an apostrophe inside
+  // a single-quoted description closes the string early and the tool node dies
+  // with "Unbalanced parentheses" the first time the model reaches for it. A
+  // description carrying an apostrophe has to be written in backticks.
+  const brokenFromAi = [
+    ...new Set(
+      agentWorkflow.nodes.flatMap((node) =>
+        JSON.stringify(node.parameters ?? {})
+          .split("$fromAI(")
+          .slice(1)
+          .map((tail) => tail.slice(0, tail.indexOf(") }}") + 1))
+          .filter((call) => {
+            const description = call.slice(call.indexOf(",") + 1).trim();
+            if (!description.startsWith("'")) return false;
+            const body = description.slice(1);
+            return !body.slice(body.indexOf("'") + 1).trim().startsWith(",");
+          })
+          .map(() => node.name),
+      ),
+    ),
+  ];
+  check(
+    brokenFromAi.length === 0,
+    "Tool descriptions must not close their own quote; write them in backticks when they contain an apostrophe" +
+      (brokenFromAi.length > 0 ? ` (${brokenFromAi.join(", ")})` : ""),
+  );
+
+  const pairedItemNodes = agentWorkflow.nodes
+    .filter((node) => /\$\('[^']+'\)\.item\b/.test(JSON.stringify(node.parameters ?? {})))
+    .map((node) => node.name);
+  check(
+    pairedItemNodes.length === 0,
+    "Agent workflow must read earlier nodes with .first(), not .item" +
+      (pairedItemNodes.length > 0 ? ` (${pairedItemNodes.join(", ")})` : ""),
+  );
 }
 
 const setupWorkflow = workflows.get("10-setup-local-task-data.json");

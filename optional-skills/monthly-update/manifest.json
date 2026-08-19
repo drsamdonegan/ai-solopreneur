@@ -22,8 +22,8 @@
         "workflowInputs": {
           "mappingMode": "defineBelow",
           "value": {
-            "sessionId": "={{ $('Validate and Normalise').item.json.sessionId }}",
-            "requestId": "={{ $('Validate and Normalise').item.json.requestId }}"
+            "sessionId": "={{ $('Validate and Normalise').first().json.sessionId }}",
+            "requestId": "={{ $('Validate and Normalise').first().json.requestId }}"
           },
           "matchingColumns": [],
           "schema": [
@@ -68,8 +68,8 @@
         "workflowInputs": {
           "mappingMode": "defineBelow",
           "value": {
-            "sessionId": "={{ $('Validate and Normalise').item.json.sessionId }}",
-            "requestId": "={{ $('Validate and Normalise').item.json.requestId }}",
+            "sessionId": "={{ $('Validate and Normalise').first().json.sessionId }}",
+            "requestId": "={{ $('Validate and Normalise').first().json.requestId }}",
             "month": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('month', 'The month the user asked about, as a month name such as July, or as 2026-07. Leave empty for the most recent update.', 'string') }}"
           },
           "matchingColumns": [],
@@ -124,8 +124,8 @@
         "workflowInputs": {
           "mappingMode": "defineBelow",
           "value": {
-            "sessionId": "={{ $('Validate and Normalise').item.json.sessionId }}",
-            "requestId": "={{ $('Validate and Normalise').item.json.requestId }}",
+            "sessionId": "={{ $('Validate and Normalise').first().json.sessionId }}",
+            "requestId": "={{ $('Validate and Normalise').first().json.requestId }}",
             "month": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('month', 'The month to read, as a month name such as July, or as 2026-07. Leave empty for the month that just ended, which is the usual case.', 'string') }}",
             "audience": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('audience', 'Only when the user says who it is for: investor, team, or community. Leave empty to use whatever is saved on their profile.', 'string') }}"
           },
@@ -190,8 +190,8 @@
         "workflowInputs": {
           "mappingMode": "defineBelow",
           "value": {
-            "sessionId": "={{ $('Validate and Normalise').item.json.sessionId }}",
-            "requestId": "={{ $('Validate and Normalise').item.json.requestId }}",
+            "sessionId": "={{ $('Validate and Normalise').first().json.sessionId }}",
+            "requestId": "={{ $('Validate and Normalise').first().json.requestId }}",
             "companyName": "What the company is called, exactly as the user said it. Required before a profile can be saved; ask if they have not said.",
             "oneLiner": "One line on what the company does, in the user's own words. Empty string when not mentioned.",
             "domainAliases": "The company's own email domains, comma separated, such as acme.com. Required before a profile can be saved; ask if they have not said.",

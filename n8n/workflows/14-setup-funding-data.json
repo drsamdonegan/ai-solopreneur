@@ -58,7 +58,8 @@
         320
       ],
       "id": "95500000-0000-4000-8000-000000000015",
-      "name": "Temporary Setup Webhook"
+      "name": "Temporary Setup Webhook",
+      "webhookId": "95500000-0000-4000-8000-000000000115"
     },
     {
       "parameters": {
@@ -72,7 +73,7 @@
               "type": "string"
             },
             {
-              "name": "updatedAt",
+              "name": "profileSavedAt",
               "type": "date"
             },
             {
@@ -145,10 +146,6 @@
             },
             {
               "name": "beats",
-              "type": "string"
-            },
-            {
-              "name": "deliverTo",
               "type": "string"
             }
           ]

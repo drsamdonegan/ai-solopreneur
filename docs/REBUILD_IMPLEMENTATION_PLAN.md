@@ -237,7 +237,10 @@ rg -n \
   README.md docs scripts n8n optional-skills
 ```
 
-Expected: the catalogue lists six retained optional skills before Xero is added, and the final search has no live references other than an intentional changelog/archive note.
+Expected: the catalogue lists the six retained audited skills, plus the later
+cloud-only Telegram trigger when that concurrent main-line work is present.
+The final search has no live references to removed skills other than an
+intentional changelog/archive note.
 
 Rollback: restore a removed skill only as a complete directory plus its docs and validator coverage.
 

@@ -55,7 +55,10 @@ At least one skill must remain enabled.
 
 ## Optional extra skills
 
-Six further skills ship with the project, all switched **off**. They live in [`optional-skills/`](../optional-skills/), one folder each, and none of them exists in your agent until you add it.
+Seven further skills are available in the catalogue. A full repository checkout
+keeps them in [`optional-skills/`](../optional-skills/); a generated learner base
+omits that catalogue and installs the same skill from its GitHub folder URL.
+None is part of the four-skill base until you add it.
 
 Open [`optional-skills/README.md`](../optional-skills/README.md) for the full list, what each one costs, and what it needs.
 

@@ -85,6 +85,12 @@ Government searches are locked to those domains, which is what keeps the scam si
 
 **It will never apply for anything, or contact anyone.** It finds and reports. Deciding what to chase, and filling in the form, stays with you — grant conditions are legal commitments, and an agent should not be signing you up to one on your behalf.
 
+## Where the report goes
+
+Into the chat, and nowhere else.
+
+The report is saved on your own agent, and your agent reads it back when you ask. It is not emailed, posted to Slack, or sent to a phone. That is deliberate: the only person who sees what your business might be eligible for is you, in the window you are already looking at.
+
 ## Running it on a schedule
 
 The optional workflow **76 - TRIGGER - Daily Funding Scan** runs at 8am in n8n's configured timezone. It ships switched off.

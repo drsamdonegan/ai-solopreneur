@@ -15,6 +15,8 @@ versioning for local workshop releases.
   routing, migration preflight, and surgical feature-slice hand-off map.
 - An inactive 08:00 daily Funding Radar trigger with shared duplicate-run
   protection.
+- A cloud-only Telegram trigger that treats inbound messages as untrusted
+  user text and sends plain-text replies through the configured bot.
 - Durable plaintext SQLite chat history stored in the Git-ignored local data
   folder.
 - Conversation browsing, full-text search, rename, delete, pagination, and
@@ -32,10 +34,8 @@ versioning for local workshop releases.
   Bookkeeping. Existing installations must re-import workflows `00` and `11`,
   then run skill sync; skill sync alone cannot replace the old single-agent
   graph.
-- Monthly Update and Funding Radar now use an explicitly named outbound-only
-  Slack bot credential. Existing learners who already imported either run
-  workflow must delete and re-import that workflow, then select the credential
-  named `Slack bot token` before Slack delivery can succeed.
+- Monthly Update uses an explicitly named outbound-only Slack bot credential.
+  Funding Radar reports remain local and are read back only in the chat.
 - The n8n agent now validates contract version 3 history supplied by the
   gateway and no longer uses process-local Simple Memory.
 - SEO Article Writer now works with free Domain Research; paid DataForSEO
@@ -43,6 +43,9 @@ versioning for local workshop releases.
 - Meeting action items use readable plain-text `-` lines.
 - LinkedIn profile lookup is provider-only, needs approval for each Crustdata
   search, and reports unavailability instead of inventing public-search URLs.
+- Funding runs now survive every n8n branch, distinguish missing from unreadable
+  profiles, expose interrupted searches honestly, and never discard a paid
+  result while building its report.
 - Backups explicitly contain plaintext chat transcripts in addition to
   encrypted n8n credentials and settings.
 - The Anthropic mock used before removal was corrected to distinguish the

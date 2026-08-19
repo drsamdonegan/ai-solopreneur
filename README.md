@@ -16,9 +16,12 @@ In about 30 minutes you will have:
 - Claude connected through a private n8n credential.
 - PDF, DOCX, TXT, and long-transcript input.
 - Local project tasks and conversation memory.
-- Editable Markdown skills.
-- Optional paid DataForSEO-backed domain and SEO research with durable evidence snapshots.
+- Five physically scoped agents with accessible role cards and saved settings.
+- Editable Markdown skills loaded only for their owning agent.
+- Free first-party domain research, with paid DataForSEO research as an
+  explicit optional upgrade.
 - Background SEO article drafts grounded in saved research and verified public sources.
+- An optional daily Funding Radar trigger that ships switched off.
 - Confirmation-gated task creation and status changes.
 
 Everything runs locally as ordinary Node.js processes. Nothing is deployed to the cloud in this release.

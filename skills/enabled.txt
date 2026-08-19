@@ -4,3 +4,5 @@ meeting-analysis
 task-capture
 weekly-status
 funding-radar
+telegram-trigger
+domain-research

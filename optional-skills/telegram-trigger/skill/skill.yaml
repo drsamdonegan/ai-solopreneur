@@ -1,0 +1,5 @@
+id: telegram-trigger
+agent: marketing
+name: Telegram Trigger
+version: 1.0.0
+description: Answer a message someone sent to this agent's Telegram bot, keeping the reply short enough to send and plain enough to read.

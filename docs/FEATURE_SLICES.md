@@ -19,12 +19,12 @@ The commit IDs below are immutable slice boundaries on the v0.3 release line. `0
 
 ### S02 · Honest optional catalogue · `a312ae9`
 
-- Purpose: remove non-runnable catalogue entries and retain standalone outbound Slack setup for the skills that really post.
+- Purpose: remove non-runnable catalogue entries and retain standalone outbound Slack setup for Monthly Update, which still posts.
 - Prerequisites: S01.
-- Owns: deleted optional skill directories and dead installers/manifests; `optional-skills/README.md`; catalogue and Slack documentation; monthly-update and funding Slack credential/error handling; catalogue validator cleanup.
-- Re-import: `00` no; `11` no. Re-import workflow 74 or 71 only if its Slack node is already installed.
+- Owns: deleted optional skill directories and dead installers/manifests; `optional-skills/README.md`; catalogue and Slack documentation; Monthly Update Slack credential/error handling; catalogue validator cleanup.
+- Re-import: `00` no; `11` no. Re-import workflow 74 only if its Slack node is already installed.
 - Skill sync: only if a removed skill was enabled.
-- External setup: optional `Slack bot token` Header Auth credential.
+- External setup: optional `Slack bot token` Header Auth credential for Monthly Update only. Funding reports are chat-only in the final v0.3 state.
 - Verify: `node scripts/validate-workflows.mjs && node scripts/validate-release.mjs`.
 - Rollback: `git revert a312ae9`; restoring deleted skills also restores claims that the local n8n agent cannot execute.
 
@@ -76,13 +76,13 @@ The commit IDs below are immutable slice boundaries on the v0.3 release line. `0
 
 ### S07 · Daily Funding Radar · `cccd7ad`
 
-- Purpose: restore an inactive 08:00 daily trigger and put duplicate-run protection in the shared funding path.
+- Purpose: restore an inactive 08:00 daily trigger, put duplicate-run protection in the shared funding path, and keep reports local to chat.
 - Prerequisites: S03–S04 and Funding Radar already installed. On this release line the canonical installed Funding Radar state begins at `19cfd00`.
 - Owns: workflows 71 and 76 in installed/catalogue copies, Funding Radar docs/tests, and folder placement.
 - Re-import: workflow 71 yes; import workflow 76. `00` and `11` no.
 - Skill sync: no unless its Markdown was separately changed.
 - External setup: run setup workflow 14; enable workflow 76 only after checking a manual run and its cost.
-- Verify: `node optional-skills/funding-radar/tests/delivery.test.mjs && node scripts/validate-workflows.mjs`.
+- Verify: `node optional-skills/funding-radar/tests/chat-only-delivery.test.mjs && node optional-skills/funding-radar/tests/daily-schedule.test.mjs && node optional-skills/funding-radar/tests/run-state.test.mjs && node scripts/validate-workflows.mjs`.
 - Rollback: `git revert cccd7ad`; disable 76 first if an existing n8n copy was activated.
 
 ### S08 · Free-first SEO writing · `8e69f18`

@@ -153,6 +153,30 @@ function readCookie(request: IncomingMessage, name: string): string | undefined 
  * The entry a trusted proxy appended is the last one, so with one proxy in
  * front that is the value to key on.
  */
+/**
+ * n8n and the document reader live in this same container and call the API over
+ * loopback, where there is no browser to carry a session cookie. Their calls are
+ * let through, but only when the connection genuinely is local AND carries none
+ * of the headers a proxy adds. Railway's edge always stamps a forwarded header,
+ * so a request from outside cannot pass even if its source address somehow
+ * looked local; both locks have to open, never one.
+ *
+ * On a learner's own computer there is no passcode, so no gate, and this is
+ * never consulted.
+ */
+function isSameContainer(request: IncomingMessage): boolean {
+  const address = request.socket.remoteAddress ?? "";
+  const local =
+    address === "127.0.0.1" ||
+    address === "::1" ||
+    address === "::ffff:127.0.0.1";
+  const proxied =
+    request.headers["x-forwarded-for"] !== undefined ||
+    request.headers["x-forwarded-host"] !== undefined ||
+    request.headers["x-real-ip"] !== undefined;
+  return local && !proxied;
+}
+
 function clientKey(request: IncomingMessage, proxyHops: number): string {
   if (proxyHops > 0) {
     const header = request.headers["x-forwarded-for"];
@@ -468,6 +492,12 @@ export function createAccessGate(options: AccessGateOptions): AccessGate {
 
   return {
     async handle(request, response, url) {
+      // Above everything, so a tool workflow reaching the business memory API
+      // is not answered with a sign-in page it cannot read.
+      if (isSameContainer(request)) {
+        return false;
+      }
+
       if (url.pathname === "/access.css") {
         response.writeHead(200, {
           ...GATE_HEADERS,

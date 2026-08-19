@@ -26,6 +26,7 @@ Thumbs.db
 .vscode/
 
 # Future chat application output
+node_modules
 node_modules/
 dist/
 coverage/

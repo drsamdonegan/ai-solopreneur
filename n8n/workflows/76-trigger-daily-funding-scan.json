@@ -154,7 +154,7 @@
     "testedWithN8n": "2.30.5",
     "toolRisk": "bounded_external_read_and_local_write",
     "authorization": "scheduled-run-only",
-    "externalWrite": "optional-slack-message-to-configured-channel",
+    "externalWrite": "none",
     "externalRead": "official-funding-sources-and-anthropic-api",
     "localWrite": "funding-opportunities-and-funding-runs"
   },

@@ -1,6 +1,9 @@
 # Optional skills
 
-Your agent starts out able to manage projects and tasks. Everything in this folder is something extra you can bolt on when you need it — and nothing here is switched on until you ask for it.
+The generated learner base starts out able to manage projects and tasks.
+Everything in this catalogue is something extra you can bolt on when you need
+it. A maintainer checkout may already have some installed while they test the
+release; `skills/enabled.txt` is the source of truth for that checkout.
 
 Each skill is self-contained. Adding one **never** changes the chat app, never touches your other skills, and never overwrites anything you have already customised. If you add the same skill twice, the second time does nothing.
 
@@ -14,6 +17,7 @@ Each skill is self-contained. Adding one **never** changes the chat app, never t
 | [`seo-article-writer`](seo-article-writer/) | Writes a full article grounded in what your research actually found | `domain-research`; paid research is optional |
 | [`linkedin-profile-lookup`](linkedin-profile-lookup/) | Looks up a named person's public professional details | A paid people-search account |
 | [`monthly-update`](monthly-update/) | Reads a month of your email and writes your company's monthly update | A read-only Gmail connection |
+| [`telegram-trigger`](telegram-trigger/) | Lets a cloud-hosted agent answer plain-text Telegram messages | A Telegram bot token and cloud deployment |
 
 Open any skill's folder and read its `skill/README.md` before you install it. Each one tells you what it costs, what it can't do, and how to prove it loaded.
 
