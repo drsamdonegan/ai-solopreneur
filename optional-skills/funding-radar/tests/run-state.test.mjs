@@ -790,6 +790,9 @@ const beatTrigger = beat.nodes.find((n) => n.type.endsWith("executeWorkflowTrigg
 const beatAccepts = new Set(
   (beatTrigger?.parameters?.workflowInputs?.values ?? []).map((v) => v.name),
 );
+const beatDeclares = new Map(
+  (beatTrigger?.parameters?.workflowInputs?.values ?? []).map((v) => [v.name, v.type]),
+);
 const runBeat = scan.nodes.find((n) => n.name === "Run Beat");
 for (const sent of Object.keys(runBeat?.parameters?.workflowInputs?.value ?? {})) {
   check(
@@ -817,6 +820,33 @@ check(
       item.json.beatIndex === index && item.json.beatCount === 2),
   "every beat leaves with the runId and its own number, so its heartbeat lands on the right row",
 );
+// Names matching is only half of it. n8n validates the declared *type* too, and
+// a number sent where a string was declared is rejected before the beat runs —
+// which killed every beat in a live scan and reported "the beat did not run"
+// three times over. So the types Build Beats actually produces are checked
+// against what the trigger says it will accept.
+const n8nTypeOf = (value) =>
+  typeof value === "number" ? "number"
+  : typeof value === "boolean" ? "boolean"
+  : typeof value === "string" ? "string"
+  : Array.isArray(value) ? "array"
+  : "object";
+const produced = builtBeats[0]?.json ?? {};
+let typesChecked = 0;
+for (const [sent, expression] of Object.entries(
+  runBeat?.parameters?.workflowInputs?.value ?? {},
+)) {
+  const from = String(expression).match(/\$json\.(\w+)/)?.[1];
+  if (from === undefined || !(from in produced)) continue;
+  const declared = beatDeclares.get(sent);
+  check(
+    declared === n8nTypeOf(produced[from]),
+    `Run Beat sends "${sent}" as ${n8nTypeOf(produced[from])} but the beat trigger declares ${declared}, so n8n rejects the whole beat`,
+  );
+  typesChecked += 1;
+}
+check(typesChecked > 0, "the types crossing into the beat were actually compared");
+
 const beatHeartbeat = beat.nodes.find((n) => n.name === "Note Beat Started");
 check(
   beatHeartbeat !== undefined && beatHeartbeat.onError === "continueRegularOutput",
