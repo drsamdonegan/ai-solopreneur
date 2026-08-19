@@ -216,6 +216,106 @@ check(
   "no run at all is reported as nothing found yet",
 );
 
+// --- the report, which does not sit next to the search that made it ---------
+
+// Load Closing Soon is wired between Shape Findings and Write Report, so the
+// item arriving at Write Report is a stored opportunity row rather than the
+// search. Reading the input instead of naming the node threw away a full
+// ten-minute search and reported it as a missing business profile.
+const scan = await load("71-run-funding-scan.json");
+const storedRow = {
+  fingerprint: "abc",
+  programName: "Some older program",
+  closesAt: "2026-12-01",
+};
+const searchResult = {
+  beatsRun: ["national"],
+  beatsAttempted: 1,
+  beatsSucceeded: 1,
+  failedBeats: [],
+  candidates: [{ fingerprint: "f1" }],
+  droppedInVerification: [],
+  skippedForBudget: 0,
+  judgeFailed: false,
+  searchCount: 3,
+  inputTokens: 100,
+  outputTokens: 50,
+  findings: [{ fingerprint: "f1" }],
+  reportable: [
+    {
+      fingerprint: "f1",
+      programName: "Export Market Development Grant",
+      change: "new",
+      amountText: "up to $150,000",
+      officialUrl: "https://austrade.gov.au/emdg",
+      verdictReason: "The published criteria fit a company of this size.",
+      deciderCriterion: "Whether the spend counts as eligible promotional expense.",
+      sourceTrust: "official",
+      closesAt: "2026-09-30",
+    },
+  ],
+};
+
+const written = attempt("Write Report with a search behind it", () =>
+  run(code(scan, "Write Report"), {
+    self: storedRow,
+    incoming: [storedRow],
+    executed: {
+      "Check Profile": { runId: "r7", staleDays: null },
+      "Shape Findings": searchResult,
+      "Load Closing Soon": [storedRow],
+    },
+  }),
+);
+check(
+  written?.[0]?.json.status === "ok",
+  "a search that ran is reported as a search that ran",
+);
+check(
+  /Export Market Development Grant/.test(written?.[0]?.json.reportText ?? ""),
+  "the programs found reach the report",
+);
+check(
+  !/do not know enough about the business/.test(written?.[0]?.json.reportText ?? ""),
+  "a finished search is never reported as a missing business profile",
+);
+check(
+  written?.[0]?.json.searchCount === 3,
+  "what the search cost is carried onto the run",
+);
+
+const blocked = attempt("Write Report with no search at all", () =>
+  run(code(scan, "Write Report"), {
+    self: { ready: false },
+    executed: { "Check Profile": { runId: "r8", staleDays: null } },
+  }),
+);
+check(
+  blocked?.[0]?.json.status === "blocked",
+  "a run stopped before searching still writes a run rather than throwing",
+);
+check(
+  /do not know enough about the business/.test(blocked?.[0]?.json.reportText ?? ""),
+  "a genuinely empty profile still asks for the business details",
+);
+
+const unreadable = attempt("Write Report when the profile could not be read", () =>
+  run(code(scan, "Write Report"), {
+    self: { ready: false },
+    executed: {
+      "Check Profile": {
+        runId: "r9",
+        staleDays: null,
+        diagnostic: { rowsReturned: 1, nonEmptyRows: 1, matchedProfileRow: 1 },
+      },
+    },
+  }),
+);
+check(
+  /fault on my side/.test(unreadable?.[0]?.json.reportText ?? ""),
+  "details that are saved but unreadable are owned, not blamed on the owner",
+);
+
 if (failures.length > 0) {
   for (const failure of failures) console.error(`- ${failure}`);
   process.exit(1);
