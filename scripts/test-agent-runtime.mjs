@@ -133,7 +133,13 @@ const ownership = new Map([
 
 const optionalSkillsDir = fileURLToPath(new URL("../optional-skills", import.meta.url));
 const installedSkillsDir = fileURLToPath(new URL("../skills", import.meta.url));
-for (const entry of await readdir(optionalSkillsDir, { withFileTypes: true })) {
+let optionalEntries = [];
+try {
+  optionalEntries = await readdir(optionalSkillsDir, { withFileTypes: true });
+} catch (error) {
+  if (error?.code !== "ENOENT") throw error;
+}
+for (const entry of optionalEntries) {
   if (!entry.isDirectory() || entry.name.startsWith("_")) {
     continue;
   }

@@ -10,7 +10,7 @@
 // The result is a plain folder. Zip it and hand it out, or push it somewhere
 // learners can download it.
 
-import { mkdir, writeFile, rm, access } from "node:fs/promises";
+import { access, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -109,6 +109,9 @@ const tracked = git(["ls-tree", "-r", "HEAD", "--name-only", "-z"])
 
 const included = tracked.filter(shouldInclude);
 const skipped = tracked.length - included.length;
+const optionalManifests = tracked
+  .filter((path) => /^optional-skills\/[^/]+\/manifest\.json$/.test(path))
+  .map((path) => JSON.parse(git(["show", `HEAD:${path}`]).toString()));
 
 for (const path of included) {
   const outPath = join(destination, path);
@@ -124,6 +127,92 @@ await writeFile(
   `${BASE_SKILLS.join("\n")}\n`,
   "utf8",
 );
+
+// Optional installers make surgical additions to three shared JSON files.
+// Excluding the skill's own files is therefore not enough: reverse every
+// catalogue-declared addition so the output is a physically clean base even
+// when the release checkout has optional skills installed.
+const agentPath = join(
+  destination,
+  "n8n",
+  "workflows",
+  "00-start-here-project-partner.json",
+);
+const policyPath = join(destination, "tools", "policy.json");
+const foldersPath = join(destination, "n8n", "folders.manifest.json");
+const agentWorkflow = JSON.parse(await readFile(agentPath, "utf8"));
+const policy = JSON.parse(await readFile(policyPath, "utf8"));
+const folders = JSON.parse(await readFile(foldersPath, "utf8"));
+const optionalToolNames = new Set(
+  optionalManifests.flatMap((manifest) =>
+    (manifest.agentTools ?? []).map((tool) => tool.name),
+  ),
+);
+const optionalPolicyIds = new Set(
+  optionalManifests.flatMap((manifest) =>
+    (manifest.policyEntries ?? []).map((entry) => entry.id),
+  ),
+);
+const optionalWorkflowNames = new Set(
+  optionalManifests.flatMap((manifest) =>
+    (manifest.folders ?? []).flatMap((folder) => folder.workflows ?? []),
+  ),
+);
+
+agentWorkflow.nodes = agentWorkflow.nodes.filter(
+  (node) => !optionalToolNames.has(node.name),
+);
+for (const toolName of optionalToolNames) {
+  delete agentWorkflow.connections[toolName];
+}
+for (const sourceConnections of Object.values(agentWorkflow.connections)) {
+  for (const [type, groups] of Object.entries(sourceConnections)) {
+    sourceConnections[type] = groups.map((group) =>
+      group.filter((connection) => !optionalToolNames.has(connection.node)),
+    );
+  }
+}
+
+const contextNode = agentWorkflow.nodes.find(
+  (node) => node.name === "Build Agent Context",
+);
+if (!contextNode) {
+  throw new Error('The committed agent has no "Build Agent Context" node.');
+}
+let contextCode = contextNode.parameters.jsCode;
+for (const manifest of optionalManifests) {
+  const anchor = `/* INSTALL ${manifest.agent} TOOL RULES */`;
+  const rules = [
+    ...(manifest.policyRules ?? []),
+    ...(manifest.unavailableCapabilities ?? []).map(
+      (capability) => `- ${capability} is unavailable for this role.`,
+    ),
+  ];
+  for (const rule of rules) {
+    const addition = `${JSON.stringify(rule)},\n      ${anchor}`;
+    while (contextCode.includes(addition)) {
+      contextCode = contextCode.replace(addition, anchor);
+    }
+  }
+  for (const replacement of manifest.policyReplacements ?? []) {
+    if (contextCode.includes(replacement.replace)) {
+      contextCode = contextCode.replace(replacement.replace, replacement.find);
+    }
+  }
+}
+contextNode.parameters.jsCode = contextCode;
+
+policy.tools = policy.tools.filter((tool) => !optionalPolicyIds.has(tool.id));
+for (const folder of folders.folders) {
+  folder.workflows = folder.workflows.filter(
+    (workflow) => !optionalWorkflowNames.has(workflow),
+  );
+}
+folders.folders = folders.folders.filter((folder) => folder.workflows.length > 0);
+
+await writeFile(agentPath, `${JSON.stringify(agentWorkflow, null, 2)}\n`, "utf8");
+await writeFile(policyPath, `${JSON.stringify(policy, null, 2)}\n`, "utf8");
+await writeFile(foldersPath, `${JSON.stringify(folders, null, 2)}\n`, "utf8");
 
 process.stdout.write(`\nBase agent written to ${destination}\n\n`);
 process.stdout.write(`  from commit   ${head}\n`);
