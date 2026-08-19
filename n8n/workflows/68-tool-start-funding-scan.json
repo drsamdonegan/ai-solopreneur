@@ -33,6 +33,10 @@
             {
               "name": "domain",
               "type": "string"
+            },
+            {
+              "name": "force",
+              "type": "string"
             }
           ]
         }

@@ -645,6 +645,37 @@ check(
   "a call that ran out of time is not simply run again to run out of time twice",
 );
 
+// --- what the agent sends against what the workflow accepts -------------------
+// The agent had been passing force correctly all along and n8n had been dropping
+// it, because the receiving trigger never declared it. Every "search again
+// anyway" went in the bin, silently, and the owner was left deleting executions
+// by hand — the exact complaint the force flag was added to answer.
+const agent = await load("../../../n8n/workflows/00-start-here-project-partner.json")
+  .catch(() => null);
+check(agent !== null, "the agent workflow can be read, to check what it sends");
+const byId = new Map(
+  [start, report, scan, beat].map((workflow) => [workflow.id, workflow]),
+);
+let boundariesChecked = 0;
+for (const tool of (agent?.nodes ?? []).filter((n) => n.type.endsWith("toolWorkflow"))) {
+  const target = byId.get(tool.parameters?.workflowId?.value);
+  if (!target) continue;
+  const trigger = target.nodes.find((n) =>
+    n.type.endsWith("executeWorkflowTrigger"),
+  );
+  const accepted = new Set(
+    (trigger?.parameters?.workflowInputs?.values ?? []).map((v) => v.name),
+  );
+  for (const sent of Object.keys(tool.parameters?.workflowInputs?.value ?? {})) {
+    check(
+      accepted.has(sent),
+      `${tool.name} sends "${sent}" but ${target.id} never declared it, so n8n drops it`,
+    );
+    boundariesChecked += 1;
+  }
+}
+check(boundariesChecked > 0, "the tool-to-workflow boundary was actually inspected");
+
 if (failures.length > 0) {
   for (const failure of failures) console.error(`- ${failure}`);
   process.exit(1);
