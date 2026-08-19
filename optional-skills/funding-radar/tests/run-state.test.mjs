@@ -172,7 +172,7 @@ check(
 );
 
 check(
-  decide([{ runId: "a", status: "running", ranAt: minutesAgo(40) }])
+  decide([{ runId: "a", status: "running", ranAt: minutesAgo(140) }])
     .replacing?.reason === "interrupted",
   "a run older than the scan's own timeout is wreckage, not a reason to refuse",
 );
@@ -204,7 +204,7 @@ check(
 );
 check(
   /longer than one usually takes/.test(
-    shape({ runId: "a", status: "running", ranAt: minutesAgo(18) }).message,
+    shape({ runId: "a", status: "running", ranAt: minutesAgo(40) }).message,
   ),
   "a slow search is flagged as slow rather than promised",
 );
@@ -232,7 +232,7 @@ check(
   "no second scan is started on top of one n8n is still running",
 );
 
-const dead = shape({ runId: "a", status: "running", ranAt: minutesAgo(38) });
+const dead = shape({ runId: "a", status: "running", ranAt: minutesAgo(140) });
 check(dead.interrupted === true, "a run that never came back reads as interrupted");
 check(
   dead.running !== true,
@@ -604,8 +604,12 @@ check(
 // --- the search budget, which the model kept hitting -------------------------
 const searchRequest = code(beat, "Build Search Request");
 check(
-  /max_uses: 10/.test(searchRequest),
-  "the beat gets more than three searches, having been refused thirteen times on three",
+  /max_uses: 30/.test(searchRequest),
+  "the beat gets the searches it kept asking for and being refused",
+);
+check(
+  /Do not decide eligibility yourself/.test(searchRequest),
+  "the wide step does not rule on fit either — sixteen programs went that way",
 );
 check(
   !/open now or open within the next 90 days/.test(searchRequest),
@@ -614,6 +618,31 @@ check(
 check(
   /cannot tell whether it is open/.test(searchRequest),
   "the wide step is told what to do when it cannot tell, rather than left to guess",
+);
+
+// --- the time a full-budget beat actually needs -------------------------------
+// The beat that died on two runs running died on the HTTP timeout, not on a bad
+// line: at ten searches it already ran past four minutes. Thirty searches is
+// about eighteen, so the call, the beat, and the scan each have to allow it.
+const beatCall = beat.nodes.find((n) => n.name === "Search With Claude");
+const perSearchSeconds = 40;
+const searchBudget = Number(code(beat, "Build Search Request").match(/max_uses: (\d+)/)?.[1] ?? NaN);
+const beatSeconds = searchBudget * perSearchSeconds;
+check(
+  beatCall.parameters.options.timeout / 1000 >= beatSeconds,
+  "one API call is given long enough to spend the whole search budget",
+);
+check(
+  beat.settings.executionTimeout >= beatSeconds,
+  "the beat workflow outlasts the call it is waiting on",
+);
+check(
+  scan.settings.executionTimeout >= beatSeconds * 3,
+  "the scan outlasts its three beats, rather than cutting the last one off",
+);
+check(
+  !("retryOnFail" in beatCall),
+  "a call that ran out of time is not simply run again to run out of time twice",
 );
 
 if (failures.length > 0) {
