@@ -43,7 +43,10 @@
       "workflows": [
         "50-tool-start-domain-research.json",
         "51-tool-complete-domain-research.json",
-        "52-tool-get-business-memory.json"
+        "52-tool-get-business-memory.json",
+        "53-tool-start-paid-domain-research.json",
+        "54-tool-complete-paid-domain-research.json",
+        "55-tool-get-paid-domain-research.json"
       ]
     },
     {

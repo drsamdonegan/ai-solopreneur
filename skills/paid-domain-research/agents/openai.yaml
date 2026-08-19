@@ -1,0 +1,4 @@
+interface:
+  display_name: "Paid Domain Research"
+  short_description: "Paid-first domain research with simple advice"
+  default_prompt: "Use $paid-domain-research to research this business domain and give me simple, practical SEO advice."

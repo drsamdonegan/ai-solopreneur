@@ -1,0 +1,315 @@
+{
+  "name": "55 - TOOL - get_paid_domain_research",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Recall paid SEO evidence\nReads historical local snapshots only. A job ID is conversation-bound; a domain returns its latest successful snapshot plus attempt history. No DataForSEO call is made.",
+        "height": 220,
+        "width": 560,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -620,
+        -260
+      ],
+      "id": "a1300000-0000-4000-8000-000000000001",
+      "name": "Paid memory explanation"
+    },
+    {
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "sessionId",
+              "type": "string"
+            },
+            {
+              "name": "requestId",
+              "type": "string"
+            },
+            {
+              "name": "domain",
+              "type": "string"
+            },
+            {
+              "name": "jobId",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -500,
+        20
+      ],
+      "id": "a1300000-0000-4000-8000-000000000002",
+      "name": "Tool Input"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const sessionId=typeof $json.sessionId==='string'?$json.sessionId.trim():'',requestId=typeof $json.requestId==='string'?$json.requestId.trim():'',jobId=typeof $json.jobId==='string'?$json.jobId.trim():'',raw=typeof $json.domain==='string'?$json.domain.trim():'',uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;let domain='',error=null;\nif(!uuid.test(sessionId)||!uuid.test(requestId))error={code:'INVALID_SESSION',message:'The paid memory lookup needs a valid conversation and request ID.'};\nif(!error&&jobId&&!/^paid-[a-z0-9-]{6,150}$/i.test(jobId))error={code:'INVALID_JOB_ID',message:'Use an exact paid research job ID.'};\nif(!error&&raw){let host=raw.toLowerCase(),scheme=host.match(/^([a-z][a-z0-9+.-]*):\\/\\//);if(scheme)host=['http','https'].includes(scheme[1])?host.slice(scheme[0].length):'';host=host.split('/')[0].split('?')[0].split('#')[0].replace(/\\.$/,'').replace(/^www\\./,'');const labels=host.split('.');if(!host||host.includes('@')||host.includes(':')||labels.length<2||labels.some(l=>!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(l)))error={code:'INVALID_DOMAIN',message:'Use a complete saved business domain such as example.com.'};else domain=host;}\nconst proposedInput={sessionId,requestId,domain,jobId};return{json:{valid:error===null,...proposedInput,proposedInput,...(error?{response:{ok:false,error}}:{})}};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -260,
+        20
+      ],
+      "id": "a1300000-0000-4000-8000-000000000003",
+      "name": "Validate Paid Memory Input"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "a1300000-0000-4000-8000-000000000004c",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -20,
+        20
+      ],
+      "id": "a1300000-0000-4000-8000-000000000004",
+      "name": "Input Is Valid?"
+    },
+    {
+      "parameters": {
+        "url": "={{ 'http://127.0.0.1:3000/api/paid-domain-research' + ($('Validate Paid Memory Input').item.json.jobId ? '?sessionId=' + encodeURIComponent($('Validate Paid Memory Input').item.json.sessionId) + '&jobId=' + encodeURIComponent($('Validate Paid Memory Input').item.json.jobId) : $('Validate Paid Memory Input').item.json.domain ? '?domain=' + encodeURIComponent($('Validate Paid Memory Input').item.json.domain) : '') }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        220,
+        -60
+      ],
+      "id": "a1300000-0000-4000-8000-000000000006",
+      "name": "Read Paid Research Memory",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const input=$('Validate Paid Memory Input').first().json,s=$json.snapshot,history=Array.isArray($json.history)?$json.history:[],response=$json.error?{ok:false,error:{code:'PAID_RESEARCH_UNAVAILABLE',message:String($json.error?.message??'Saved paid research is unavailable.')}}:{ok:true,domain:input.domain||null,jobId:input.jobId||null,snapshot:s??null,history,message:s?'The latest successful paid SEO snapshot was loaded with market, costs, sources, and warnings.':history.length?'Paid research history was loaded; no successful snapshot matched this request.':'No saved paid domain research was found.'};return{json:{...input,response}};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        20
+      ],
+      "id": "a1300000-0000-4000-8000-000000000007",
+      "name": "Shape Paid Memory Result"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const i=$('Validate Paid Memory Input').first().json,r=$json.response??{ok:false,error:{code:'PAID_RESEARCH_UNAVAILABLE',message:'Saved paid research is unavailable.'}};return{json:{occurredAt:new Date().toISOString(),sessionId:i.sessionId,requestId:i.requestId,toolName:'get_paid_domain_research',proposedInput:JSON.stringify(i.proposedInput??{}),result:JSON.stringify(r),error:r.ok===false?String(r.error?.message??'Tool failed'):'',response:r}};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        700,
+        20
+      ],
+      "id": "a1300000-0000-4000-8000-000000000008",
+      "name": "Prepare Audit"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "value": "tool_audit",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "occurredAt": "={{ $json.occurredAt }}",
+            "sessionId": "={{ $json.sessionId }}",
+            "requestId": "={{ $json.requestId }}",
+            "toolName": "={{ $json.toolName }}",
+            "proposedInput": "={{ $json.proposedInput }}",
+            "result": "={{ $json.result }}",
+            "error": "={{ $json.error }}"
+          },
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        940,
+        20
+      ],
+      "id": "a1300000-0000-4000-8000-000000000009",
+      "name": "Write Tool Audit",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const p=$('Prepare Audit').item.json,r={...p.response};if(!Number.isInteger($json.id))r.auditWarning='The read could not be written to the local audit table.';return{json:r};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1180,
+        20
+      ],
+      "id": "a1300000-0000-4000-8000-000000000010",
+      "name": "Return Tool Result"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Tool Input": {
+      "main": [
+        [
+          {
+            "node": "Validate Paid Memory Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Paid Memory Input": {
+      "main": [
+        [
+          {
+            "node": "Input Is Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Input Is Valid?": {
+      "main": [
+        [
+          {
+            "node": "Read Paid Research Memory",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Paid Research Memory": {
+      "main": [
+        [
+          {
+            "node": "Shape Paid Memory Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shape Paid Memory Result": {
+      "main": [
+        [
+          {
+            "node": "Prepare Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Audit": {
+      "main": [
+        [
+          {
+            "node": "Write Tool Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Tool Audit": {
+      "main": [
+        [
+          {
+            "node": "Return Tool Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "executionTimeout": 30,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true
+  },
+  "versionId": "a1300000-0000-4000-8000-000000000100",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "phase": 11,
+    "testedWithN8n": "2.30.5",
+    "toolRisk": "read",
+    "authorization": "automatic-current-context-read-or-conversation-bound-job",
+    "dataSource": "local-sqlite-seo-snapshots",
+    "paidCalls": "none"
+  },
+  "id": "phase11GetPaidDomainResearch",
+  "tags": [
+    {
+      "id": "tagAgentCanDo",
+      "name": "What your agent can do"
+    }
+  ]
+}
