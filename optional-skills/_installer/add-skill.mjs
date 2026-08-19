@@ -27,7 +27,10 @@ import {
   AGENT_IDS,
   parseSkillMetadata,
 } from "../../scripts/compile-skills.mjs";
-import { AGENT_NODE_BY_ID } from "../../scripts/agent-runtime-contract.mjs";
+import {
+  AGENT_NODE_BY_ID,
+  AGENT_NODE_NAMES,
+} from "../../scripts/agent-runtime-contract.mjs";
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const optionalSkillsDirectory = join(projectRoot, "optional-skills");
@@ -105,25 +108,76 @@ function nextToolPosition(workflow) {
   return [nextX, TOOL_ROW_Y];
 }
 
+// A skill declaring `global` puts its tools on every agent rather than one.
+function agentNodesFor(agentId) {
+  return agentId === "global"
+    ? [...AGENT_NODE_NAMES]
+    : [AGENT_NODE_BY_ID[agentId]].filter(Boolean);
+}
+
 function addToolNode(workflow, toolNode, agentId) {
-  const agentNode = AGENT_NODE_BY_ID[agentId];
-  if (!agentNode || !workflow.nodes.some((node) => node.name === agentNode)) {
+  const agentNodes = agentNodesFor(agentId);
+  const missingRoute = agentNodes.find(
+    (name) => !workflow.nodes.some((node) => node.name === name),
+  );
+  if (agentNodes.length === 0 || missingRoute) {
     throw new Error(`The agent workflow has no reviewed route for "${agentId}".`);
   }
+
   if (workflow.nodes.some((node) => node.name === toolNode.name)) {
-    note(skipped, `Agent tool "${toolNode.name}" is already wired in`);
-    return;
+    note(skipped, `Agent tool "${toolNode.name}" is already there`);
+  } else {
+    workflow.nodes.push({ ...toolNode, position: nextToolPosition(workflow) });
+    note(done, `Added the "${toolNode.name}" tool`);
   }
 
-  workflow.nodes.push({ ...toolNode, position: nextToolPosition(workflow) });
+  // Wiring is checked one agent at a time rather than "is the node present",
+  // so re-running this repairs an install made before the skill went global
+  // instead of reporting it as already done.
+  const wired = workflow.connections[toolNode.name]?.ai_tool?.[0] ?? [];
+  const already = new Set(wired.map((connection) => connection.node));
+  const missing = agentNodes.filter((name) => !already.has(name));
+  if (missing.length === 0) {
+    note(skipped, `"${toolNode.name}" is already wired to its agent`);
+    return;
+  }
   workflow.connections[toolNode.name] = {
-    ai_tool: [[{ node: agentNode, type: "ai_tool", index: 0 }]],
+    ai_tool: [
+      [
+        ...wired,
+        ...missing.map((node) => ({ node, type: "ai_tool", index: 0 })),
+      ],
+    ],
   };
-  note(done, `Wired the "${toolNode.name}" tool into ${agentNode}`);
+  note(done, `Wired the "${toolNode.name}" tool into ${missing.join(", ")}`);
 }
 
 function toolRuleAnchor(agentId) {
   return `/* INSTALL ${agentId} TOOL RULES */`;
+}
+
+// One agent's tool rules are the text between the anchor before its own and its
+// own, because every rule is inserted immediately above the anchor it belongs
+// to. Positions are read from the file rather than assumed, so the five blocks
+// can be in any order.
+function rulesFor(code, agentId) {
+  const anchor = toolRuleAnchor(agentId);
+  const end = code.indexOf(anchor);
+  if (end === -1) {
+    return "";
+  }
+  let start = 0;
+  for (const other of AGENT_IDS) {
+    if (other === agentId) {
+      continue;
+    }
+    const otherAnchor = toolRuleAnchor(other);
+    const at = code.indexOf(otherAnchor);
+    if (at !== -1 && at < end) {
+      start = Math.max(start, at + otherAnchor.length);
+    }
+  }
+  return code.slice(start, end);
 }
 
 function patchBasePolicy(
@@ -149,12 +203,14 @@ function patchBasePolicy(
   }
 
   let code = contextNode.parameters.jsCode;
-  const anchor = toolRuleAnchor(agent);
-  if (!code.includes(anchor)) {
-    throw new Error(
-      `Could not find the reviewed tool-policy anchor for "${agent}". ` +
-        "Re-import the current base workflow before adding this skill.",
-    );
+  const ruleAgents = agent === "global" ? [...AGENT_IDS] : [agent];
+  for (const ruleAgent of ruleAgents) {
+    if (!code.includes(toolRuleAnchor(ruleAgent))) {
+      throw new Error(
+        `Could not find the reviewed tool-policy anchor for "${ruleAgent}". ` +
+          "Re-import the current base workflow before adding this skill.",
+      );
+    }
   }
 
   for (const replacement of policyReplacements) {
@@ -177,14 +233,21 @@ function patchBasePolicy(
       (capability) => `- ${capability} is unavailable for this role.`,
     ),
   ];
-  for (const rule of scopedRules) {
-    const encoded = JSON.stringify(rule);
-    if (code.includes(encoded)) {
-      note(skipped, `A ${agent} tool rule was already in the agent instructions`);
-      continue;
+  for (const ruleAgent of ruleAgents) {
+    const anchor = toolRuleAnchor(ruleAgent);
+    for (const rule of scopedRules) {
+      const encoded = JSON.stringify(rule);
+      // A global skill writes the same sentence into five different lists, so
+      // "is this text anywhere in the file" is the wrong question: it would
+      // stop after the first agent and leave the other four without rules.
+      // Only this agent's own stretch of the file counts.
+      if (rulesFor(code, ruleAgent).includes(encoded)) {
+        note(skipped, `A ${ruleAgent} tool rule was already in the agent instructions`);
+        continue;
+      }
+      code = code.replace(anchor, `${encoded},\n      ${anchor}`);
+      note(done, `Added a ${ruleAgent} tool rule to the agent instructions`);
     }
-    code = code.replace(anchor, `${encoded},\n      ${anchor}`);
-    note(done, `Added a ${agent} tool rule to the agent instructions`);
   }
 
   contextNode.parameters.jsCode = code;
@@ -381,7 +444,7 @@ async function addSkill(id) {
   const manifest = await readJson(join(skillDirectory, "manifest.json"));
   if (
     manifest.id !== id ||
-    !AGENT_IDS.includes(manifest.agent) ||
+    !(AGENT_IDS.includes(manifest.agent) || manifest.agent === "global") ||
     typeof manifest.name !== "string"
   ) {
     throw new Error(

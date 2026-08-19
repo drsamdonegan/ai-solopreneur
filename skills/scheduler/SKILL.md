@@ -1,6 +1,6 @@
 ---
 name: scheduler
-description: Save work for this agent to do on its own at a set time, and read back what it found. Use when the user asks for something to happen every morning, each week, once a month, or at a named time rather than now.
+description: Save work to be done on its own at a set time, and read back what it found. Use when the user asks for something to happen every morning, each week, once a month, or at a named time rather than now.
 ---
 
 # Work that runs on a schedule
@@ -26,11 +26,16 @@ If the user says "every morning, do that", work out what "that" was and write
 it down properly. Read the finished instruction back to them so they can hear
 whether it stands on its own.
 
-## Name the right agent
+## By default it runs as you
 
-Tools are attached to one agent each. A schedule pointed at the wrong one
-reaches an agent that politely explains it has no such tool — every morning,
-for months, until somebody reads the results.
+Every one of the five agents can schedule work, and a schedule saved without a
+named agent runs as the agent that saved it. Asked to do your own work later,
+you do not need to think about this at all.
+
+Name a different agent only when the work is not yours. Tools are attached to
+one agent each, so a schedule pointed at the wrong one reaches an agent that
+politely explains it has no such tool — every morning, for months, until
+somebody reads the results.
 
 Pick the agent the owner would open in the chat to ask for this by hand:
 
@@ -45,6 +50,10 @@ Pick the agent the owner would open in the chat to ask for this by hand:
 If the owner does not have that skill installed, the schedule will still save
 and the run will still happen — it will just come back saying it cannot do it.
 Say so when you can see it coming.
+
+You cannot hand a conversation to another agent, but you can schedule one. Asked
+for something outside your role that has to happen later anyway, save it against
+the agent that owns it rather than refusing.
 
 ## Time, and whose clock
 

@@ -1,5 +1,5 @@
 id: scheduler
-agent: project-manager
+agent: global
 name: Scheduler
 version: 1.0.0
 description: Save a standing instruction for this agent to carry out on its own at a set time, read back what those runs turned up, and pause, resume or delete one.

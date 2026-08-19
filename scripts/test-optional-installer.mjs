@@ -131,6 +131,13 @@ try {
   const invalidManifest = JSON.parse(await readFile(manifestPath, "utf8"));
   invalidManifest.agent = "bookkeeping";
   await writeFile(manifestPath, `${JSON.stringify(invalidManifest, null, 2)}\n`);
+  // The evidence below is that the copy never happened, so the destination has
+  // to be absent first. This skill ships installed now, and without clearing it
+  // the check passes on a file that was already there.
+  await rm(join(invalidRoot, "skills", "linkedin-profile-lookup"), {
+    recursive: true,
+    force: true,
+  });
   install(invalidRoot, "linkedin-profile-lookup", false);
   await assert.rejects(
     readFile(

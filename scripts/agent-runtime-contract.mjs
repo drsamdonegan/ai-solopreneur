@@ -21,7 +21,14 @@ function targets(workflow, sourceName, outputType) {
 
 /**
  * Return human-readable structural-scope failures. Tool ownership is a map or
- * object from tool-node name to one of the five agent IDs.
+ * object from tool-node name to one of the five agent IDs, or to "global".
+ *
+ * "global" is the deliberate exception to one-tool-one-agent. A capability that
+ * is about the agent itself rather than about a trade — scheduling its own work
+ * is the first — is useless if only one of the five holds it: the owner asks
+ * the Investment agent to run a funding scan every Monday and is told it has no
+ * such tool. A global tool must reach all five, and nothing in between, so a
+ * missing wire is still a failure rather than a quiet partial install.
  */
 export function validateAgentToolScopes(workflow, ownership) {
   const entries = ownership instanceof Map
@@ -31,8 +38,13 @@ export function validateAgentToolScopes(workflow, ownership) {
   const failures = [];
 
   for (const [toolName, agentId] of entries) {
-    const expectedNode = AGENT_NODE_BY_ID[agentId];
-    if (!expectedNode) {
+    const expectedNodes =
+      agentId === "global"
+        ? [...AGENT_NODE_NAMES]
+        : AGENT_NODE_BY_ID[agentId] === undefined
+          ? null
+          : [AGENT_NODE_BY_ID[agentId]];
+    if (expectedNodes === null) {
       failures.push(`${toolName} declares unknown agent ${agentId}`);
       continue;
     }
@@ -41,9 +53,12 @@ export function validateAgentToolScopes(workflow, ownership) {
       continue;
     }
     const actual = targets(workflow, toolName, "ai_tool");
-    if (actual.length !== 1 || actual[0] !== expectedNode) {
+    const same =
+      actual.length === expectedNodes.length &&
+      [...actual].sort().every((node, index) => node === [...expectedNodes].sort()[index]);
+    if (!same) {
       failures.push(
-        `${toolName} must connect only to ${expectedNode} (found ${actual.join(", ") || "none"})`,
+        `${toolName} must connect only to ${expectedNodes.join(" and ")} (found ${actual.join(", ") || "none"})`,
       );
     }
   }

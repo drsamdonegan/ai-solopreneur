@@ -64,9 +64,13 @@ adding a second one.
 
 ## Which agent runs it
 
-Your agent is five specialists, and tools are attached to one specialist each.
-A schedule pointed at the wrong one will run, every morning, and come back
-saying it has no such tool.
+All five of your specialists can schedule work, so it does not matter which one
+you have open when you ask. Left to itself, a schedule runs as the agent that
+saved it.
+
+That is usually right. Where it matters is when the work belongs to somebody
+else: tools are attached to one specialist each, so a schedule pointed at the
+wrong one will run, every morning, and come back saying it has no such tool.
 
 | The work | The agent |
 | --- | --- |

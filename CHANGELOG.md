@@ -20,7 +20,13 @@ versioning for local workshop releases.
   whichever agent owns the skill being asked for. Daily, weekdays, weekly,
   monthly, or once; times default to Australia/Melbourne and are correct across
   daylight saving; results saved and read back on request. Its trigger ships unpublished, and a run more than six
-  hours late is rolled on rather than run.
+  hours late is rolled on rather than run. All five agents hold its tools, and
+  a schedule saved without a named agent runs as the agent that saved it.
+- Optional skills may declare `agent: global`, which wires their tools to all
+  five agents and writes their tool rules into all five role policies.
+  Re-running the installer now repairs a partial wiring rather than reporting
+  the tool as already installed, which is the upgrade path for anyone who added
+  the scheduler while it was project-manager only.
 
 ### Changed
 

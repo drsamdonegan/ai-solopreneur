@@ -1852,7 +1852,7 @@ for (const installed of installedSkills) {
     (skill) => skill.id === installed.id,
   );
   check(
-    AGENT_IDS.includes(installed.agent) &&
+    (AGENT_IDS.includes(installed.agent) || installed.agent === "global") &&
       compiled?.agent === installed.agent,
     `Installed skill ${installed.id} must declare the same reviewed agent in manifest.json and skill.yaml`,
   );

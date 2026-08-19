@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "scheduler",
-  "agent": "project-manager",
+  "agent": "global",
   "name": "Scheduler",
   "requires": [],
   "tests": [
@@ -11,7 +11,7 @@
   "agentTools": [
     {
       "parameters": {
-        "description": "Saves a standing instruction for this agent to carry out later on its own: every morning, every weekday, weekly, monthly, or once on a named date. Use it whenever the user asks for something to happen at a time rather than now, such as every morning, each Monday, at 8am, or from tomorrow onwards. It never does the work now; it only saves when to do it. Write the instruction the way the user would type it into the chat, because when it fires the agent receives that one sentence and nothing else: no conversation and no memory of this one. Name which agent should run it, choosing whichever one owns the skill being asked for, since every tool is attached to a single agent. Calling this again with the same name changes that schedule rather than adding a second one.",
+        "description": "Saves a standing instruction to be carried out later on its own: every morning, every weekday, weekly, monthly, or once on a named date. Use it whenever the user asks for something to happen at a time rather than now, such as every morning, each Monday, at 8am, or from tomorrow onwards. It never does the work now; it only saves when to do it. Write the instruction the way the user would type it into the chat, because when it fires the agent receives that one sentence and nothing else: no conversation and no memory of this one. It runs as you unless another agent is named, so name one only when the work belongs to a different specialist. Calling this again with the same name changes that schedule rather than adding a second one.",
         "source": "database",
         "workflowId": {
           "__rl": true,
@@ -24,9 +24,10 @@
           "value": {
             "sessionId": "={{ $('Validate and Normalise').first().json.sessionId }}",
             "requestId": "={{ $('Validate and Normalise').first().json.requestId }}",
+            "callerAgent": "={{ $('Validate and Normalise').first().json.agentId }}",
             "name": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('name', `A short name for the schedule, in the user's own words, for example \"Morning domain research\". Leave empty and one is made from the instruction.`, 'string') }}",
             "instruction": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('instruction', `What the agent should do when it fires, written exactly as the user would type it into the chat. It is read on its own with no conversation behind it, so name the website, the person, or the report in full rather than saying \"the same as before\".`, 'string') }}",
-            "agent": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('agent', `Which agent runs it: project-manager, sales, marketing, investment, or bookkeeping. Pick the one that owns the skill being scheduled \u2014 the agent you would open in the chat to ask for this by hand. Defaults to project-manager.`, 'string') }}",
+            "agent": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('agent', `Which agent should run it: project-manager, sales, marketing, investment, or bookkeeping. Leave empty to schedule it as yourself, which is right whenever the work is your own. Name a different one when the work belongs to another specialist, such as website research on marketing or grants on investment.`, 'string') }}",
             "frequency": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('frequency', `How often: daily, weekdays, weekly, monthly, or once. Defaults to daily. Nothing shorter than a day is available.`, 'string') }}",
             "time": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('time', `The time of day it should run, passed on exactly as the user said it. 8am, 5:30pm, 17:30 and noon all read correctly. Required.`, 'string') }}",
             "dayOfWeek": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('dayOfWeek', `For a weekly schedule, which day, such as tuesday. Ignored otherwise.`, 'string') }}",
@@ -49,6 +50,15 @@
             {
               "id": "requestId",
               "displayName": "requestId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "callerAgent",
+              "displayName": "callerAgent",
               "required": false,
               "defaultMatch": false,
               "display": true,

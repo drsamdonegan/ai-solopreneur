@@ -224,9 +224,25 @@ check(
   asked({ agent: "marketing" }).agentId === "marketing",
   "a named agent should be kept",
 );
+// The tool is on all five agents, so "run this later" from the Investment
+// agent has to stay with the Investment agent. Handing it to the project
+// manager would schedule a funding scan onto an agent with no funding tools,
+// and it would fail quietly every week.
 check(
-  asked({ agent: "" }).agentId === "project-manager",
-  "no named agent falls back to the project manager",
+  asked({ agent: "", callerAgent: "investment" }).agentId === "investment",
+  "with no agent named, a schedule runs as whichever agent was asked",
+);
+check(
+  asked({ agent: "marketing", callerAgent: "investment" }).agentId === "marketing",
+  "a named agent still wins over the one that was asked",
+);
+check(
+  asked({ agent: "", callerAgent: "" }).agentId === "project-manager",
+  "with nothing to go on at all, it falls back to the project manager",
+);
+check(
+  asked({ agent: "", callerAgent: "nonsense" }).agentId === "project-manager",
+  "a caller that is not one of the five is not trusted into the row",
 );
 check(
   asked({ agent: "legal" }).response?.error?.code === "AGENT_NOT_RECOGNISED",

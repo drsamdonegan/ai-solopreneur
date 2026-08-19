@@ -29,9 +29,13 @@ Then open the chat and just say it.
 
 ## Which agent runs it
 
-Your agent is really five specialists, and each one holds different tools. A
-schedule has to name the one that can actually do the job — the same one you
-would pick in the chat.
+You can ask any of your five specialists to schedule something — whichever one
+you happen to have open. By default it schedules the work for itself, which is
+what you want when you are already talking to the right one.
+
+Where it matters is when the work belongs to somebody else. Each specialist
+holds different tools, so a schedule has to end up with the one that can
+actually do the job.
 
 | What you asked for | Who runs it |
 | --- | --- |
