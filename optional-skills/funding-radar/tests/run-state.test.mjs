@@ -397,6 +397,10 @@ check(
   /I ran 9 searches/.test(emptyButSearched?.[0]?.json.reportText ?? ""),
   "an empty result says how hard it looked, so it can be told from a dud run",
 );
+check(
+  /without a single program to look at/.test(emptyButSearched?.[0]?.json.reportText ?? ""),
+  "searching hard and seeing nothing at all is called out as odd, not as no news",
+);
 
 const toolBroke = attempt("Write Report when web searches errored", () =>
   run(code(scan, "Write Report"), {
@@ -442,6 +446,109 @@ check(
 check(
   /never suggest the business profile is missing details/.test(emptyRead.message),
   "the agent is told not to blame the profile for an empty report",
+);
+
+// --- what the beat saw, not just what it returned ---------------------------
+// Nine real web searches came back with an empty candidate list and no way to
+// tell whether that meant everything found had closed or nothing was found at
+// all. The two need different fixes and the report said the same words for
+// both, so the beat now hands up its working.
+const beat = await load("72-run-funding-beat.json");
+const shapeBeat = (payload) => {
+  const checked = {
+    beat: "national",
+    scope: "national funding",
+    searchCount: 3,
+    failed: false,
+    firstBody: {
+      content: [{ type: "text", text: JSON.stringify(payload) }],
+      usage: { input_tokens: 10, output_tokens: 5 },
+    },
+  };
+  return run(code(beat, "Shape Beat Result"), {
+    self: checked,
+    executed: { "Check Search Response": checked },
+  }).json;
+};
+
+const sawAndDropped = attempt("a beat that saw programs and kept none", () =>
+  shapeBeat({
+    candidates: [],
+    considered: 12,
+    rejected: [
+      { programName: "One", reason: "closed" },
+      { programName: "Two", reason: "closed" },
+      { programName: "Three", reason: "not-applicable" },
+    ],
+  }),
+);
+check(
+  sawAndDropped?.considered === 12,
+  "how many programs a beat looked at survives the beat",
+);
+check(
+  sawAndDropped?.rejected?.length === 3,
+  "the reason each one was set aside survives the beat",
+);
+check(
+  sawAndDropped?.ok === true,
+  "reporting its working does not make a good beat look failed",
+);
+
+const badLink = attempt("a beat whose candidate had no usable link", () =>
+  shapeBeat({
+    candidates: [{ programName: "Program with no link", officialUrl: "" }],
+    considered: 1,
+    rejected: [],
+  }),
+);
+check(
+  (badLink?.rejected ?? []).some((entry) => entry.reason === "no usable link"),
+  "a candidate dropped for a broken link is no longer dropped in silence",
+);
+
+const noCount = attempt("a beat that forgot to count", () =>
+  shapeBeat({ candidates: [], rejected: [{ programName: "One", reason: "closed" }] }),
+);
+check(
+  noCount?.considered === 1,
+  "a beat that omits the count still accounts for what it rejected",
+);
+
+const allClosed = attempt("Write Report when everything found had closed", () =>
+  run(code(scan, "Write Report"), {
+    self: storedRow,
+    incoming: [storedRow],
+    executed: {
+      "Check Profile": { runId: "r13", staleDays: null },
+      "Shape Findings": {
+        ...searchResult,
+        searchCount: 9,
+        candidates: [],
+        findings: [],
+        reportable: [],
+        considered: 12,
+        rejected: [
+          { programName: "One", reason: "closed" },
+          { programName: "Two", reason: "closed" },
+          { programName: "Three", reason: "not-applicable" },
+        ],
+      },
+      "Load Closing Soon": [],
+    },
+  }),
+);
+check(
+  /looked at 12 programs/.test(allClosed?.[0]?.json.reportText ?? ""),
+  "a report that found nothing still says how much it went through",
+);
+check(
+  /2 closed/.test(allClosed?.[0]?.json.reportText ?? ""),
+  "the reasons are tallied, so a run of closed rounds reads differently from a dud",
+);
+check(
+  !/without a single program to look at/.test(allClosed?.[0]?.json.reportText ?? ""),
+  "a beat that saw plenty is not described as having seen nothing",
 );
 
 if (failures.length > 0) {

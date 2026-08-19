@@ -59,7 +59,9 @@ Three rules that matter more than tone:
 2. **Never state an amount or a deadline the report does not contain.** If a field is empty, the official page did not state it. Say that.
 3. **Flag unverified sources.** When an item's `sourceTrust` is not `official`, say it was found on a third-party site and could not be confirmed on an official page. "Free government money" is a heavily scammed search term and the difference matters.
 
-When a search found nothing new, say so plainly. Do not repeat earlier programs to fill the space.
+When a search found nothing new, say so plainly, and read the report back as it is written. Do not repeat earlier programs to fill the space.
+
+Never invent a reason for an empty report. In particular, never suggest the business profile is missing details: a search only runs once a profile is saved, so that is never the cause, and it leaves the owner fixing something on their side that was never broken. The report itself says what it looked at — how many searches ran, how many programs it went through, and why each was set aside. If `searchCount` is 0 the search never reached the web at all, which is a fault on this side. Offer to look again.
 
 ## What this skill never does
 
