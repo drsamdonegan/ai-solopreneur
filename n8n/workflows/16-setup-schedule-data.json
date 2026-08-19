@@ -1,0 +1,293 @@
+{
+  "name": "16 - SETUP - Scheduled Work Data",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Run this once\n\nSelect **Execute workflow** below. It creates two local tables:\n\n- `scheduled_runs` \u2014 one row per thing you have asked your agent to do on a schedule\n- `schedule_results` \u2014 what your agent said each time one of them ran\n\nNothing leaves your computer. Both start empty.\n\nRunning this again is safe and changes nothing.",
+        "height": 380,
+        "width": 420,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -660,
+        -280
+      ],
+      "id": "95800000-0000-4000-8000-000000000001",
+      "name": "Sticky Start Here"
+    },
+    {
+      "parameters": {
+        "content": "## Then publish the trigger\n\nCreating the tables is not enough. The workflow that actually watches the\nclock is **79 - TRIGGER - Scheduled work**, and it ships switched off so\nnothing starts running behind your back.\n\nOpen it, read the note on the canvas, and set the toggle at the top right\nto **Published**. Until you do, your agent will happily save a schedule\nand nothing will ever fire.\n\nThen just say it in the chat:\n\n> Every weekday at 8am, research mlai.au and tell me what changed.",
+        "height": 380,
+        "width": 420,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -200,
+        -280
+      ],
+      "id": "95800000-0000-4000-8000-000000000002",
+      "name": "Sticky Next Step"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -660,
+        180
+      ],
+      "id": "95800000-0000-4000-8000-000000000010",
+      "name": "Run Setup Once"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "setup-schedule-data",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -660,
+        320
+      ],
+      "id": "95800000-0000-4000-8000-000000000015",
+      "name": "Temporary Setup Webhook",
+      "webhookId": "95800000-0000-4000-8000-000000000115"
+    },
+    {
+      "parameters": {
+        "resource": "table",
+        "operation": "create",
+        "tableName": "scheduled_runs",
+        "columns": {
+          "column": [
+            {
+              "name": "scheduleId",
+              "type": "string"
+            },
+            {
+              "name": "name",
+              "type": "string"
+            },
+            {
+              "name": "instruction",
+              "type": "string"
+            },
+            {
+              "name": "agentId",
+              "type": "string"
+            },
+            {
+              "name": "frequency",
+              "type": "string"
+            },
+            {
+              "name": "timeOfDay",
+              "type": "string"
+            },
+            {
+              "name": "dayOfWeek",
+              "type": "string"
+            },
+            {
+              "name": "dayOfMonth",
+              "type": "number"
+            },
+            {
+              "name": "onDate",
+              "type": "string"
+            },
+            {
+              "name": "timezone",
+              "type": "string"
+            },
+            {
+              "name": "enabled",
+              "type": "string"
+            },
+            {
+              "name": "createdAt",
+              "type": "string"
+            },
+            {
+              "name": "nextRunAt",
+              "type": "string"
+            },
+            {
+              "name": "lastRunAt",
+              "type": "string"
+            },
+            {
+              "name": "lastStatus",
+              "type": "string"
+            },
+            {
+              "name": "lastSummary",
+              "type": "string"
+            },
+            {
+              "name": "runCount",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {
+          "createIfNotExists": true
+        }
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -420,
+        180
+      ],
+      "id": "95800000-0000-4000-8000-000000000011",
+      "name": "Create Schedules Table"
+    },
+    {
+      "parameters": {
+        "resource": "table",
+        "operation": "create",
+        "tableName": "schedule_results",
+        "columns": {
+          "column": [
+            {
+              "name": "scheduleId",
+              "type": "string"
+            },
+            {
+              "name": "name",
+              "type": "string"
+            },
+            {
+              "name": "ranAt",
+              "type": "string"
+            },
+            {
+              "name": "status",
+              "type": "string"
+            },
+            {
+              "name": "agentId",
+              "type": "string"
+            },
+            {
+              "name": "instruction",
+              "type": "string"
+            },
+            {
+              "name": "reply",
+              "type": "string"
+            },
+            {
+              "name": "errorSummary",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {
+          "createIfNotExists": true
+        }
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -180,
+        180
+      ],
+      "id": "95800000-0000-4000-8000-000000000012",
+      "name": "Create Results Table"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "return [{ json: {\n  ok: true,\n  message: 'Both schedule tables are ready. Next: open 79 - TRIGGER - Scheduled work and set it to Published, then ask your agent to schedule something.'\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        60,
+        180
+      ],
+      "id": "95800000-0000-4000-8000-000000000013",
+      "name": "Confirm Setup"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Run Setup Once": {
+      "main": [
+        [
+          {
+            "node": "Create Schedules Table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Temporary Setup Webhook": {
+      "main": [
+        [
+          {
+            "node": "Create Schedules Table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Schedules Table": {
+      "main": [
+        [
+          {
+            "node": "Create Results Table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Results Table": {
+      "main": [
+        [
+          {
+            "node": "Confirm Setup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "executionTimeout": 60
+  },
+  "versionId": "95800000-0000-4000-8000-0000000000100",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "phase": 18,
+    "testedWithN8n": "2.30.5"
+  },
+  "id": "phase18ScheduleSetup",
+  "tags": [
+    {
+      "id": "tagSetupOnce",
+      "name": "Set up once"
+    }
+  ]
+}
