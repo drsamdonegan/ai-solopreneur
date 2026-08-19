@@ -56,11 +56,11 @@
             },
             {
               "name": "beatIndex",
-              "type": "string"
+              "type": "number"
             },
             {
               "name": "beatCount",
-              "type": "string"
+              "type": "number"
             }
           ]
         }
