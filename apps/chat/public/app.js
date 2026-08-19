@@ -123,10 +123,6 @@
     profileWho: document.querySelector("#profile-who"),
     requestStatus: document.querySelector("#request-status"),
     resetButton: document.querySelector("#reset-button"),
-    scanProgress: document.querySelector("#scan-progress"),
-    scanProgressFill: document.querySelector("#scan-progress-fill"),
-    scanProgressMeta: document.querySelector("#scan-progress-meta"),
-    scanProgressNote: document.querySelector("#scan-progress-note"),
     sendButton: document.querySelector("#send-button"),
     sendButtonLabel: document.querySelector("#send-button-label"),
     suggestionList: document.querySelector("#suggestion-list"),
@@ -1528,22 +1524,92 @@
   // A funding search runs server-side for the best part of an hour, and a
   // chat transcript cannot show that anything is happening. While the
   // Investment agent is open, the page polls a small endpoint that reads the
-  // search's own progress notes, and draws them as a bar above the composer.
+  // search's own progress notes, and draws them as a card at the foot of the
+  // conversation — in the transcript, under the agent's reply, where the
+  // person is already looking.
   const FUNDING_AGENT_ID = "investment";
   const SCAN_POLL_MS = 12_000;
+  // What the page asks the agent once a search lands. It goes through the
+  // agent rather than being rendered here, because the whole point is results
+  // in its own words rather than a wall of stored report text.
+  //
+  // Kept to something a person would plausibly type: the turn is stored like
+  // any other and comes back on every reload, so a long machine-worded
+  // instruction would sit in the transcript for ever looking like the owner
+  // wrote it. How to say it belongs in the skill, not in a string here.
+  const SCAN_RESULT_PROMPT = "What did the funding search find?";
   let scanPollTimer = null;
   let scanWasRunning = false;
   let scanDoneUntil = 0;
+  // Only ever deliver a given search once, and only one that this page
+  // actually watched running — opening the page long after a search finished
+  // should not fire an unprompted message.
+  let deliveredFinishedAt = null;
+  let scanCard = null;
 
-  function renderScanProgress(scan) {
-    const card = elements.scanProgress;
-    if (!card || !scan || scan.available === false) {
-      if (card) {
-        card.hidden = true;
-      }
+  function scanProgressCard() {
+    if (scanCard) {
+      return scanCard;
+    }
+    const card = document.createElement("div");
+    card.className = "scan-progress";
+    card.id = "scan-progress";
+    card.setAttribute("role", "status");
+    card.setAttribute("aria-live", "polite");
+    card.hidden = true;
+
+    const spinner = document.createElement("div");
+    spinner.className = "scan-progress__spinner";
+    spinner.setAttribute("aria-hidden", "true");
+
+    const body = document.createElement("div");
+    body.className = "scan-progress__body";
+    const note = document.createElement("p");
+    note.className = "scan-progress__note";
+    const track = document.createElement("div");
+    track.className = "scan-progress__track";
+    track.setAttribute("aria-hidden", "true");
+    const fill = document.createElement("div");
+    fill.className = "scan-progress__fill";
+    track.append(fill);
+    body.append(note, track);
+
+    const meta = document.createElement("p");
+    meta.className = "scan-progress__meta";
+
+    card.append(spinner, body, meta);
+    scanCard = { card, note, fill, meta };
+    return scanCard;
+  }
+
+  // Every path that draws the transcript replaces its children, so the card
+  // re-attaches itself rather than assuming it survived.
+  function attachScanCard(card) {
+    if (card.parentElement !== elements.conversation) {
+      elements.conversation.append(card);
       return;
     }
+    if (elements.conversation.lastElementChild !== card) {
+      elements.conversation.append(card);
+    }
+  }
+
+  function hideScanCard() {
+    if (scanCard) {
+      scanCard.card.hidden = true;
+      scanCard.card.remove();
+    }
+  }
+
+  function renderScanProgress(scan) {
+    if (!scan || scan.available === false) {
+      hideScanCard();
+      return;
+    }
+    const { card, note, fill, meta } = scanProgressCard();
+
     if (scan.running === true) {
+      const wasHidden = card.hidden;
       scanWasRunning = true;
       card.classList.remove("scan-progress--done");
       const total = Number(scan.of) || 0;
@@ -1554,43 +1620,64 @@
         total > 0
           ? Math.max(4, Math.min(100, Math.round((step / total) * 100)))
           : 4;
-      elements.scanProgressFill.style.width = `${percent}%`;
-      elements.scanProgressNote.textContent = String(
-        scan.note ?? "Searching…",
-      );
+      fill.style.width = `${percent}%`;
+      note.textContent = String(scan.note ?? "Searching…");
       const started = Number(scan.startedMinutesAgo);
       const quiet = Number(scan.updatedMinutesAgo);
-      let meta = Number.isFinite(started) ? `Started ${started} min ago` : "";
+      let text = Number.isFinite(started) ? `Started ${started} min ago` : "";
       // A beat can hold one long API call, so a few quiet minutes are
       // normal; past that the card says when it last heard anything, so a
       // stall is visible instead of the bar just sitting still.
       if (Number.isFinite(quiet) && quiet >= 3) {
-        meta += ` · last update ${quiet} min ago`;
+        text += ` · last update ${quiet} min ago`;
       }
-      elements.scanProgressMeta.textContent = meta;
+      meta.textContent = text;
       card.hidden = false;
+      attachScanCard(card);
+      if (wasHidden) {
+        scrollConversation();
+      }
       return;
     }
-    // Not running. Show the outcome once, briefly, if we watched it finish —
-    // a page opened long after a search ended should not lead with old news.
+
+    // Not running. A search this page watched finish gets read out by the
+    // agent, and the card stands down to a one-line note underneath it.
     if (scanWasRunning) {
       scanWasRunning = false;
       scanDoneUntil = Date.now() + 90_000;
+      const finishedAt = String(scan.finishedAt ?? "");
+      if (scan.interrupted !== true && finishedAt !== deliveredFinishedAt) {
+        deliveredFinishedAt = finishedAt;
+        void deliverScanResults();
+      }
     }
     if (Date.now() >= scanDoneUntil) {
-      card.hidden = true;
+      hideScanCard();
       return;
     }
     card.classList.add("scan-progress--done");
     const found = Number(scan.newCount) || 0;
-    elements.scanProgressNote.textContent =
+    note.textContent =
       scan.interrupted === true
         ? "The search stopped without finishing. Ask me to search again."
         : found > 0
-          ? `Search finished — ${found} new ${found === 1 ? "program" : "programs"} found. Ask “what did the funding search find?”`
-          : "Search finished. Ask “what did the funding search find?” for the full report.";
-    elements.scanProgressMeta.textContent = "";
+          ? `Search finished — ${found} new ${found === 1 ? "program" : "programs"} found.`
+          : "Search finished.";
+    meta.textContent = "";
     card.hidden = false;
+    attachScanCard(card);
+  }
+
+  async function deliverScanResults() {
+    // sendMessage refuses while another request is in flight, so a person
+    // mid-sentence is never interrupted; the next poll tries again.
+    if (requestInProgress || documentRequestInProgress) {
+      deliveredFinishedAt = null;
+      return;
+    }
+    // Shown, not hidden: the server stores it either way, so hiding it now
+    // only means it appears out of nowhere on the next reload.
+    await sendMessage(SCAN_RESULT_PROMPT, true);
   }
 
   async function refreshScanProgress() {
@@ -1605,12 +1692,12 @@
         headers: { Accept: "application/json" },
       });
       if (!response.ok) {
-        elements.scanProgress.hidden = true;
+        hideScanCard();
         return;
       }
       renderScanProgress(await response.json());
     } catch {
-      elements.scanProgress.hidden = true;
+      hideScanCard();
     }
   }
 
@@ -1630,9 +1717,7 @@
     }
     scanWasRunning = false;
     scanDoneUntil = 0;
-    if (elements.scanProgress) {
-      elements.scanProgress.hidden = true;
-    }
+    hideScanCard();
   }
 
   document.addEventListener("visibilitychange", () => {
