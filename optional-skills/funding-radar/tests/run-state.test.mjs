@@ -162,8 +162,11 @@ check(
   live.response.startedMinutesAgo === 3,
   "the owner is told how long the running search has been going",
 );
+// Pinned as intent rather than wording, because the wording has since been
+// rewritten once already and the test went red instead of the behaviour.
 check(
-  /search again anyway/.test(live.response.message),
+  /force/.test(live.response.message) &&
+    /never refuse|fresh one now|search again/i.test(live.response.message),
   "waiting on a running search always comes with a way out",
 );
 
@@ -200,9 +203,19 @@ check(
 );
 check(
   /longer than one usually takes/.test(
-    shape({ runId: "a", status: "running", ranAt: minutesAgo(14) }).message,
+    shape({ runId: "a", status: "running", ranAt: minutesAgo(7) }).message,
   ),
   "a slow search is flagged as slow rather than promised",
+);
+// The two tools read the same row and used to disagree about when it goes
+// stale: for the ten minutes in between, asking for the report insisted a
+// search was in progress while asking to search started a new one.
+const windowOf = (source) =>
+  Number(source.match(/const DEAD_AFTER = (\d+);/)?.[1] ?? NaN);
+check(
+  windowOf(code(report, "Shape Report Result")) <=
+    windowOf(code(start, "Decide Run")),
+  "the report never calls a run live that the start tool would already replace",
 );
 
 const dead = shape({ runId: "a", status: "running", ranAt: minutesAgo(38) });
@@ -314,6 +327,121 @@ const unreadable = attempt("Write Report when the profile could not be read", ()
 check(
   /fault on my side/.test(unreadable?.[0]?.json.reportText ?? ""),
   "details that are saved but unreadable are owned, not blamed on the owner",
+);
+
+// --- a search that never reached the web ------------------------------------
+// Every beat answers even when its web search never ran, and it answers with
+// an empty list. That was written up as "I checked national, regional, nongov
+// sources and found nothing new" — a confident account of work that did not
+// happen, indistinguishable from genuine good news, and the owner was then
+// told their business details were probably too thin.
+const searchless = attempt("Write Report when no search ran", () =>
+  run(code(scan, "Write Report"), {
+    self: storedRow,
+    incoming: [storedRow],
+    executed: {
+      "Check Profile": { runId: "r10", staleDays: null },
+      "Shape Findings": {
+        ...searchResult,
+        beatsRun: ["national", "regional", "nongov"],
+        beatsAttempted: 3,
+        beatsSucceeded: 3,
+        searchCount: 0,
+        candidates: [],
+        findings: [],
+        reportable: [],
+      },
+      "Load Closing Soon": [],
+    },
+  }),
+);
+check(
+  searchless?.[0]?.json.status === "failed",
+  "a run that searched nothing is not recorded as a clean run",
+);
+check(
+  !/found nothing new/.test(searchless?.[0]?.json.reportText ?? ""),
+  "a run that searched nothing never claims to have checked the sources",
+);
+check(
+  /could not search the web/.test(searchless?.[0]?.json.reportText ?? ""),
+  "a run that searched nothing says so",
+);
+check(
+  /nothing you need to fix/.test(searchless?.[0]?.json.reportText ?? ""),
+  "a fault on this side is not handed to the owner as homework",
+);
+
+const emptyButSearched = attempt("Write Report when the search found nothing", () =>
+  run(code(scan, "Write Report"), {
+    self: storedRow,
+    incoming: [storedRow],
+    executed: {
+      "Check Profile": { runId: "r11", staleDays: null },
+      "Shape Findings": {
+        ...searchResult,
+        searchCount: 9,
+        candidates: [],
+        findings: [],
+        reportable: [],
+      },
+      "Load Closing Soon": [],
+    },
+  }),
+);
+check(
+  emptyButSearched?.[0]?.json.status === "ok",
+  "a search that looked and found nothing is still a good run",
+);
+check(
+  /I ran 9 searches/.test(emptyButSearched?.[0]?.json.reportText ?? ""),
+  "an empty result says how hard it looked, so it can be told from a dud run",
+);
+
+const toolBroke = attempt("Write Report when web searches errored", () =>
+  run(code(scan, "Write Report"), {
+    self: storedRow,
+    incoming: [storedRow],
+    executed: {
+      "Check Profile": { runId: "r12", staleDays: null },
+      "Shape Findings": {
+        ...searchResult,
+        searchCount: 4,
+        toolErrors: ["max_uses_exceeded", "max_uses_exceeded"],
+      },
+      "Load Closing Soon": [],
+    },
+  }),
+);
+check(
+  toolBroke?.[0]?.json.status === "partial",
+  "searches that failed outright downgrade the run rather than passing silently",
+);
+check(
+  /max_uses_exceeded/.test(toolBroke?.[0]?.json.reportText ?? ""),
+  "the reason the web went missing reaches the report",
+);
+
+// --- what the agent is told when the report is empty ------------------------
+// With nothing to go on, the agent invented an explanation and picked the
+// worst available one: that the owner had not told it enough about their
+// business. The search only runs once a profile is saved, so that is never it.
+const emptyRead = run(code(report, "Shape Report Result"), {
+  incoming: [],
+  executed: {
+    "Validate Report Input": { filter: "open" },
+    "Read Latest Run": [
+      { runId: "a", status: "ok", ranAt: minutesAgo(3), reportText: "Funding scan", searchCount: 0, errorSummary: "no web searches ran" },
+    ],
+  },
+})[0].json.response;
+check(
+  emptyRead.searchCount === 0,
+  "how many searches ran is visible to the agent reading the report",
+);
+check(
+  /never suggest the business profile is missing details/.test(emptyRead.message),
+  "the agent is told not to blame the profile for an empty report",
 );
 
 if (failures.length > 0) {
