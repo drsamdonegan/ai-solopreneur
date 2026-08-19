@@ -693,6 +693,13 @@ if (agentWorkflow) {
   // a single-quoted description closes the string early and the tool node dies
   // with "Unbalanced parentheses" the first time the model reaches for it. A
   // description carrying an apostrophe has to be written in backticks.
+  //
+  // Which makes a backtick inside a backtick exactly as fatal, and far more
+  // tempting: backticks are how anyone writes an example value, and the
+  // description they are writing is already backtick-quoted because it
+  // contains an apostrophe. This check read only the single-quoted ones and
+  // waved five broken descriptions through. It now reads whichever quote the
+  // description actually opened with.
   const brokenFromAi = [
     ...new Set(
       agentWorkflow.nodes.flatMap((node) =>
@@ -702,9 +709,10 @@ if (agentWorkflow) {
           .map((tail) => tail.slice(0, tail.indexOf(") }}") + 1))
           .filter((call) => {
             const description = call.slice(call.indexOf(",") + 1).trim();
-            if (!description.startsWith("'")) return false;
+            const quote = description.charAt(0);
+            if (quote !== "'" && quote !== "`") return false;
             const body = description.slice(1);
-            return !body.slice(body.indexOf("'") + 1).trim().startsWith(",");
+            return !body.slice(body.indexOf(quote) + 1).trim().startsWith(",");
           })
           .map(() => node.name),
       ),
@@ -712,7 +720,8 @@ if (agentWorkflow) {
   ];
   check(
     brokenFromAi.length === 0,
-    "Tool descriptions must not close their own quote; write them in backticks when they contain an apostrophe" +
+    "Tool descriptions must not close their own quote: write one containing an " +
+      "apostrophe in backticks, and never put a backtick inside it" +
       (brokenFromAi.length > 0 ? ` (${brokenFromAi.join(", ")})` : ""),
   );
 
@@ -1405,13 +1414,25 @@ if (startPaidResearchWorkflow) {
     "https://api.dataforseo.com/v3/dataforseo_labs/google/related_keywords/live",
     "https://api.dataforseo.com/v3/serp/google/organic/live/regular",
   ];
-  const paidHttpNodes = startPaidResearchWorkflow.nodes.filter(
-    (node) => dataForSeoUrls.includes(String(node.parameters?.url ?? "")),
+  // Each seed gets its own call, because a live endpoint rejects every task after
+  // the first, so a reviewed endpoint may now appear several times. What must not
+  // change is the set: every DataForSEO URL in here is one of the six, and all six
+  // are still present.
+  const paidHttpNodes = startPaidResearchWorkflow.nodes.filter((node) =>
+    String(node.parameters?.url ?? "").includes("api.dataforseo.com"),
   );
+  const paidCalledUrls = startPaidResearchWorkflow.nodes
+    .map((node) => String(node.parameters?.url ?? ""))
+    .filter((url) => url.includes("api.dataforseo.com"));
+  const unreviewed = [...new Set(paidCalledUrls)].filter(
+    (url) => !dataForSeoUrls.includes(url),
+  );
+  const missing = dataForSeoUrls.filter((url) => !paidCalledUrls.includes(url));
   check(
-    JSON.stringify(paidHttpNodes.map((node) => node.parameters.url)) ===
-      JSON.stringify(dataForSeoUrls),
-    "start_paid_domain_research may use only the six reviewed DataForSEO endpoints",
+    unreviewed.length === 0 && missing.length === 0,
+    "start_paid_domain_research may use only the six reviewed DataForSEO endpoints" +
+      (unreviewed.length > 0 ? ` (unreviewed: ${unreviewed.join(", ")})` : "") +
+      (missing.length > 0 ? ` (missing: ${missing.join(", ")})` : ""),
   );
   check(
     paidHttpNodes.every(
