@@ -928,13 +928,16 @@ if (linkedInLookupWorkflow) {
       ?.jsCode ?? "";
   check(
     /profile_enriched: false/.test(rankingCode) &&
-      /slice\(0, 3\)/.test(rankingCode) &&
+      // Bounded, but wide enough to be useful: three of twenty-eight namesakes
+      // hides the person the user came for.
+      /slice\(0, 8\)/.test(rankingCode) &&
       /linkedinSlug/.test(rankingCode) &&
       /structuredLocation/.test(rankingCode) &&
       /professionalText/.test(rankingCode) &&
       /professionalNetworkName/.test(rankingCode) &&
       /requested professional title/.test(rankingCode) &&
       /industry or professional context/.test(rankingCode) &&
+      /work email domain matches employer/.test(rankingCode) &&
       !/business_emails|personal_emails|phone_numbers|contact\./i.test(
         rankingCode,
       ),

@@ -30,14 +30,14 @@ field names, JSON, or a form:
 
 - **First and last name** — required. No search can run without it.
 - **Work email** — optional, but the single most useful extra. Say "work email":
-  the company domain is strong employer evidence, while a personal Gmail,
-  Outlook, or iCloud address adds nothing to the match. Never press for it.
+  the company domain is scored against each candidate's employer and outweighs
+  any location detail, while a personal Gmail, Outlook, or iCloud address is
+  ignored because it names no employer. Never press for it.
 - **Where they are based** — optional: city, state or province, country.
 - **Their industry or current employer** — optional.
 
-Always ask for at least one detail beyond the name. A name alone cannot produce
-a confident result. Explain that one extra detail helps distinguish strangers
-who share a name.
+Always ask for at least one detail beyond the name: it is what separates
+strangers who share one.
 
 Then wait. Never invent or guess a missing value, and do not search on a name
 alone unless the user has been told it will likely be inconclusive and asks to
@@ -73,7 +73,7 @@ search.
 
 - For `match_status: matched` with high confidence, present the selected profile as the likely match and include the evidence.
 - For medium confidence, say "possible match" and state what supports and weakens the match.
-- For low confidence or `match_status: ambiguous`, do not select a person. Show at most three candidate profile URLs with their names, roles, locations, and match evidence, then ask the user to choose or add a discriminator.
+- For low confidence or `match_status: ambiguous`, do not select a person. Show every candidate the tool returned — up to eight — with names, roles, locations, and evidence, then ask the user to choose or add a discriminator.
 - For `match_status: not_found`, say that no sufficiently supported match was found. Do not convert the top search result into a match.
 - Describe confidence as match confidence, not proof that the profile belongs to the person.
 
