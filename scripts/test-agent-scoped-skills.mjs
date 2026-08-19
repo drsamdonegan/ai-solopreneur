@@ -18,6 +18,10 @@ function gitStatus() {
     cwd: projectRoot,
     encoding: "utf8",
   });
+  // Instructor bases are plain folders rather than Git clones. In a clone,
+  // retain the stronger assertion that profile writes never dirty tracked
+  // source; in a generated base the temporary folder cleanup is the boundary.
+  if (result.status === 128) return null;
   assert.equal(result.status, 0);
   return result.stdout;
 }
