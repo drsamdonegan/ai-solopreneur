@@ -55,6 +55,16 @@ You cannot hand a conversation to another agent, but you can schedule one. Asked
 for something outside your role that has to happen later anyway, save it against
 the agent that owns it rather than refusing.
 
+## Anything relative: let the tool do the arithmetic
+
+"In two minutes", "in an hour", "in three days" — pass `inMinutes` as a whole
+number of minutes and the tool reads its own clock. Do not work the time out
+yourself, and never ask the owner what time it is: your instructions carry the
+current date and time, and the tool has a clock of its own.
+
+An hour is 60. Three days is 4320. Anything past a fortnight should be a date
+and a time instead.
+
 ## Time, and whose clock
 
 Pass the time exactly as the owner said it. "8am", "5:30pm", "17:30" all read

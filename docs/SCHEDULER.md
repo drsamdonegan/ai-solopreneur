@@ -62,6 +62,20 @@ will do it, when it next runs, and anything it had to guess. Correct it there
 and then — saying it again with the same name changes that schedule rather than
 adding a second one.
 
+## Saying when
+
+Times of day and relative times both work, and your agent knows what today's
+date is, so nothing has to be spelled out:
+
+> Every weekday at 8am, research mlai.au and tell me what changed.
+
+> Run a scan of mlai.au in two minutes.
+
+> Tomorrow at 9, list everything overdue.
+
+The one thing it cannot do is anything shorter than a day *repeatedly*. A
+one-off two minutes from now is fine; a job every two minutes is not.
+
 ## Which agent runs it
 
 All five of your specialists can schedule work, so it does not matter which one
@@ -151,7 +165,7 @@ first earns its keep.
 
 The fastest test is a one-off a few minutes out:
 
-> Run a one-off, ten minutes from now: list my tasks and summarise them.
+> Run a one-off two minutes from now: list my tasks and summarise them.
 
 Wait for it, then:
 
