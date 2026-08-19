@@ -123,6 +123,10 @@
     profileWho: document.querySelector("#profile-who"),
     requestStatus: document.querySelector("#request-status"),
     resetButton: document.querySelector("#reset-button"),
+    scanProgress: document.querySelector("#scan-progress"),
+    scanProgressFill: document.querySelector("#scan-progress-fill"),
+    scanProgressMeta: document.querySelector("#scan-progress-meta"),
+    scanProgressNote: document.querySelector("#scan-progress-note"),
     sendButton: document.querySelector("#send-button"),
     sendButtonLabel: document.querySelector("#send-button-label"),
     suggestionList: document.querySelector("#suggestion-list"),
@@ -285,6 +289,9 @@
     elements.agentInitials.textContent = initials;
     elements.mobileAgentInitials.textContent = initials;
     applySavedAvatar();
+    // Every path that changes the active agent comes through here, so this is
+    // the one place the funding progress poll starts and stops.
+    syncScanProgress();
   }
 
   function applySavedAvatar() {
@@ -1509,8 +1516,130 @@
     } finally {
       setBusy(false);
       elements.input.focus();
+      // "Go and search" starts a scan mid-conversation; check straight away
+      // rather than making the new bar wait for the next scheduled poll.
+      if (activeAgentId === FUNDING_AGENT_ID) {
+        void refreshScanProgress();
+      }
     }
   }
+
+  // ---- Funding search progress ------------------------------------------
+  // A funding search runs server-side for the best part of an hour, and a
+  // chat transcript cannot show that anything is happening. While the
+  // Investment agent is open, the page polls a small endpoint that reads the
+  // search's own progress notes, and draws them as a bar above the composer.
+  const FUNDING_AGENT_ID = "investment";
+  const SCAN_POLL_MS = 12_000;
+  let scanPollTimer = null;
+  let scanWasRunning = false;
+  let scanDoneUntil = 0;
+
+  function renderScanProgress(scan) {
+    const card = elements.scanProgress;
+    if (!card || !scan || scan.available === false) {
+      if (card) {
+        card.hidden = true;
+      }
+      return;
+    }
+    if (scan.running === true) {
+      scanWasRunning = true;
+      card.classList.remove("scan-progress--done");
+      const total = Number(scan.of) || 0;
+      const step = Number(scan.step) || 0;
+      // Step 0 is "reading the profile", so the bar shows a sliver rather
+      // than nothing: a search that just started should look started.
+      const percent =
+        total > 0
+          ? Math.max(4, Math.min(100, Math.round((step / total) * 100)))
+          : 4;
+      elements.scanProgressFill.style.width = `${percent}%`;
+      elements.scanProgressNote.textContent = String(
+        scan.note ?? "Searching…",
+      );
+      const started = Number(scan.startedMinutesAgo);
+      const quiet = Number(scan.updatedMinutesAgo);
+      let meta = Number.isFinite(started) ? `Started ${started} min ago` : "";
+      // A beat can hold one long API call, so a few quiet minutes are
+      // normal; past that the card says when it last heard anything, so a
+      // stall is visible instead of the bar just sitting still.
+      if (Number.isFinite(quiet) && quiet >= 3) {
+        meta += ` · last update ${quiet} min ago`;
+      }
+      elements.scanProgressMeta.textContent = meta;
+      card.hidden = false;
+      return;
+    }
+    // Not running. Show the outcome once, briefly, if we watched it finish —
+    // a page opened long after a search ended should not lead with old news.
+    if (scanWasRunning) {
+      scanWasRunning = false;
+      scanDoneUntil = Date.now() + 90_000;
+    }
+    if (Date.now() >= scanDoneUntil) {
+      card.hidden = true;
+      return;
+    }
+    card.classList.add("scan-progress--done");
+    const found = Number(scan.newCount) || 0;
+    elements.scanProgressNote.textContent =
+      scan.interrupted === true
+        ? "The search stopped without finishing. Ask me to search again."
+        : found > 0
+          ? `Search finished — ${found} new ${found === 1 ? "program" : "programs"} found. Ask “what did the funding search find?”`
+          : "Search finished. Ask “what did the funding search find?” for the full report.";
+    elements.scanProgressMeta.textContent = "";
+    card.hidden = false;
+  }
+
+  async function refreshScanProgress() {
+    // No visibility guard: the browser already throttles background-tab
+    // timers, the poll is a couple of hundred bytes, and a guard here is one
+    // more way for the bar to sit stale when the user comes back.
+    if (activeAgentId !== FUNDING_AGENT_ID) {
+      return;
+    }
+    try {
+      const response = await fetch("/api/funding-progress", {
+        headers: { Accept: "application/json" },
+      });
+      if (!response.ok) {
+        elements.scanProgress.hidden = true;
+        return;
+      }
+      renderScanProgress(await response.json());
+    } catch {
+      elements.scanProgress.hidden = true;
+    }
+  }
+
+  function syncScanProgress() {
+    if (activeAgentId === FUNDING_AGENT_ID) {
+      if (scanPollTimer === null) {
+        scanPollTimer = window.setInterval(() => {
+          void refreshScanProgress();
+        }, SCAN_POLL_MS);
+      }
+      void refreshScanProgress();
+      return;
+    }
+    if (scanPollTimer !== null) {
+      window.clearInterval(scanPollTimer);
+      scanPollTimer = null;
+    }
+    scanWasRunning = false;
+    scanDoneUntil = 0;
+    if (elements.scanProgress) {
+      elements.scanProgress.hidden = true;
+    }
+  }
+
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) {
+      void refreshScanProgress();
+    }
+  });
 
   function updateCharacterCount() {
     const length = elements.input.value.length;

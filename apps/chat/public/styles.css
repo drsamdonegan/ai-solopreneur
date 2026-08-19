@@ -1867,3 +1867,85 @@ textarea:focus-visible,
     transition-duration: 0.01ms !important;
   }
 }
+
+/* The funding search progress card. A search runs server-side for the best
+   part of an hour, and the transcript alone cannot show that anything is
+   happening; this sits above the composer while the Investment agent is open
+   and a search is running, drawn from the search's own progress notes. */
+.scan-progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 10px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+}
+
+.scan-progress[hidden] {
+  display: none;
+}
+
+.scan-progress__spinner {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--line);
+  border-top-color: var(--brand-primary);
+  animation: scan-progress-spin 1s linear infinite;
+}
+
+.scan-progress--done .scan-progress__spinner {
+  animation: none;
+  border-color: var(--brand-primary);
+  background: var(--brand-primary);
+}
+
+@keyframes scan-progress-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.scan-progress__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.scan-progress__note {
+  margin: 0 0 6px;
+  font-size: 0.85rem;
+  color: var(--ink);
+}
+
+.scan-progress--done .scan-progress__note {
+  margin: 0;
+}
+
+.scan-progress__track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.scan-progress--done .scan-progress__track {
+  display: none;
+}
+
+.scan-progress__fill {
+  height: 100%;
+  width: 0%;
+  border-radius: 999px;
+  background: var(--brand-primary);
+  transition: width 0.6s ease;
+}
+
+.scan-progress__meta {
+  flex: none;
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--muted);
+}

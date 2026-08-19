@@ -1,0 +1,168 @@
+{
+  "name": "65 - INTERNAL - Funding Progress",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## What this is\n\nThe chat page polls this while a funding search runs, to draw the progress bar: which step the search is on, what it is doing, and when it last reported. It reads one row from `funding_runs` and does nothing else — no searching, no model calls, no cost.\n\nIt answers on `/webhook/funding-progress`, and the chat app asks it a few times a minute, which is why this workflow keeps no execution history: saving several thousand identical successful runs a day would bury the executions list everyone actually reads.",
+        "height": 340,
+        "width": 400,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -720,
+        -220
+      ],
+      "id": "95560000-0000-4000-8000-000000000001",
+      "name": "Read this first"
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "funding-progress",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -280,
+        -60
+      ],
+      "id": "95560000-0000-4000-8000-000000000002",
+      "name": "Progress Asked For",
+      "webhookId": "95560000-0000-4000-8000-0000000000f2"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "funding_runs",
+          "mode": "name"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": []
+        },
+        "returnAll": false,
+        "limit": 1,
+        "orderBy": true,
+        "orderByColumn": "ranAt",
+        "orderByDirection": "DESC"
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -60,
+        -60
+      ],
+      "id": "95560000-0000-4000-8000-000000000003",
+      "name": "Read Latest Run",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// The chat page polls this several times a minute while a search runs, so the\n// run's own row has to answer everything: no report tool, no agent, no model\n// call, nothing that costs money or time.\nconst rows = $input.all().map((item) => item.json).filter((row) => row && row.runId);\nconst latest = rows[0] ?? null;\nif (!latest) {\n  return [{ json: { schemaVersion: 1, hasRun: false, running: false } }];\n}\nconst minutesSince = (value) => {\n  const parsed = Date.parse(String(value ?? ''));\n  if (Number.isNaN(parsed)) return null;\n  return Math.round((Date.now() - parsed) / 60000);\n};\nconst running = String(latest.status ?? '') === 'running';\n// While a run is open, errorSummary carries its progress heartbeat: the table\n// gained no new column because setup cannot add one to a table that already\n// exists, and the field is guaranteed empty until the run finishes and\n// overwrites it with real errors.\nlet heartbeat = null;\nif (running) {\n  try {\n    const parsed = JSON.parse(String(latest.errorSummary ?? ''));\n    if (parsed && parsed.hb === 1) heartbeat = parsed;\n  } catch {}\n}\nconst startedMinutesAgo = minutesSince(latest.ranAt);\nconst quietMinutes = heartbeat ? minutesSince(heartbeat.at) : startedMinutesAgo;\n// The same rule the report tool applies: silence decides death, not age. A\n// beat can legitimately hold one API call for twenty-five minutes, so thirty\n// quiet minutes is the first point at which \"it stopped\" is a fact. A row from\n// before heartbeats existed only has its start time, so it gets the old rule.\nconst QUIET_AFTER = 30;\nconst DEAD_AFTER = 102;\nconst dead = running && (heartbeat\n  ? quietMinutes !== null && quietMinutes >= QUIET_AFTER\n  : startedMinutesAgo !== null && startedMinutesAgo >= DEAD_AFTER);\nif (running && !dead) {\n  return [{ json: {\n    schemaVersion: 1,\n    hasRun: true,\n    running: true,\n    startedAt: latest.ranAt,\n    startedMinutesAgo,\n    step: heartbeat ? Number(heartbeat.step) || 0 : 0,\n    of: heartbeat ? Number(heartbeat.of) || 0 : 0,\n    note: heartbeat ? String(heartbeat.note ?? '').slice(0, 200) : 'Getting started',\n    updatedMinutesAgo: quietMinutes,\n  } }];\n}\nreturn [{ json: {\n  schemaVersion: 1,\n  hasRun: true,\n  running: false,\n  interrupted: dead === true,\n  status: dead ? 'interrupted' : String(latest.status ?? ''),\n  finishedAt: dead ? null : latest.ranAt,\n  newCount: Number(latest.newCount ?? 0) || 0,\n  closingSoonCount: Number(latest.closingSoonCount ?? 0) || 0,\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        160,
+        -60
+      ],
+      "id": "95560000-0000-4000-8000-000000000004",
+      "name": "Shape Progress"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json; charset=utf-8"
+              },
+              {
+                "name": "Cache-Control",
+                "value": "no-store"
+              }
+            ]
+          },
+          "enableStreaming": false
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        380,
+        -60
+      ],
+      "id": "95560000-0000-4000-8000-000000000005",
+      "name": "Respond With Progress"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Progress Asked For": {
+      "main": [
+        [
+          {
+            "node": "Read Latest Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Latest Run": {
+      "main": [
+        [
+          {
+            "node": "Shape Progress",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shape Progress": {
+      "main": [
+        [
+          {
+            "node": "Respond With Progress",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "none",
+    "saveDataSuccessExecution": "none",
+    "saveExecutionProgress": false,
+    "saveManualExecutions": true,
+    "executionTimeout": 30
+  },
+  "id": "phase15FundingProgress",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "phase": 15,
+    "testedWithN8n": "2.30.5",
+    "toolRisk": "read",
+    "authorization": "none-progress-poll",
+    "dataSource": "local-funding-tables"
+  },
+  "tags": []
+}

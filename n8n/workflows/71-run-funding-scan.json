@@ -176,7 +176,7 @@
             "ranAt": "={{ $json.startedAt }}",
             "status": "running",
             "reportText": "",
-            "errorSummary": ""
+            "errorSummary": "={{ JSON.stringify({ hb: 1, note: 'Reading your business profile and planning the search', step: 0, of: ($json.beats ?? []).length + 2, at: $json.startedAt }) }}"
           },
           "matchingColumns": [],
           "schema": [
@@ -245,7 +245,7 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "const context = $('Check Profile').first().json;\nconst memoryResponse = $input.first()?.json ?? {};\n\nlet memorySummary = '';\nconst memories = Array.isArray(memoryResponse.memories) ? memoryResponse.memories : [];\nif (memories.length > 0) {\n  const first = memories[0];\n  const parts = [first.summary, first.description, first.whatTheBusinessDoes]\n    .filter((value) => typeof value === 'string' && value.trim());\n  memorySummary = parts.length > 0 ? parts.join(' ') : JSON.stringify(first);\n}\nmemorySummary = memorySummary.slice(0, 1500);\n\nconst scopes = {\n  national: `National and federal funding for a business in ${context.profileJson ? JSON.parse(context.profileJson).country : ''}: grants, tax incentives, rebates, export support, and industry programs.`,\n  regional: `State, provincial, or territory funding for a business in ${context.region}: grants, vouchers, and rebates run by that government.`,\n  local: `City or council funding for a business in ${context.city}: small local grants and business support programs.`,\n  industry: `Funding tied to this business's industry (${context.industry}): sector bodies, innovation funds, and mission-linked programs.`,\n  nongov: 'Non-government money: charitable foundations, philanthropic grants, corporate and startup programs, competitions with cash prizes, and platform credit programs such as cloud, API, or software credits for small businesses.',\n};\n\nconst domainsFor = (beat) => {\n  if (beat === 'national') return context.sourceDomains.national ?? [];\n  if (beat === 'regional') return context.sourceDomains.regional ?? [];\n  if (beat === 'local') return context.sourceDomains.local ?? [];\n  return [];\n};\n\nconst items = [];\nfor (const beat of context.beats) {\n  const scope = scopes[beat];\n  if (!scope) continue;\n  const domains = domainsFor(beat);\n  // A government beat with no official domain list would search the open web\n  // for 'council grants', which is where the scam sites live. Skip it instead.\n  if (['regional', 'local'].includes(beat) && domains.length === 0) continue;\n  items.push({ json: {\n    beat,\n    scope,\n    domains: JSON.stringify(domains),\n    profileJson: context.profileJson,\n    memorySummary,\n    today: context.today,\n    timezone: context.timezone,\n  } });\n}\n\nreturn items;"
+        "jsCode": "const context = $('Check Profile').first().json;\nconst memoryResponse = $input.first()?.json ?? {};\n\nlet memorySummary = '';\nconst memories = Array.isArray(memoryResponse.memories) ? memoryResponse.memories : [];\nif (memories.length > 0) {\n  const first = memories[0];\n  const parts = [first.summary, first.description, first.whatTheBusinessDoes]\n    .filter((value) => typeof value === 'string' && value.trim());\n  memorySummary = parts.length > 0 ? parts.join(' ') : JSON.stringify(first);\n}\nmemorySummary = memorySummary.slice(0, 1500);\n\nconst scopes = {\n  national: `National and federal funding for a business in ${context.profileJson ? JSON.parse(context.profileJson).country : ''}: grants, tax incentives, rebates, export support, and industry programs.`,\n  regional: `State, provincial, or territory funding for a business in ${context.region}: grants, vouchers, and rebates run by that government.`,\n  local: `City or council funding for a business in ${context.city}: small local grants and business support programs.`,\n  industry: `Funding tied to this business's industry (${context.industry}): sector bodies, innovation funds, and mission-linked programs.`,\n  nongov: 'Non-government money: charitable foundations, philanthropic grants, corporate and startup programs, competitions with cash prizes, and platform credit programs such as cloud, API, or software credits for small businesses.',\n};\n\nconst domainsFor = (beat) => {\n  if (beat === 'national') return context.sourceDomains.national ?? [];\n  if (beat === 'regional') return context.sourceDomains.regional ?? [];\n  if (beat === 'local') return context.sourceDomains.local ?? [];\n  return [];\n};\n\nconst items = [];\nfor (const beat of context.beats) {\n  const scope = scopes[beat];\n  if (!scope) continue;\n  const domains = domainsFor(beat);\n  // A government beat with no official domain list would search the open web\n  // for 'council grants', which is where the scam sites live. Skip it instead.\n  if (['regional', 'local'].includes(beat) && domains.length === 0) continue;\n  items.push({ json: {\n    beat,\n    runId: context.runId,\n    beatIndex: items.length,\n    scope,\n    domains: JSON.stringify(domains),\n    profileJson: context.profileJson,\n    memorySummary,\n    today: context.today,\n    timezone: context.timezone,\n  } });\n}\n\n// Numbered after the loop, because a beat skipped for having no official\n// domain list must not leave a hole in the count the progress bar shows.\nfor (const item of items) item.json.beatCount = items.length;\n\nreturn items;"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -273,7 +273,10 @@
             "profileJson": "={{ $json.profileJson }}",
             "memorySummary": "={{ $json.memorySummary }}",
             "today": "={{ $json.today }}",
-            "timezone": "={{ $json.timezone }}"
+            "timezone": "={{ $json.timezone }}",
+            "runId": "={{ $json.runId }}",
+            "beatIndex": "={{ $json.beatIndex }}",
+            "beatCount": "={{ $json.beatCount }}"
           },
           "matchingColumns": [],
           "schema": [
@@ -334,6 +337,33 @@
             {
               "id": "timezone",
               "displayName": "timezone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "runId",
+              "displayName": "runId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "beatIndex",
+              "displayName": "beatIndex",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "beatCount",
+              "displayName": "beatCount",
               "required": false,
               "defaultMatch": false,
               "display": true,
@@ -1125,6 +1155,122 @@
       "id": "95540000-0000-4000-8000-000000000034",
       "name": "Upsert Opportunities",
       "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "value": "funding_runs",
+          "mode": "name"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "runId",
+              "condition": "eq",
+              "keyValue": "={{ $('Check Profile').first().json.runId }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "errorSummary": "={{ JSON.stringify({ hb: 1, note: 'Opening the official page for each of ' + ($json.shortlist ?? []).length + ' shortlisted programs', step: ($json.beatsAttempted ?? 0) + 1, of: ($json.beatsAttempted ?? 0) + 2, at: new Date().toISOString() }) }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "runId",
+              "displayName": "runId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "errorSummary",
+              "displayName": "errorSummary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1160,
+        -420
+      ],
+      "id": "95550000-0000-4000-8000-000000000061",
+      "name": "Note Page Checks Started",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "value": "funding_runs",
+          "mode": "name"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "runId",
+              "condition": "eq",
+              "keyValue": "={{ $('Check Profile').first().json.runId }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "errorSummary": "={{ JSON.stringify({ hb: 1, note: 'Deciding eligibility for ' + ($('Collect Verified').first().json.verified ?? []).length + ' programs', step: ($('Collect Candidates').first().json.beatsAttempted ?? 0) + 2, of: ($('Collect Candidates').first().json.beatsAttempted ?? 0) + 2, at: new Date().toISOString() }) }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "runId",
+              "displayName": "runId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "errorSummary",
+              "displayName": "errorSummary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1900,
+        -420
+      ],
+      "id": "95550000-0000-4000-8000-000000000062",
+      "name": "Note Judging Started",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
     }
   ],
   "pinData": {},
@@ -1250,6 +1396,11 @@
       "main": [
         [
           {
+            "node": "Note Page Checks Started",
+            "type": "main",
+            "index": 0
+          },
+          {
             "node": "Anything To Verify?",
             "type": "main",
             "index": 0
@@ -1329,6 +1480,11 @@
     "Build Judge Request": {
       "main": [
         [
+          {
+            "node": "Note Judging Started",
+            "type": "main",
+            "index": 0
+          },
           {
             "node": "Judge Eligibility",
             "type": "main",

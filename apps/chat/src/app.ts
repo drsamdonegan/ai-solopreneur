@@ -2660,6 +2660,58 @@ export function createChatHandler(options: ChatGatewayOptions): RequestListener 
         return;
       }
 
+      if (url.pathname === "/api/funding-progress") {
+        if (request.method !== "GET") {
+          sendJson(
+            response,
+            405,
+            {
+              error: {
+                code: "INVALID_REQUEST",
+                message: "Read funding progress with GET.",
+              },
+            },
+            { Allow: "GET" },
+          );
+          return;
+        }
+        // The page polls this while a funding search runs, to draw its
+        // progress bar. n8n answers it from the search's own progress notes —
+        // no agent, no model call — so the poll costs nothing. A chat page has
+        // to keep working when n8n is down or mid-restart, which is why every
+        // failure here is a quiet "not available" rather than an error the
+        // user has to read.
+        try {
+          const progressUrl = new URL(
+            "/webhook/funding-progress",
+            options.upstreamUrl,
+          );
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 5_000);
+          let upstream: Response;
+          try {
+            upstream = await fetchImplementation(progressUrl, {
+              signal: controller.signal,
+            });
+          } finally {
+            clearTimeout(timer);
+          }
+          if (!upstream.ok) {
+            sendJson(response, 200, { schemaVersion: 1, available: false });
+            return;
+          }
+          const body = (await upstream.json()) as Record<string, unknown>;
+          sendJson(response, 200, {
+            ...body,
+            schemaVersion: 1,
+            available: true,
+          });
+        } catch {
+          sendJson(response, 200, { schemaVersion: 1, available: false });
+        }
+        return;
+      }
+
       if (url.pathname === "/api/chat") {
         if (request.method !== "POST") {
           sendJson(

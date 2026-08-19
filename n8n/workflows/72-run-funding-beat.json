@@ -49,6 +49,18 @@
             {
               "name": "timezone",
               "type": "string"
+            },
+            {
+              "name": "runId",
+              "type": "string"
+            },
+            {
+              "name": "beatIndex",
+              "type": "string"
+            },
+            {
+              "name": "beatCount",
+              "type": "string"
             }
           ]
         }
@@ -228,6 +240,64 @@
       ],
       "id": "95530000-0000-4000-8000-000000000016",
       "name": "Shape Beat Result"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "value": "funding_runs",
+          "mode": "name"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "runId",
+              "condition": "eq",
+              "keyValue": "={{ $json.runId }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "errorSummary": "={{ JSON.stringify({ hb: 1, note: ({ national: 'Searching national and federal funding sources', regional: 'Searching state and territory funding sources', local: 'Searching local council funding sources', industry: 'Searching industry-specific funds and programs', nongov: 'Searching non-government money: foundations, corporates, competitions' })[$json.beat] ?? ('Searching ' + $json.beat + ' sources'), step: Number($json.beatIndex ?? 0) + 1, of: Number($json.beatCount ?? 0) + 2, at: new Date().toISOString() }) }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "runId",
+              "displayName": "runId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "errorSummary",
+              "displayName": "errorSummary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -60,
+        -420
+      ],
+      "id": "95550000-0000-4000-8000-000000000071",
+      "name": "Note Beat Started",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
     }
   ],
   "pinData": {},
@@ -246,6 +316,11 @@
     "Build Search Request": {
       "main": [
         [
+          {
+            "node": "Note Beat Started",
+            "type": "main",
+            "index": 0
+          },
           {
             "node": "Search With Claude",
             "type": "main",

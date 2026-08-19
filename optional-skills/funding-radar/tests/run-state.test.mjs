@@ -676,6 +676,160 @@ for (const tool of (agent?.nodes ?? []).filter((n) => n.type.endsWith("toolWorkf
 }
 check(boundariesChecked > 0, "the tool-to-workflow boundary was actually inspected");
 
+// --- progress heartbeats -----------------------------------------------------
+// While a run is open its row's errorSummary carries a heartbeat: what the
+// search is doing, which step it is on, and when it last said so. The readers
+// then judge death by silence instead of age — an hour-long search with a
+// fresh heartbeat is alive, and a twenty-minute-old one that went quiet
+// half an hour ago is not.
+const hb = (minutesQuiet, extra = {}) =>
+  JSON.stringify({
+    hb: 1,
+    note: "Searching state and territory funding sources",
+    step: 2,
+    of: 5,
+    at: minutesAgo(minutesQuiet),
+    ...extra,
+  });
+
+const freshHeartbeat = shape({
+  runId: "a", status: "running", ranAt: minutesAgo(45), errorSummary: hb(3),
+});
+check(
+  freshHeartbeat.running === true,
+  "a search deep into an hour is still alive while its heartbeat is fresh",
+);
+check(
+  /step 2 of 5/.test(freshHeartbeat.message) && /state and territory/.test(freshHeartbeat.message),
+  "the agent is told what the running search is doing, not just how old it is",
+);
+
+const quietHeartbeat = shape({
+  runId: "a", status: "running", ranAt: minutesAgo(45), errorSummary: hb(35),
+});
+check(
+  quietHeartbeat.interrupted === true,
+  "a heartbeat quiet past thirty minutes is a dead run, whatever its age",
+);
+
+check(
+  shape({ runId: "a", status: "running", ranAt: minutesAgo(45), errorSummary: "" }).running === true,
+  "a run from before heartbeats existed is still judged by the old age rule",
+);
+
+const startFresh = decide([
+  { runId: "a", status: "running", ranAt: minutesAgo(50), errorSummary: hb(2) },
+]);
+check(
+  startFresh.shouldQueue === false,
+  "the start guard trusts a fresh heartbeat over a fifty-minute age",
+);
+check(
+  /state and territory/.test(startFresh.response.message),
+  "the refusal says what the running search is doing",
+);
+
+const startQuiet = decide([
+  { runId: "a", status: "running", ranAt: minutesAgo(50), errorSummary: hb(34) },
+]);
+check(
+  startQuiet.shouldQueue === true && startQuiet.replacing?.reason === "interrupted",
+  "a quiet heartbeat frees the lock without waiting out the full age window",
+);
+
+// The three writers and the three readers of the heartbeat have to agree on
+// the silence threshold, or one of them calls a working search dead.
+const quietOf = (source) => Number(source.match(/const QUIET_AFTER = (\d+);/)?.[1] ?? NaN);
+const progress = await load("65-internal-funding-progress.json");
+check(
+  quietOf(code(report, "Shape Report Result")) === quietOf(code(start, "Decide Run")) &&
+    quietOf(code(start, "Decide Run")) === quietOf(code(progress, "Shape Progress")),
+  "every reader of the heartbeat uses the same silence threshold",
+);
+
+// --- the progress webhook the chat page polls --------------------------------
+const shapeProgress = (rowsIn) =>
+  run(code(progress, "Shape Progress"), { incoming: rowsIn, executed: {} })[0].json;
+
+check(
+  shapeProgress([]).hasRun === false,
+  "no runs at all answers quietly instead of erroring",
+);
+const polling = shapeProgress([
+  { runId: "a", status: "running", ranAt: minutesAgo(9), errorSummary: hb(1) },
+]);
+check(
+  polling.running === true && polling.step === 2 && polling.of === 5 &&
+    /state and territory/.test(polling.note),
+  "a running search reports its step, its total, and what it is doing",
+);
+const pollDead = shapeProgress([
+  { runId: "a", status: "running", ranAt: minutesAgo(50), errorSummary: hb(40) },
+]);
+check(
+  pollDead.running === false && pollDead.interrupted === true,
+  "the page is told a dead run is dead, not shown a frozen bar",
+);
+const pollDone = shapeProgress([
+  { runId: "a", status: "ok", ranAt: minutesAgo(4), errorSummary: "", newCount: 3, closingSoonCount: 1 },
+]);
+check(
+  pollDone.running === false && pollDone.status === "ok" && pollDone.newCount === 3,
+  "a finished run reports its outcome counts and nothing heavier",
+);
+check(
+  !("reportText" in pollDone),
+  "the unauthenticated progress endpoint never carries the report itself",
+);
+
+// --- the heartbeat writers ---------------------------------------------------
+// The scan numbers its beats and hands the numbering to each one; the beat
+// writes the heartbeat under the runId it was given. All of that crosses the
+// 71-to-72 boundary, which is exactly where force was silently dropped.
+const beatTrigger = beat.nodes.find((n) => n.type.endsWith("executeWorkflowTrigger"));
+const beatAccepts = new Set(
+  (beatTrigger?.parameters?.workflowInputs?.values ?? []).map((v) => v.name),
+);
+const runBeat = scan.nodes.find((n) => n.name === "Run Beat");
+for (const sent of Object.keys(runBeat?.parameters?.workflowInputs?.value ?? {})) {
+  check(
+    beatAccepts.has(sent),
+    `Run Beat sends "${sent}" but the beat trigger never declared it, so n8n drops it`,
+  );
+}
+const builtBeats = run(code(scan, "Build Beats"), {
+  self: {},
+  incoming: [{ memories: [] }],
+  executed: {
+    "Check Profile": {
+      runId: "r20",
+      beats: ["national", "nongov"],
+      sourceDomains: { national: ["business.gov.au"], regional: [], local: [] },
+      profileJson: JSON.stringify({ country: "Australia" }),
+      region: "NSW", city: "Sydney", industry: "software",
+      today: "2026-08-19", timezone: "Australia/Melbourne",
+    },
+  },
+});
+check(
+  builtBeats.length === 2 &&
+    builtBeats.every((item, index) => item.json.runId === "r20" &&
+      item.json.beatIndex === index && item.json.beatCount === 2),
+  "every beat leaves with the runId and its own number, so its heartbeat lands on the right row",
+);
+const beatHeartbeat = beat.nodes.find((n) => n.name === "Note Beat Started");
+check(
+  beatHeartbeat !== undefined && beatHeartbeat.onError === "continueRegularOutput",
+  "a failed heartbeat write is a missing progress note, never a dead search",
+);
+for (const writer of ["Note Page Checks Started", "Note Judging Started"]) {
+  const found = scan.nodes.find((n) => n.name === writer);
+  check(
+    found !== undefined && found.onError === "continueRegularOutput",
+    `${writer} exists and cannot take the scan down with it`,
+  );
+}
+
 if (failures.length > 0) {
   for (const failure of failures) console.error(`- ${failure}`);
   process.exit(1);

@@ -130,6 +130,23 @@
         ></div>
 
         <div class="composer-area">
+          <div
+            class="scan-progress"
+            id="scan-progress"
+            role="status"
+            aria-live="polite"
+            hidden
+          >
+            <div class="scan-progress__spinner" aria-hidden="true"></div>
+            <div class="scan-progress__body">
+              <p class="scan-progress__note" id="scan-progress-note"></p>
+              <div class="scan-progress__track" aria-hidden="true">
+                <div class="scan-progress__fill" id="scan-progress-fill"></div>
+              </div>
+            </div>
+            <p class="scan-progress__meta" id="scan-progress-meta"></p>
+          </div>
+
           <section class="suggestions" id="suggestions" aria-labelledby="suggestions-title">
             <p class="section-label" id="suggestions-title">Try an example</p>
             <div class="suggestion-list" id="suggestion-list"></div>
