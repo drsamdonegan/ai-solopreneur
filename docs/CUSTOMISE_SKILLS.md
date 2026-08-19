@@ -9,10 +9,9 @@ The starter agent includes:
 | Skill | What it changes |
 | --- | --- |
 | `project-assistant` | How the agent turns uncertainty into practical next steps |
+| `meeting-analysis` | How the agent grounds meeting summaries and action items |
 | `task-capture` | How the agent prepares a confirmation-gated task proposal |
 | `weekly-status` | How the agent summarises factual task progress |
-| `domain-research` | How the free website-only business research path behaves |
-| `paid-domain-research` | How the optional, explicitly requested paid search upgrade behaves |
 
 ## Change one skill
 
@@ -39,6 +38,7 @@ Open `skills/enabled.txt`. It contains one skill ID per line:
 
 ```text
 project-assistant
+meeting-analysis
 task-capture
 weekly-status
 ```
@@ -77,9 +77,10 @@ Then sync the skills and restart the services, exactly as you would after editin
 
 The installer copies the skill's files in, wires up any workflows it needs, and adds its line to `skills/enabled.txt` for you. It never overwrites anything you have already changed, and running it twice does nothing the second time.
 
-### Two rules make these work well
+### One rule makes these work well
 
-- **Add one at a time.** Every enabled skill sits in the prompt for every message, so three competing reply formats make the agent answer an ordinary project question as though it were a sales enquiry.
+- **Add one at a time.** Each enabled skill is loaded only for its owning agent,
+  but two skills for the same role can still contain competing reply formats.
 
 Remove a skill's line from `skills/enabled.txt` to switch it off again without deleting anything.
 

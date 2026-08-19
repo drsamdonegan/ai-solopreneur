@@ -66,7 +66,9 @@ Claude Code understands the same thing in plain English — paste the address an
 
 ## A word on enabling several at once
 
-Every enabled skill sits in the agent's instructions for **every** message. Three competing reply formats will make it answer an ordinary project question as though it were a sales enquiry.
+Every enabled skill sits only in its owning agent's instructions. Add them one
+at a time so two skills for the same role do not introduce competing formats,
+and so provider setup failures stay easy to diagnose.
 
 Add them one at a time, and switch off the ones you are not using by removing their line from `skills/enabled.txt`.
 

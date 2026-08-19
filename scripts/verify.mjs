@@ -27,7 +27,12 @@ function run(label, command, args, cwd = projectRoot) {
 }
 
 async function declaredOptionalTests() {
-  const entries = await readdir(optionalRoot, { withFileTypes: true });
+  let entries = [];
+  try {
+    entries = await readdir(optionalRoot, { withFileTypes: true });
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+  }
   const tests = [];
 
   for (const entry of entries) {
@@ -63,11 +68,19 @@ async function declaredOptionalTests() {
 
 run("workflow validation", process.execPath, ["scripts/validate-workflows.mjs"]);
 run("agent runtime isolation", process.execPath, ["scripts/test-agent-runtime.mjs"]);
-run("agent-aware optional installer", process.execPath, [
-  "scripts/test-optional-installer.mjs",
-]);
+try {
+  await readFile(join(optionalRoot, "_installer", "add-skill.mjs"), "utf8");
+  run("agent-aware optional installer", process.execPath, [
+    "scripts/test-optional-installer.mjs",
+  ]);
+} catch (error) {
+  if (error?.code !== "ENOENT") throw error;
+}
 run("release validation", process.execPath, ["scripts/validate-release.mjs"]);
 run("skill compilation", process.execPath, ["scripts/compile-skills.mjs"]);
+run("read-only upgrade preflight", process.execPath, [
+  "scripts/test-upgrade-check.mjs",
+]);
 
 for (const test of await declaredOptionalTests()) {
   run(test.label, process.execPath, [test.path]);

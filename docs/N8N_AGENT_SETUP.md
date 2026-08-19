@@ -29,7 +29,9 @@ Anthropic API access is billed separately from a Claude web-chat subscription. T
 
 ## 1. Confirm the automatic workflow import
 
-The repository includes eleven reviewed base workflow exports. First setup imports them automatically, so learners do not need to build nodes from a blank canvas.
+The repository includes eleven reviewed base workflow exports. First setup
+imports those plus any optional workflows already installed in this copy, so
+learners do not need to build nodes from a blank canvas.
 
 Open **Personal** in the n8n sidebar. This is the page to work from.
 
@@ -49,9 +51,16 @@ If macOS blocks it, Control-click the file, choose **Open**, then confirm.
 
 Double-click `import-workflows-windows.cmd`.
 
-The fallback opens a terminal, checks the workflows and Markdown skills, starts n8n if needed, and imports all eleven workflows. It briefly enables localhost-only setup endpoints to create local tables and sync enabled skills, then immediately removes both endpoints. It publishes the reviewed runtime subworkflows but does not publish the main agent, health workflow, or an API key.
+The fallback opens a terminal, checks the workflows and Markdown skills, starts
+n8n if needed, and imports every workflow present in `n8n/workflows`. It briefly
+enables localhost-only setup endpoints to create local tables and sync enabled
+skills, then immediately removes both endpoints. It publishes the reviewed
+runtime subworkflows but does not publish the main agent, health workflow, or
+an API key.
 
-Refresh **Personal**. All eleven workflows should appear. With a folder licence they are grouped into three folders:
+Refresh **Personal**. All eleven base workflows and every installed optional
+workflow should appear. With a folder licence the base workflows are grouped
+into three folders:
 
 - `1. Start here` — `00 - START HERE - Project Partner`, `01 - START HERE - Learner Checklist`
 - `2. Tasks` — `20 - TOOL - list_tasks`, `21 - TOOL - create_task`, `22 - TOOL - update_task_status`, `30 - TOOL - Propose create_task`, `31 - TOOL - Propose update_task_status`, `40 - CONFIRM - Task Write`

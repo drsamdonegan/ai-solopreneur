@@ -116,28 +116,20 @@ for (const path of included) {
   await writeFile(outPath, git(["show", `HEAD:${path}`]));
 }
 
-// Verify rather than assume: a base copy with a stray optional skill enabled
-// would fail for every learner who downloaded it.
-const enabled = git(["show", "HEAD:skills/enabled.txt"])
-  .toString()
-  .split(/\r?\n/)
-  .map((line) => line.trim())
-  .filter((line) => line && !line.startsWith("#"));
-const unexpected = enabled.filter((id) => !BASE_SKILLS.includes(id));
+// A maintainer may have optional skills enabled in the source checkout. The
+// generated learner base always receives the canonical four, independently of
+// that local release state.
+await writeFile(
+  join(destination, "skills", "enabled.txt"),
+  `${BASE_SKILLS.join("\n")}\n`,
+  "utf8",
+);
 
 process.stdout.write(`\nBase agent written to ${destination}\n\n`);
 process.stdout.write(`  from commit   ${head}\n`);
 process.stdout.write(`  files         ${included.length} (${skipped} left out)\n`);
 process.stdout.write(`  skills        ${BASE_SKILLS.join(", ")}\n`);
 process.stdout.write(`  workflows     ${BASE_WORKFLOWS.length}\n`);
-
-if (unexpected.length > 0) {
-  process.stderr.write(
-    `\nWARNING: skills/enabled.txt at HEAD still switches on ${unexpected.join(", ")}.\n` +
-      "Commit a clean enabled.txt before handing this out.\n",
-  );
-  process.exit(1);
-}
 
 process.stdout.write(
   "\nNothing optional is installed. A learner who runs setup here gets the\n" +

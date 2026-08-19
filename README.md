@@ -2,7 +2,7 @@
 
 Build and personalise a useful Claude-powered project assistant on your own computer. No manual Node.js install is required: Claude Code or the one-click setup selects the reviewed Node.js 24.18.0 and npm 11.16.0 pair, downloading a verified private copy inside this project when that exact pair is not already available.
 
-**Local release:** `v0.2.0`
+**Local release:** `v0.3.0`
 
 If this is your first technical project, use the
 **[complete beginner getting-started guide](docs/GETTING_STARTED.md)**. It
@@ -291,7 +291,7 @@ The maintenance helpers are also available directly: `node scripts/local.mjs hel
 ## Current milestone
 
 Phases 0–8 of the local-first implementation plan are implemented for local
-release `v0.2.0`, using a verified project-local Node.js runtime throughout.
+release `v0.3.0`, using a verified project-local Node.js runtime throughout.
 The repository owner reviewed the experience and
 explicitly authorised Phase 8 without the planned five-person pilot. That
 waiver is recorded transparently: `pilot/results.json` remains `not_run` and

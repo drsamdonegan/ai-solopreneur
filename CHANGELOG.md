@@ -5,8 +5,16 @@ versioning for local workshop releases.
 
 ## Unreleased
 
+## 0.3.0 — 2026-08-19
+
 ### Added
 
+- Five accessible agent cards and a settings dialog that separates workspace
+  identity, shared business context, and per-agent context.
+- A schema-v2 skill bundle, per-agent prompt/tool isolation, all-five-agent
+  routing, migration preflight, and surgical feature-slice hand-off map.
+- An inactive 08:00 daily Funding Radar trigger with shared duplicate-run
+  protection.
 - Durable plaintext SQLite chat history stored in the Git-ignored local data
   folder.
 - Conversation browsing, full-text search, rename, delete, pagination, and
@@ -30,6 +38,11 @@ versioning for local workshop releases.
   named `Slack bot token` before Slack delivery can succeed.
 - The n8n agent now validates contract version 3 history supplied by the
   gateway and no longer uses process-local Simple Memory.
+- SEO Article Writer now works with free Domain Research; paid DataForSEO
+  research is an explicit optional upgrade.
+- Meeting action items use readable plain-text `-` lines.
+- LinkedIn profile lookup is provider-only, needs approval for each Crustdata
+  search, and reports unavailability instead of inventing public-search URLs.
 - Backups explicitly contain plaintext chat transcripts in addition to
   encrypted n8n credentials and settings.
 - The Anthropic mock used before removal was corrected to distinguish the
@@ -38,6 +51,7 @@ versioning for local workshop releases.
 
 ### Removed
 
+- Non-runnable optional catalogue entries and dead installer/build manifests.
 - The inbound Slack trigger optional skill and learner guide. Its archived
   verification covered the `url_verification` echo, bot/self filtering,
   approximately 26 ms acknowledgements, deterministic UUID/thread mapping
@@ -46,6 +60,11 @@ versioning for local workshop releases.
 - GitHub Actions CI/CD, automated test directories, smoke-test scripts, and
   package test commands, at the repository owner's direction after the
   persistence fix was confirmed.
+
+### Deferred
+
+- Xero Coding Review. Bookkeeping remains routable but v0.3 includes no
+  accounting connector or accounting write capability.
 
 ## 0.2.0 — 2026-07-29
 
