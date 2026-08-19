@@ -551,6 +551,58 @@ check(
   "a beat that saw plenty is not described as having seen nothing",
 );
 
+// --- a beat whose request never came back ------------------------------------
+// A dropped connection loses the beat's own name with it, and the report then
+// said "I could not reach the unknown sources today", which tells nobody which
+// sources went missing or whether it matters.
+const collect = (results, asked) =>
+  run(code(scan, "Collect Candidates"), {
+    incoming: results,
+    executed: { "Build Beats": asked.map((beat) => ({ beat })) },
+  })[0].json;
+
+const oneBeatDied = attempt("Collect Candidates with a beat that never answered", () =>
+  collect(
+    [
+      { beat: "national", ok: true, candidates: [], searchCount: 3, considered: 2, rejected: [{ programName: "One", reason: "closed" }] },
+      { beat: "regional", ok: true, candidates: [], searchCount: 3, considered: 0, rejected: [] },
+      { error: "The connection was aborted, perhaps the server is offline" },
+    ],
+    ["national", "regional", "nongov"],
+  ),
+);
+check(
+  (oneBeatDied?.failedBeats ?? []).some((entry) => entry.beat === "nongov"),
+  "a beat that died is named, so the report can say which sources went missing",
+);
+check(
+  !(oneBeatDied?.beatsRun ?? []).includes("unknown"),
+  "no beat is ever reported to the owner as 'unknown'",
+);
+check(
+  oneBeatDied?.considered === 2 && (oneBeatDied?.rejected ?? []).length === 1,
+  "the surviving beats' working is still totalled when one of them dies",
+);
+check(
+  (oneBeatDied?.rejected ?? [])[0]?.beat === "national",
+  "each rejection carries the beat it came from",
+);
+
+// --- the search budget, which the model kept hitting -------------------------
+const searchRequest = code(beat, "Build Search Request");
+check(
+  /max_uses: 10/.test(searchRequest),
+  "the beat gets more than three searches, having been refused thirteen times on three",
+);
+check(
+  !/open now or open within the next 90 days/.test(searchRequest),
+  "the wide step no longer has to certify a program is open before returning it",
+);
+check(
+  /cannot tell whether it is open/.test(searchRequest),
+  "the wide step is told what to do when it cannot tell, rather than left to guess",
+);
+
 if (failures.length > 0) {
   for (const failure of failures) console.error(`- ${failure}`);
   process.exit(1);
