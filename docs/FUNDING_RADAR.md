@@ -68,7 +68,7 @@ The report is deliberately short — five items at most. A report you scroll pas
 
 ## What it costs
 
-About **one to two dollars per search**: up to ten web searches per source group, four page checks, one eligibility pass. Every run records what it actually used in `funding_runs`, so you can read the real number after a few goes. It only runs when you ask, so you control the bill.
+About **a few dollars per search, and about an hour**: up to thirty web searches per source group, eight page checks, one eligibility pass. The source groups run one after another, which is where the hour goes. Every run records what it actually used in `funding_runs`, so you can read the real number after a few goes. It only runs when you ask, so you control the bill.
 
 Those are estimates. Your real numbers are recorded on every run in `funding_runs`: `searchCount`, `inputTokens`, `outputTokens`. After a few searches, read those instead of trusting this page.
 
