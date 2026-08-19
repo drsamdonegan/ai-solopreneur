@@ -18,8 +18,8 @@ versioning for local workshop releases.
   support on macOS and Windows.
 - Scheduler optional skill: a saved instruction and a time, carried out by
   whichever agent owns the skill being asked for. Daily, weekdays, weekly,
-  monthly, or once; timezone-aware across daylight saving; results saved and
-  read back on request. Its trigger ships unpublished, and a run more than six
+  monthly, or once; times default to Australia/Melbourne and are correct across
+  daylight saving; results saved and read back on request. Its trigger ships unpublished, and a run more than six
   hours late is rolled on rather than run.
 
 ### Changed

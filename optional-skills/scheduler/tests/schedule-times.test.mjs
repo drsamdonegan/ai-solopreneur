@@ -233,12 +233,33 @@ check(
   "an agent that does not exist should be refused, not silently swapped",
 );
 
-// A guessed timezone is the failure nobody sees, so it is always reported.
-const guessed = asked({ timezone: "" });
+// The default is a named zone, not a reading of whatever clock the container
+// happens to be on. That distinction is the whole point: an agent's own clock
+// is the owner's timezone on a laptop and UTC in the cloud, so the same
+// schedule would have meant two different times, ten hours apart.
+const defaulted = asked({ timezone: "" });
 check(
-  guessed.assumptions.some((line) => line.includes("timezone")) ||
-    guessed.warnings.some((line) => line.includes("UTC")),
-  "a timezone the tool had to guess must come back as an assumption or a warning",
+  defaulted.timezone === "Australia/Melbourne",
+  "a schedule saved without a timezone should be Melbourne",
+);
+check(
+  !/resolvedOptions\(\)/.test(validate),
+  "the default must not be read from the container's clock, or it changes when the agent moves",
+);
+// Nobody sees a timezone they did not choose unless they are told about it.
+check(
+  defaulted.assumptions.some((line) => line.includes("Australia/Melbourne")),
+  "assuming a timezone has to be reported, not done quietly",
+);
+check(
+  asked({ timezone: "Europe/London" }).timezone === "Europe/London",
+  "a timezone the owner did state must be kept",
+);
+check(
+  asked({ timezone: "Europe/London" }).assumptions.every(
+    (line) => !line.includes("Melbourne"),
+  ),
+  "a stated timezone must not be reported back as an assumption",
 );
 check(
   asked({ timezone: "Mars/Olympus" }).response?.error?.code === "TIMEZONE_NOT_RECOGNISED",

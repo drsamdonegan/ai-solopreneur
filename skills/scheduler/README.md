@@ -47,13 +47,14 @@ wrong.
 
 ## Timezones
 
-Say where you are once — "I'm in Melbourne" — and 8am means 8am to you.
+If you say nothing, times mean **Melbourne** time. That is a fixed default, not
+your computer's clock, so a schedule means the same thing whether your agent is
+running on your laptop or in the cloud — and 8am stays 8am on both sides of
+daylight saving.
 
-If you skip it, your agent uses its own clock. On your own computer that is
-your timezone and everything is fine. **In the cloud it is usually UTC**, which
-means 8am fires in the evening. Your agent will tell you when it has had to
-guess; if it says UTC and you are not on UTC, tell it your city and ask it to
-save the schedule again.
+Somewhere else? Say so once — "I'm in London" — and it is saved with your
+timezone instead. Your agent always reads back the timezone it used, so you can
+correct it on the spot.
 
 ## What you get back
 

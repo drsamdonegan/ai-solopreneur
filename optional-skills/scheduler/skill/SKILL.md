@@ -51,11 +51,13 @@ Say so when you can see it coming.
 Pass the time exactly as the owner said it. "8am", "5:30pm", "17:30" all read
 correctly.
 
-The timezone is the part that quietly goes wrong. An agent running in the cloud
-usually has its clock set to UTC, so "8am" saved without a timezone fires at
-8am UTC — six in the evening in Melbourne. The tool tells you which timezone it
-used. **If it says UTC and the owner is not on UTC, ask which city they are in
-and save it again.** Do not leave that one for them to discover in a week.
+A schedule saved without a timezone is Australia/Melbourne. That is a fixed
+default rather than the agent's own clock, so a schedule means the same time
+whether the agent is running on a laptop or in the cloud. The tool reports the
+timezone it used every time, so read it back.
+
+**If the owner is not in Melbourne, ask which city they are in and save it
+again with that timezone.** Do not leave that one for them to find in a week.
 
 Nothing runs more often than once a day. That is deliberate: an hourly job
 against a metered API key gets expensive without anyone noticing.

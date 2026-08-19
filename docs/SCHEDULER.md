@@ -79,21 +79,25 @@ saying it has no such tool.
 Your agent picks for you and tells you which it chose. If it guessed wrong, say
 so and it will save it again.
 
-## Timezones, and the one that catches everybody
+## Timezones
 
-Say where you are once and the times mean what you think they mean:
+Say nothing and times mean **Australia/Melbourne**.
 
-> I'm in Melbourne. Every weekday at 8am, ...
+That is a fixed default rather than a reading of whatever clock the agent
+happens to be running on, which matters more than it sounds. An agent's own
+clock is your timezone on your laptop and UTC in the cloud, so the same
+schedule would mean two different times depending on where it was running, and
+in the cloud 8am would fire at six in the evening. It does not any more, and
+you do not need to set `GENERIC_TIMEZONE` in your hosting dashboard for
+schedules to be right.
 
-If you do not, your agent uses its own clock.
+Somewhere else? Say so once and it is saved with your timezone instead:
 
-- **On your own computer** that is your timezone. Everything is fine.
-- **In the cloud** it is UTC unless you set `GENERIC_TIMEZONE` in your hosting
-  dashboard. 8am then means 8am UTC, which is six in the evening in Melbourne.
+> I'm in London. Every weekday at 8am, ...
 
-Your agent will warn you when it has had to fall back to UTC. If it does, tell
-it your city and ask it to save the schedule again. Daylight saving is handled:
-8am stays 8am on both sides of the change.
+Your agent always reads back the timezone it used, so you can correct it on the
+spot. Daylight saving is handled either way: 8am stays 8am on both sides of the
+change.
 
 ## What you get back
 
@@ -155,8 +159,9 @@ Wait for it, then:
 work** is not published. Open it and check the toggle.
 
 **It runs at the wrong hour.** Timezone. Ask your agent what is scheduled — it
-reads the next run back in the timezone it saved. If that timezone is UTC and
-you are not, tell it where you are and save the schedule again.
+reads the next run back in the timezone it saved. Anything saved without a
+timezone is Melbourne, so if you are elsewhere, tell it where you are and save
+the schedule again.
 
 **It runs and comes back with nothing useful.** Ask for that schedule by name
 and read the full answer. Usually the instruction assumed context the run
