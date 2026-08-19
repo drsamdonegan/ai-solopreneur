@@ -57,7 +57,8 @@
         "10-setup-local-task-data.json",
         "11-setup-sync-enabled-skills.json",
         "90-debug-agent-health.json",
-        "14-setup-funding-data.json"
+        "14-setup-funding-data.json",
+        "16-setup-schedule-data.json"
       ]
     },
     {
@@ -78,6 +79,17 @@
         "68-tool-start-funding-scan.json",
         "71-run-funding-scan.json",
         "72-run-funding-beat.json"
+      ]
+    },
+    {
+      "id": "skill-scheduling",
+      "name": "7. Work that runs on a schedule",
+      "description": "Things your agent does on its own at a set time: saving a schedule, reading back what the schedules have turned up, changing one, and the clock that sets them off.",
+      "workflows": [
+        "76-tool-create-schedule.json",
+        "77-tool-list-schedules.json",
+        "78-tool-update-schedule.json",
+        "79-trigger-scheduled-runs.json"
       ]
     }
   ]

@@ -71,6 +71,7 @@ try {
     "seo-article-writer",
     "funding-radar",
     "monthly-update",
+    "scheduler",
   ];
   for (const skillId of installed) {
     install(root, skillId);

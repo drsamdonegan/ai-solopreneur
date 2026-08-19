@@ -7,3 +7,4 @@ funding-radar
 telegram-trigger
 domain-research
 paid-domain-research
+scheduler

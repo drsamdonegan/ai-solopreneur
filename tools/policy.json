@@ -100,6 +100,30 @@
       "workflowId": "phase11GetPaidDomainResearch"
     },
     {
+      "id": "create_schedule",
+      "risk": "bounded_local_write",
+      "available": true,
+      "modelCallable": true,
+      "mode": "explicit_request_required",
+      "workflowId": "phase18CreateSchedule"
+    },
+    {
+      "id": "list_schedules",
+      "risk": "read",
+      "available": true,
+      "modelCallable": true,
+      "mode": "automatic",
+      "workflowId": "phase18ListSchedules"
+    },
+    {
+      "id": "update_schedule",
+      "risk": "bounded_local_write",
+      "available": true,
+      "modelCallable": true,
+      "mode": "explicit_request_required",
+      "workflowId": "phase18UpdateSchedule"
+    },
+    {
       "id": "delete_task",
       "risk": "destructive",
       "available": false,

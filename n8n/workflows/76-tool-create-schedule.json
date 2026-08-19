@@ -1,0 +1,648 @@
+{
+  "name": "76 - TOOL - create_schedule",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Ask the agent to do something later\n\nOne row per thing the owner has asked for on a schedule: what to do, which\nagent does it, and when.\n\nThe instruction is stored as written, because when it fires the agent gets\nthat sentence and nothing else \u2014 no conversation, no memory of this chat.\n\nAsking for the same thing twice changes the one schedule instead of leaving\ntwo of them running side by side.",
+        "height": 340,
+        "width": 500,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -660,
+        -300
+      ],
+      "id": "95810000-0000-4000-8000-000000000001",
+      "name": "Create tool explanation"
+    },
+    {
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "sessionId",
+              "type": "string"
+            },
+            {
+              "name": "requestId",
+              "type": "string"
+            },
+            {
+              "name": "scheduleId",
+              "type": "string"
+            },
+            {
+              "name": "name",
+              "type": "string"
+            },
+            {
+              "name": "instruction",
+              "type": "string"
+            },
+            {
+              "name": "agent",
+              "type": "string"
+            },
+            {
+              "name": "frequency",
+              "type": "string"
+            },
+            {
+              "name": "time",
+              "type": "string"
+            },
+            {
+              "name": "dayOfWeek",
+              "type": "string"
+            },
+            {
+              "name": "dayOfMonth",
+              "type": "string"
+            },
+            {
+              "name": "date",
+              "type": "string"
+            },
+            {
+              "name": "timezone",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -520,
+        60
+      ],
+      "id": "95810000-0000-4000-8000-000000000010",
+      "name": "Tool Input"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "scheduled_runs",
+          "mode": "name"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": []
+        },
+        "returnAll": false,
+        "limit": 100,
+        "orderBy": false
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -280,
+        60
+      ],
+      "id": "95810000-0000-4000-8000-000000000011",
+      "name": "Read Existing Schedules",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const AGENT_IDS = ['project-manager', 'sales', 'marketing', 'investment', 'bookkeeping'];\nconst FREQUENCIES = ['daily', 'weekdays', 'weekly', 'monthly', 'once'];\n// Ten is not a technical limit. It is the point past which nobody remembers\n// what their agent is doing overnight, and every one of these costs money.\nconst MAX_SCHEDULES = 10;\n\n// --- working out when a schedule next comes round --------------------------\n// The clock inside this agent is UTC unless somebody set GENERIC_TIMEZONE, and\n// in the cloud it usually is. So \"8am\" has to be pinned to a named zone or a\n// Melbourne morning fires at six in the evening. Every schedule carries its own\n// timezone, and everything below converts between that zone's wall clock and a\n// real instant.\nconst DAY_NAMES = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];\n\nconst zoneIsReal = (zone) => {\n  try {\n    new Intl.DateTimeFormat('en-US', { timeZone: zone });\n    return true;\n  } catch {\n    return false;\n  }\n};\n\nconst zoneParts = (instant, zone) => {\n  const read = {};\n  for (const part of new Intl.DateTimeFormat('en-US', {\n    timeZone: zone, hour12: false,\n    year: 'numeric', month: '2-digit', day: '2-digit',\n    hour: '2-digit', minute: '2-digit', second: '2-digit',\n  }).formatToParts(instant)) {\n    read[part.type] = part.value;\n  }\n  return {\n    year: Number(read.year), month: Number(read.month), day: Number(read.day),\n    // Some environments render midnight as hour 24 rather than 0.\n    hour: Number(read.hour) % 24, minute: Number(read.minute), second: Number(read.second),\n  };\n};\n\n// How far that zone sits from UTC at that moment, daylight saving included.\nconst zoneOffsetMinutes = (instant, zone) => {\n  const at = zoneParts(instant, zone);\n  return (Date.UTC(at.year, at.month - 1, at.day, at.hour, at.minute, at.second) - instant.getTime()) / 60000;\n};\n\n// A wall-clock time in that zone, back to a real instant. The offset depends on\n// the answer, so it is applied twice: once against a guess, then again against\n// the offset that guess actually landed in. That second pass is what keeps the\n// hour right on the two days a year the clocks move.\nconst instantAt = (year, month, day, hour, minute, zone) => {\n  const wall = Date.UTC(year, month - 1, day, hour, minute, 0);\n  const guess = new Date(wall - zoneOffsetMinutes(new Date(wall), zone) * 60000);\n  return new Date(wall - zoneOffsetMinutes(guess, zone) * 60000);\n};\n\n// The first moment strictly after `after` that matches the rule, or null.\nconst nextRunAfter = (rule, after) => {\n  const zone = rule.timezone;\n  if (!zoneIsReal(zone)) return null;\n  const clock = String(rule.timeOfDay ?? '').split(':').map(Number);\n  const hour = clock[0];\n  const minute = clock[1];\n  if (!Number.isInteger(hour) || !Number.isInteger(minute)) return null;\n\n  if (rule.frequency === 'once') {\n    if (rule.onDate) {\n      const parts = String(rule.onDate).split('-').map(Number);\n      const once = instantAt(parts[0], parts[1], parts[2], hour, minute, zone);\n      return once.getTime() > after.getTime() ? once : null;\n    }\n  }\n\n  const from = zoneParts(after, zone);\n  for (let step = 0; step <= 400; step += 1) {\n    // Adding to the day number rolls months and years over on its own.\n    const day = new Date(Date.UTC(from.year, from.month - 1, from.day + step));\n    const year = day.getUTCFullYear();\n    const month = day.getUTCMonth() + 1;\n    const date = day.getUTCDate();\n    const weekday = DAY_NAMES[day.getUTCDay()];\n    if (rule.frequency === 'weekdays' && (weekday === 'saturday' || weekday === 'sunday')) continue;\n    if (rule.frequency === 'weekly' && weekday !== rule.dayOfWeek) continue;\n    if (rule.frequency === 'monthly' && date !== Number(rule.dayOfMonth)) continue;\n    const candidate = instantAt(year, month, date, hour, minute, zone);\n    if (candidate.getTime() > after.getTime()) return candidate;\n  }\n  return null;\n};\n\n// What the agent reads back to the owner, in their own timezone.\nconst inWords = (instant, zone) => {\n  if (!instant || !zoneIsReal(zone)) return '';\n  return new Intl.DateTimeFormat('en-GB', {\n    timeZone: zone, weekday: 'short', day: 'numeric', month: 'short',\n    year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true,\n  }).format(instant) + ' (' + zone + ')';\n};\n\nconst clockInWords = (timeOfDay) => {\n  const clock = String(timeOfDay ?? '').split(':').map(Number);\n  const hour = clock[0];\n  const minute = clock[1];\n  if (!Number.isInteger(hour) || !Number.isInteger(minute)) return String(timeOfDay ?? '');\n  const suffix = hour < 12 ? 'am' : 'pm';\n  const shown = hour % 12 === 0 ? 12 : hour % 12;\n  return shown + ':' + String(minute).padStart(2, '0') + ' ' + suffix;\n};\n\nconst patternInWords = (rule) => {\n  const at = 'at ' + clockInWords(rule.timeOfDay);\n  if (rule.frequency === 'daily') return 'every day ' + at;\n  if (rule.frequency === 'weekdays') return 'every weekday ' + at;\n  if (rule.frequency === 'weekly') {\n    const day = String(rule.dayOfWeek ?? '');\n    return 'every ' + day.charAt(0).toUpperCase() + day.slice(1) + ' ' + at;\n  }\n  if (rule.frequency === 'monthly') return 'on day ' + rule.dayOfMonth + ' of each month ' + at;\n  return 'once, ' + at;\n};\n\n\nconst input = $('Tool Input').first().json;\nconst rows = $input.all()\n  .map((item) => item.json)\n  .filter((row) => row && typeof row.scheduleId === 'string' && row.scheduleId !== '');\n\nconst text = (value, limit) => {\n  const raw = typeof value === 'string' ? value.trim() : '';\n  return raw.slice(0, limit ?? 200);\n};\nconst normalise = (value) => String(value).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();\n\nconst sessionId = text(input.sessionId, 60);\nconst requestId = text(input.requestId, 60);\nconst proposedInput = {\n  sessionId,\n  requestId,\n  scheduleId: text(input.scheduleId, 40),\n  name: text(input.name, 80),\n  instruction: text(input.instruction, 1200),\n  agent: text(input.agent, 40),\n  frequency: text(input.frequency, 20),\n  time: text(input.time, 20),\n  dayOfWeek: text(input.dayOfWeek, 20),\n  dayOfMonth: text(input.dayOfMonth, 10),\n  date: text(input.date, 20),\n  timezone: text(input.timezone, 60),\n};\nconst fail = (code, message) => ({ json: {\n  valid: false, sessionId, requestId, proposedInput,\n  response: { ok: false, error: { code, message } },\n} });\n\nconst uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;\nif (!uuidPattern.test(sessionId) || !uuidPattern.test(requestId)) {\n  return [fail('INVALID_SESSION', 'Saving a schedule needs a valid conversation and request ID.')];\n}\n\nconst assumptions = [];\n\n// --- what should run -------------------------------------------------------\n// The instruction is sent to the agent later, on its own, with nobody watching.\n// It has to read like something typed into the chat, not like a note to self.\nconst instruction = proposedInput.instruction;\nif (instruction.length < 5) {\n  return [fail('INSTRUCTION_REQUIRED', 'Ask the user what they want done at that time, then call this again with it written out the way they would type it into the chat. The agent reads only that sentence when the schedule fires; it cannot see this conversation.')];\n}\n\n// --- which agent runs it ---------------------------------------------------\n// Tools are attached to one agent each, so a schedule pointed at the wrong one\n// reaches an agent that politely says it has no such tool, every single day.\nconst AGENT_ALIASES = {\n  pm: 'project-manager', projectmanager: 'project-manager', 'project-manger': 'project-manager',\n  finance: 'bookkeeping', accounts: 'bookkeeping', accounting: 'bookkeeping', bookkeeper: 'bookkeeping',\n  investor: 'investment', investments: 'investment', funding: 'investment',\n  sale: 'sales', seller: 'sales', marketer: 'marketing', seo: 'marketing', research: 'marketing',\n};\nlet agentId = proposedInput.agent.toLowerCase().replace(/[\\s_]+/g, '-');\nagentId = AGENT_ALIASES[agentId.replace(/-/g, '')] ?? AGENT_ALIASES[agentId] ?? agentId;\nif (agentId === '') {\n  agentId = 'project-manager';\n  assumptions.push('your project manager runs it, because no other role was named');\n}\nif (!AGENT_IDS.includes(agentId)) {\n  return [fail('AGENT_NOT_RECOGNISED', 'A schedule has to name which agent runs it: project-manager, sales, marketing, investment, or bookkeeping. Pick the one that owns the skill being scheduled, which is the same agent you would open in the chat to ask for it by hand.')];\n}\n\n// --- how often -------------------------------------------------------------\nconst FREQUENCY_ALIASES = {\n  everyday: 'daily', day: 'daily', days: 'daily', eachday: 'daily', morning: 'daily',\n  weekday: 'weekdays', workday: 'weekdays', workdays: 'weekdays', businessdays: 'weekdays',\n  week: 'weekly', eachweek: 'weekly', everyweek: 'weekly',\n  month: 'monthly', eachmonth: 'monthly', everymonth: 'monthly',\n  oneoff: 'once', onetime: 'once', today: 'once', tomorrow: 'once',\n};\nlet frequency = proposedInput.frequency.toLowerCase().replace(/[\\s_-]+/g, '');\nfrequency = FREQUENCY_ALIASES[frequency] ?? frequency;\nif (frequency === '') {\n  frequency = 'daily';\n  assumptions.push('it repeats every day');\n}\nif (!FREQUENCIES.includes(frequency)) {\n  return [fail('FREQUENCY_NOT_RECOGNISED', 'A schedule repeats daily, on weekdays, weekly, monthly, or once. There is nothing smaller than a day on purpose: an hourly job against a metered API key gets expensive without anyone noticing.')];\n}\n\n// --- what time -------------------------------------------------------------\n// A model passes on whatever the user said, so this reads \"8am\", \"8:30 pm\",\n// \"0800\" and \"17:30\" rather than making the agent ask twice.\nconst parseTime = (value) => {\n  const raw = String(value ?? '').trim().toLowerCase().replace(/\\./g, '').replace(/\\s+/g, '');\n  if (raw === '') return null;\n  if (raw === 'midnight') return '00:00';\n  if (raw === 'noon' || raw === 'midday') return '12:00';\n  const match = raw.match(/^([0-9]{1,2})(?::?([0-9]{2}))?(am|pm)?$/);\n  if (!match) return null;\n  let hour = Number(match[1]);\n  const minute = match[2] === undefined ? 0 : Number(match[2]);\n  if (minute > 59) return null;\n  if (match[3] === 'am') {\n    if (hour < 1 || hour > 12) return null;\n    if (hour === 12) hour = 0;\n  } else if (match[3] === 'pm') {\n    if (hour < 1 || hour > 12) return null;\n    if (hour !== 12) hour += 12;\n  } else if (hour > 23) {\n    return null;\n  }\n  return String(hour).padStart(2, '0') + ':' + String(minute).padStart(2, '0');\n};\nconst timeOfDay = parseTime(proposedInput.time);\nif (timeOfDay === null) {\n  return [fail('TIME_REQUIRED', 'Ask the user what time of day it should run, then call this again. Pass it exactly as they said it: \"8am\", \"5:30pm\" and \"17:30\" all read correctly.')];\n}\n\n// --- which day -------------------------------------------------------------\nconst parseDay = (value) => {\n  const raw = String(value ?? '').trim().toLowerCase().replace(/s$/, '');\n  if (raw.length < 3) return '';\n  return DAY_NAMES.find((day) => day.slice(0, 3) === raw.slice(0, 3)) ?? '';\n};\nlet dayOfWeek = '';\nif (frequency === 'weekly') {\n  dayOfWeek = parseDay(proposedInput.dayOfWeek);\n  if (dayOfWeek === '') {\n    dayOfWeek = 'monday';\n    assumptions.push('the weekly run falls on a Monday');\n  }\n}\nlet dayOfMonth = 0;\nif (frequency === 'monthly') {\n  const asked = Number(String(proposedInput.dayOfMonth).replace(/[^0-9]/g, ''));\n  if (Number.isInteger(asked) && asked >= 1 && asked <= 28) {\n    dayOfMonth = asked;\n  } else if (Number.isInteger(asked) && asked >= 29) {\n    dayOfMonth = 28;\n    assumptions.push('the monthly run falls on the 28th, because the 29th, 30th and 31st do not exist in every month');\n  } else {\n    dayOfMonth = 1;\n    assumptions.push('the monthly run falls on the 1st');\n  }\n}\nlet onDate = '';\nif (frequency === 'once' && /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(proposedInput.date)) {\n  onDate = proposedInput.date;\n}\n\n// --- whose clock -----------------------------------------------------------\n// Reading the container's own clock looked helpful and was not: it is the\n// learner's timezone on their laptop and UTC in the cloud, so the same\n// schedule meant two different times depending on where the agent happened to\n// be running, and in the cloud 8am fired at six in the evening. A named\n// default means a schedule means the same thing everywhere, and it is stated\n// back to the user every time rather than assumed quietly.\nconst DEFAULT_TIMEZONE = 'Australia/Melbourne';\nlet timezone = proposedInput.timezone;\nif (timezone === '') {\n  timezone = DEFAULT_TIMEZONE;\n  assumptions.push('the time means ' + DEFAULT_TIMEZONE + ' time, which is what this agent assumes when nobody has said where they are');\n}\nif (!zoneIsReal(timezone)) {\n  return [fail('TIMEZONE_NOT_RECOGNISED', 'That is not a timezone this agent recognises. Pass a standard name such as Australia/Melbourne, Europe/London, or America/New_York.')];\n}\n\n// --- naming it -------------------------------------------------------------\nlet name = proposedInput.name;\nif (name === '') {\n  // Cutting on a full stop turns \"research mlai.au\" into \"research mlai\", so\n  // this cuts on length and steps back to the last whole word.\n  const flat = instruction.replace(/\\s+/g, ' ').trim();\n  name = flat.length <= 60 ? flat : flat.slice(0, 60).replace(/\\s\\S*$/, '');\n  if (name === '') name = 'Scheduled work';\n  assumptions.push('it is called \"' + name + '\"');\n}\n\n// The ID comes from the name, so asking for the same thing again changes the\n// one schedule instead of quietly leaving two running side by side.\nconst fnv = (seed) => {\n  let hash = 0x811c9dc5;\n  for (let index = 0; index < seed.length; index += 1) {\n    hash ^= seed.charCodeAt(index);\n    hash = Math.imul(hash, 0x01000193) >>> 0;\n  }\n  return hash.toString(16).padStart(8, '0');\n};\n\nconst askedId = proposedInput.scheduleId;\nlet existing = null;\nif (askedId !== '') {\n  existing = rows.find((row) => row.scheduleId === askedId) ?? null;\n  if (!existing) {\n    return [fail('SCHEDULE_NOT_FOUND', 'There is no schedule with that ID. Call list_schedules to see what is saved and use an ID from that list, or leave the ID out to create a new one.')];\n  }\n} else {\n  existing = rows.find((row) => normalise(row.name ?? '') === normalise(name)) ?? null;\n}\n\nlet scheduleId = existing ? existing.scheduleId : '';\nif (scheduleId === '') {\n  let attempt = 0;\n  do {\n    scheduleId = 'sch-' + fnv(normalise(name) + (attempt === 0 ? '' : '#' + attempt));\n    attempt += 1;\n  } while (rows.some((row) => row.scheduleId === scheduleId) && attempt < 20);\n}\n\nconst enabledCount = rows.filter((row) => String(row.enabled ?? '') === 'yes').length;\nif (!existing && enabledCount >= MAX_SCHEDULES) {\n  return [fail('TOO_MANY_SCHEDULES', 'This agent already has ' + MAX_SCHEDULES + ' schedules switched on, which is the limit. Ask the user which one to pause or delete first, then use update_schedule.')];\n}\n\n// --- when it next comes round ----------------------------------------------\nconst rule = { frequency, timeOfDay, dayOfWeek, dayOfMonth, onDate, timezone };\nconst now = new Date();\nconst nextRun = nextRunAfter(rule, now);\nif (nextRun === null) {\n  return [fail('TIME_ALREADY_PAST', frequency === 'once'\n    ? 'That one-off time has already gone by. Ask the user for a date and time still ahead of them, and pass the date as YYYY-MM-DD.'\n    : 'That combination of day and time never comes round. Check both and try again.')];\n}\n\nreturn [{ json: {\n  valid: true,\n  sessionId,\n  requestId,\n  proposedInput,\n  scheduleId,\n  name,\n  instruction,\n  agentId,\n  frequency,\n  timeOfDay,\n  dayOfWeek,\n  dayOfMonth,\n  onDate,\n  timezone,\n  enabled: 'yes',\n  createdAt: existing ? String(existing.createdAt ?? now.toISOString()) : now.toISOString(),\n  nextRunAt: nextRun.toISOString(),\n  lastRunAt: existing ? String(existing.lastRunAt ?? '') : '',\n  lastStatus: existing ? String(existing.lastStatus ?? '') : '',\n  lastSummary: existing ? String(existing.lastSummary ?? '') : '',\n  runCount: existing ? Number(existing.runCount ?? 0) || 0 : 0,\n  replaced: Boolean(existing),\n  runsWhen: patternInWords(rule),\n  nextRun: inWords(nextRun, timezone),\n  assumptions,\n  // Nothing here can see whether the trigger is published, and a schedule that\n  // never fires looks exactly like one that has not come round yet. So while\n  // nothing has ever run, say so every time.\n  nothingHasEverRun: rows.every((row) => !(Number(row.runCount ?? 0) > 0)),\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -40,
+        60
+      ],
+      "id": "95810000-0000-4000-8000-000000000012",
+      "name": "Validate And Plan"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "95810000-0000-4000-8000-000000000013-c1",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        200,
+        60
+      ],
+      "id": "95810000-0000-4000-8000-000000000013",
+      "name": "Schedule Is Valid?"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "upsert",
+        "dataTableId": {
+          "__rl": true,
+          "value": "scheduled_runs",
+          "mode": "name"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "scheduleId",
+              "condition": "eq",
+              "keyValue": "={{ $json.scheduleId }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "scheduleId": "={{ $json.scheduleId }}",
+            "name": "={{ $json.name }}",
+            "instruction": "={{ $json.instruction }}",
+            "agentId": "={{ $json.agentId }}",
+            "frequency": "={{ $json.frequency }}",
+            "timeOfDay": "={{ $json.timeOfDay }}",
+            "dayOfWeek": "={{ $json.dayOfWeek }}",
+            "dayOfMonth": "={{ $json.dayOfMonth }}",
+            "onDate": "={{ $json.onDate }}",
+            "timezone": "={{ $json.timezone }}",
+            "enabled": "={{ $json.enabled }}",
+            "createdAt": "={{ $json.createdAt }}",
+            "nextRunAt": "={{ $json.nextRunAt }}",
+            "lastRunAt": "={{ $json.lastRunAt }}",
+            "lastStatus": "={{ $json.lastStatus }}",
+            "lastSummary": "={{ $json.lastSummary }}",
+            "runCount": "={{ $json.runCount }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "scheduleId",
+              "displayName": "scheduleId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "name",
+              "displayName": "name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "instruction",
+              "displayName": "instruction",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "agentId",
+              "displayName": "agentId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "frequency",
+              "displayName": "frequency",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "timeOfDay",
+              "displayName": "timeOfDay",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "dayOfWeek",
+              "displayName": "dayOfWeek",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "dayOfMonth",
+              "displayName": "dayOfMonth",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "onDate",
+              "displayName": "onDate",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "timezone",
+              "displayName": "timezone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "enabled",
+              "displayName": "enabled",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "createdAt",
+              "displayName": "createdAt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "nextRunAt",
+              "displayName": "nextRunAt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "lastRunAt",
+              "displayName": "lastRunAt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "lastStatus",
+              "displayName": "lastStatus",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "lastSummary",
+              "displayName": "lastSummary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "runCount",
+              "displayName": "runCount",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "dryRun": false
+        }
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        440,
+        -40
+      ],
+      "id": "95810000-0000-4000-8000-000000000014",
+      "name": "Save Schedule",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const plan = $('Validate And Plan').first().json;\nconst saved = $json.id !== undefined || $json.scheduleId === plan.scheduleId;\n\nif (!saved) {\n  return [{ json: { ...plan, response: { ok: false, error: {\n    code: 'SAVE_FAILED',\n    message: \"The schedule could not be saved. If the '16 - SETUP - Scheduled Work Data' workflow has never been run, run it once in n8n and try again.\",\n  } } } }];\n}\n\nconst notes = [];\nif (plan.nothingHasEverRun) {\n  notes.push(\"Nothing has run on a schedule here yet. Tell the user that the '79 - TRIGGER - Scheduled work' workflow has to be Published in n8n before anything fires, and that saving a schedule on its own does nothing.\");\n}\nnotes.push('A scheduled run happens with nobody watching, so it cannot answer a question or send a confirmation phrase. It can research, read and report; anything that needs the user to confirm a write will simply wait for them.');\nnotes.push('Its answer is saved, not delivered. Tell the user to ask you what their schedules have turned up, and you will read it back with list_schedules.');\n\nreturn [{ json: { ...plan, response: {\n  ok: true,\n  saved: true,\n  replaced: plan.replaced,\n  schedule: {\n    scheduleId: plan.scheduleId,\n    name: plan.name,\n    instruction: plan.instruction,\n    agent: plan.agentId,\n    runsWhen: plan.runsWhen,\n    timezone: plan.timezone,\n    nextRun: plan.nextRun,\n  },\n  assumptions: plan.assumptions,\n  notes,\n  message: (plan.replaced\n    ? 'Updated the existing schedule rather than adding a second one. '\n    : 'Saved. ')\n    + 'Read back to the user what it will do, which agent runs it, when it next runs, and every assumption listed here, so they can correct anything you guessed.',\n} } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        680,
+        -40
+      ],
+      "id": "95810000-0000-4000-8000-000000000015",
+      "name": "Shape Save Result"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const input = $('Validate And Plan').first().json;\nconst response = $json.response ?? { ok: false, error: { code: 'TOOL_FAILED', message: 'The tool did not return a result.' } };\nreturn { json: {\n  occurredAt: new Date().toISOString(),\n  sessionId: input.sessionId,\n  requestId: input.requestId,\n  toolName: 'create_schedule',\n  proposedInput: JSON.stringify(input.proposedInput ?? {}),\n  result: JSON.stringify(response),\n  error: response.ok === false ? String(response.error?.message ?? 'Tool failed') : '',\n  response\n} };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        920,
+        60
+      ],
+      "id": "95810000-0000-4000-8000-000000000090",
+      "name": "Prepare Audit"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "value": "tool_audit",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "occurredAt": "={{ $json.occurredAt }}",
+            "sessionId": "={{ $json.sessionId }}",
+            "requestId": "={{ $json.requestId }}",
+            "toolName": "={{ $json.toolName }}",
+            "proposedInput": "={{ $json.proposedInput }}",
+            "result": "={{ $json.result }}",
+            "error": "={{ $json.error }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "occurredAt",
+              "displayName": "occurredAt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "sessionId",
+              "displayName": "sessionId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "requestId",
+              "displayName": "requestId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "toolName",
+              "displayName": "toolName",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "proposedInput",
+              "displayName": "proposedInput",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "result",
+              "displayName": "result",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "error",
+              "displayName": "error",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1160,
+        60
+      ],
+      "id": "95810000-0000-4000-8000-000000000091",
+      "name": "Write Tool Audit",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const prepared = $('Prepare Audit').first().json;\nconst response = { ...prepared.response };\nif (!Number.isInteger($json.id)) {\n  response.auditWarning = 'The tool result could not be written to the local audit table.';\n}\nreturn { json: response };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1400,
+        60
+      ],
+      "id": "95810000-0000-4000-8000-000000000092",
+      "name": "Return Tool Result"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Tool Input": {
+      "main": [
+        [
+          {
+            "node": "Read Existing Schedules",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Existing Schedules": {
+      "main": [
+        [
+          {
+            "node": "Validate And Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate And Plan": {
+      "main": [
+        [
+          {
+            "node": "Schedule Is Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Is Valid?": {
+      "main": [
+        [
+          {
+            "node": "Save Schedule",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Schedule": {
+      "main": [
+        [
+          {
+            "node": "Shape Save Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shape Save Result": {
+      "main": [
+        [
+          {
+            "node": "Prepare Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Audit": {
+      "main": [
+        [
+          {
+            "node": "Write Tool Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Tool Audit": {
+      "main": [
+        [
+          {
+            "node": "Return Tool Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "executionTimeout": 30
+  },
+  "versionId": "95810000-0000-4000-8000-0000000000100",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "phase": 18,
+    "testedWithN8n": "2.30.5",
+    "toolRisk": "bounded_local_write",
+    "authorization": "explicit-current-user-request",
+    "externalWrite": "none",
+    "localWrite": "one-scheduled-run-row"
+  },
+  "id": "phase18CreateSchedule",
+  "tags": [
+    {
+      "id": "tagAgentCanDo",
+      "name": "What your agent can do"
+    }
+  ]
+}
