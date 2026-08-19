@@ -124,6 +124,14 @@
       "workflowId": "phase18UpdateSchedule"
     },
     {
+      "id": "lookup_linkedin_profile",
+      "risk": "paid_external_read",
+      "available": true,
+      "modelCallable": true,
+      "mode": "automatic",
+      "workflowId": "phase12LookupLinkedInProfile"
+    },
+    {
       "id": "delete_task",
       "risk": "destructive",
       "available": false,
