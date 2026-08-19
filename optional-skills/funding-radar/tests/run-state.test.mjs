@@ -831,6 +831,13 @@ const n8nTypeOf = (value) =>
   : typeof value === "string" ? "string"
   : Array.isArray(value) ? "array"
   : "object";
+// Three places have to agree, not two. The sending node carries its own cached
+// copy of the sub-workflow's input schema and coerces to it before sending, so
+// fixing only the trigger turned "number arriving where string was declared"
+// into "string arriving where number was declared" — same error, second deploy.
+const senderSchema = new Map(
+  (runBeat?.parameters?.workflowInputs?.schema ?? []).map((s) => [s.id, s.type]),
+);
 const produced = builtBeats[0]?.json ?? {};
 let typesChecked = 0;
 for (const [sent, expression] of Object.entries(
@@ -838,10 +845,14 @@ for (const [sent, expression] of Object.entries(
 )) {
   const from = String(expression).match(/\$json\.(\w+)/)?.[1];
   if (from === undefined || !(from in produced)) continue;
-  const declared = beatDeclares.get(sent);
+  const actual = n8nTypeOf(produced[from]);
   check(
-    declared === n8nTypeOf(produced[from]),
-    `Run Beat sends "${sent}" as ${n8nTypeOf(produced[from])} but the beat trigger declares ${declared}, so n8n rejects the whole beat`,
+    beatDeclares.get(sent) === actual,
+    `Run Beat sends "${sent}" as ${actual} but the beat trigger declares ${beatDeclares.get(sent)}, so n8n rejects the whole beat`,
+  );
+  check(
+    senderSchema.get(sent) === actual,
+    `Run Beat's own schema calls "${sent}" a ${senderSchema.get(sent)} but it is a ${actual}, so it is coerced before the beat ever sees it`,
   );
   typesChecked += 1;
 }
