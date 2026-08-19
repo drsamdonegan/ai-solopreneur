@@ -11,7 +11,7 @@
   "agentTools": [
     {
       "parameters": {
-        "description": "Saves a standing instruction to be carried out later on its own: every morning, every weekday, weekly, monthly, or once on a named date. Use it whenever the user asks for something to happen at a time rather than now, such as every morning, each Monday, at 8am, or from tomorrow onwards. It never does the work now; it only saves when to do it. Write the instruction the way the user would type it into the chat, because when it fires the agent receives that one sentence and nothing else: no conversation and no memory of this one. It runs as you unless another agent is named, so name one only when the work belongs to a different specialist. Calling this again with the same name changes that schedule rather than adding a second one.",
+        "description": "Saves a standing instruction to be carried out later on its own: every morning, every weekday, weekly, monthly, or once on a named date. Use it whenever the user asks for something to happen at a time rather than now, such as every morning, each Monday, at 8am, or from tomorrow onwards. It never does the work now; it only saves when to do it. For anything relative, such as in two minutes or in an hour, pass inMinutes and let the tool read its own clock rather than working out a time yourself. Write the instruction the way the user would type it into the chat, because when it fires the agent receives that one sentence and nothing else: no conversation and no memory of this one. It runs as you unless another agent is named, so name one only when the work belongs to a different specialist. Calling this again with the same name changes that schedule rather than adding a second one.",
         "source": "database",
         "workflowId": {
           "__rl": true,
@@ -25,11 +25,12 @@
             "sessionId": "={{ $('Validate and Normalise').first().json.sessionId }}",
             "requestId": "={{ $('Validate and Normalise').first().json.requestId }}",
             "callerAgent": "={{ $('Validate and Normalise').first().json.agentId }}",
+            "inMinutes": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('inMinutes', `For anything relative \u2014 in two minutes, in an hour, in three days \u2014 the whole number of minutes from now, and nothing else: the tool reads its own clock and works the time out. An hour is 60. Leave empty when the user named an actual time of day.`, 'string') }}",
             "name": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('name', `A short name for the schedule, in the user's own words, for example \"Morning domain research\". Leave empty and one is made from the instruction.`, 'string') }}",
             "instruction": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('instruction', `What the agent should do when it fires, written exactly as the user would type it into the chat. It is read on its own with no conversation behind it, so name the website, the person, or the report in full rather than saying \"the same as before\".`, 'string') }}",
             "agent": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('agent', `Which agent should run it: project-manager, sales, marketing, investment, or bookkeeping. Leave empty to schedule it as yourself, which is right whenever the work is your own. Name a different one when the work belongs to another specialist, such as website research on marketing or grants on investment.`, 'string') }}",
             "frequency": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('frequency', `How often: daily, weekdays, weekly, monthly, or once. Defaults to daily. Nothing shorter than a day is available.`, 'string') }}",
-            "time": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('time', `The time of day it should run, passed on exactly as the user said it. 8am, 5:30pm, 17:30 and noon all read correctly. Required.`, 'string') }}",
+            "time": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('time', `The time of day it should run, passed on exactly as the user said it. Eight am, half past five in the afternoon, 17:30 and noon all read correctly. Leave empty when using inMinutes instead.`, 'string') }}",
             "dayOfWeek": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('dayOfWeek', `For a weekly schedule, which day, such as tuesday. Ignored otherwise.`, 'string') }}",
             "dayOfMonth": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('dayOfMonth', `For a monthly schedule, which day of the month, 1 to 28. Ignored otherwise.`, 'string') }}",
             "date": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('date', `For a one-off, the date it should run, as YYYY-MM-DD. Leave empty for the next time that clock time comes round.`, 'string') }}",
@@ -59,6 +60,15 @@
             {
               "id": "callerAgent",
               "displayName": "callerAgent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "inMinutes",
+              "displayName": "inMinutes",
               "required": false,
               "defaultMatch": false,
               "display": true,
@@ -336,6 +346,10 @@
     {
       "find": "- Delete, archive, bulk changes, arbitrary HTTP, SQL, shell, and filesystem capabilities are unavailable.",
       "replace": "- Delete, archive, bulk changes, arbitrary HTTP, SQL, shell, and filesystem capabilities are unavailable. Deleting one saved schedule with update_schedule is the single exception, and only when the current user asks for it."
+    },
+    {
+      "find": "Use relevant details from only the current conversation.",
+      "replace": "The current date and time is ${new Date().toLocaleString('en-AU', { timeZone: 'Australia/Melbourne', dateStyle: 'full', timeStyle: 'short' })}, Australia/Melbourne. Work out today, tomorrow, next Monday, and the date in three weeks from that. Never ask the user what the date or time is.\n\nUse relevant details from only the current conversation."
     }
   ],
   "unavailableCapabilities": [],

@@ -49,6 +49,17 @@ You do not have to work this out yourself — say what you want and your agent
 picks. It reads the choice back to you, so you can correct it if it guessed
 wrong.
 
+## Saying when
+
+Both of these work:
+
+> Every weekday at 8am, research mlai.au and tell me what changed.
+
+> Run a scan of mlai.au in two minutes.
+
+Times of day and relative times are both fine, and your agent knows what the
+date and time are, so "tomorrow" and "next Monday" need no explanation.
+
 ## Timezones
 
 If you say nothing, times mean **Melbourne** time. That is a fixed default, not

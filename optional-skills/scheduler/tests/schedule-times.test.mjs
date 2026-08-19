@@ -167,12 +167,65 @@ for (const [spoken, expected] of [
     `"${spoken}" should be read as ${expected}`,
   );
 }
+// "two minutes from now" is unanswerable for a model with no clock, and asking
+// the user what time it is was exactly what the agent did instead. This node
+// has a clock, so it does the arithmetic.
+const soon = asked({ time: "", inMinutes: "2" });
+check(soon.valid === true, "a relative ask needs no time of day");
+check(soon.frequency === "once", "in-two-minutes is a one-off, whatever else was passed");
+const secondsAway = (Date.parse(soon.nextRunAt) - Date.now()) / 1000;
+check(
+  secondsAway > 0 && secondsAway <= 180,
+  `two minutes from now should land inside the next three minutes, not ${Math.round(secondsAway)}s`,
+);
+check(
+  asked({ time: "", inMinutes: "1" }).valid === true &&
+    Date.parse(asked({ time: "", inMinutes: "1" }).nextRunAt) > Date.now(),
+  "one minute from now must still be in the future after the seconds are dropped",
+);
+const hour = asked({ time: "", inMinutes: "60" });
+const hourAway = (Date.parse(hour.nextRunAt) - Date.now()) / 60000;
+check(
+  hourAway > 58.9 && hourAway <= 60,
+  `an hour from now should be an hour away, not ${hourAway.toFixed(1)} minutes`,
+);
+// The saved wall clock has to be in the schedule's own timezone, or the trigger
+// would fire it at the right instant and describe it at the wrong hour.
+const abroad = asked({ time: "", inMinutes: "5", timezone: "Europe/London" });
+const abroadAway = (Date.parse(abroad.nextRunAt) - Date.now()) / 60000;
+check(
+  abroadAway > 3.9 && abroadAway <= 5,
+  "five minutes from now is the same instant whatever timezone it is written in",
+);
+check(
+  abroad.nextRun.includes("Europe/London"),
+  "and it is read back in the timezone it was saved with",
+);
+for (const nonsense of ["0", "-5", "soon", "a bit"]) {
+  check(
+    asked({ time: "", inMinutes: nonsense }).response?.error?.code === "MINUTES_NOT_UNDERSTOOD",
+    `inMinutes of "${nonsense}" should be refused rather than guessed at`,
+  );
+}
+check(
+  asked({ time: "", inMinutes: "43200" }).response?.error?.code === "TOO_FAR_AHEAD",
+  "a month expressed in minutes should be sent back as a date instead",
+);
+check(
+  asked({ time: "8am", inMinutes: "" }).frequency === "daily",
+  "a named time is untouched by any of this",
+);
+
 for (const nonsense of ["", "soon", "in the morning", "25:00", "8:99"]) {
   check(
     asked({ time: nonsense }).response?.error?.code === "TIME_REQUIRED",
     `"${nonsense}" is not a time and should send the agent back to ask`,
   );
 }
+check(
+  asked({ time: "" }).response?.error?.message.includes("inMinutes"),
+  "and being sent back has to mention the relative option, or the agent asks the user for the time",
+);
 
 for (const [spoken, expected] of [
   ["tuesday", "tuesday"],
