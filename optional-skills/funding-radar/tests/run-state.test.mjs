@@ -18,6 +18,7 @@ const load = async (name) =>
 
 const start = await load("68-tool-start-funding-scan.json");
 const report = await load("63-tool-get-funding-report.json");
+const scan = await load("71-run-funding-scan.json");
 const code = (workflow, name) =>
   workflow.nodes.find((entry) => entry.name === name).parameters.jsCode;
 
@@ -171,9 +172,9 @@ check(
 );
 
 check(
-  decide([{ runId: "a", status: "running", ranAt: minutesAgo(24) }])
+  decide([{ runId: "a", status: "running", ranAt: minutesAgo(40) }])
     .replacing?.reason === "interrupted",
-  "a run older than twenty minutes is wreckage, not a reason to refuse",
+  "a run older than the scan's own timeout is wreckage, not a reason to refuse",
 );
 check(
   decide([{ runId: "a", status: "running", ranAt: minutesAgo(2) }], true)
@@ -203,7 +204,7 @@ check(
 );
 check(
   /longer than one usually takes/.test(
-    shape({ runId: "a", status: "running", ranAt: minutesAgo(7) }).message,
+    shape({ runId: "a", status: "running", ranAt: minutesAgo(18) }).message,
   ),
   "a slow search is flagged as slow rather than promised",
 );
@@ -216,6 +217,19 @@ check(
   windowOf(code(report, "Shape Report Result")) <=
     windowOf(code(start, "Decide Run")),
   "the report never calls a run live that the start tool would already replace",
+);
+// A measured eighteen-minute run was written off as dead at thirteen, which is
+// how a working search gets a second one started on top of it. Before that
+// timeout there is no age at which death is a fact, so neither window may sit
+// below it.
+const scanTimeoutMinutes = scan.settings.executionTimeout / 60;
+check(
+  windowOf(code(report, "Shape Report Result")) >= scanTimeoutMinutes,
+  "no run is called dead while n8n would still be letting it work",
+);
+check(
+  windowOf(code(start, "Decide Run")) >= scanTimeoutMinutes,
+  "no second scan is started on top of one n8n is still running",
 );
 
 const dead = shape({ runId: "a", status: "running", ranAt: minutesAgo(38) });
@@ -235,7 +249,6 @@ check(
 // item arriving at Write Report is a stored opportunity row rather than the
 // search. Reading the input instead of naming the node threw away a full
 // ten-minute search and reported it as a missing business profile.
-const scan = await load("71-run-funding-scan.json");
 const storedRow = {
   fingerprint: "abc",
   programName: "Some older program",
