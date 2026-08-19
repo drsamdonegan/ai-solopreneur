@@ -359,7 +359,7 @@
               "defaultMatch": false,
               "display": true,
               "canBeUsedToMatch": true,
-              "type": "string"
+              "type": "number"
             },
             {
               "id": "beatCount",
@@ -368,7 +368,7 @@
               "defaultMatch": false,
               "display": true,
               "canBeUsedToMatch": true,
-              "type": "string"
+              "type": "number"
             }
           ],
           "attemptToConvertTypes": false,
