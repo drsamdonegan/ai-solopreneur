@@ -1870,17 +1870,22 @@ textarea:focus-visible,
 
 /* The funding search progress card. A search runs server-side for the best
    part of an hour, and the transcript alone cannot show that anything is
-   happening; this sits above the composer while the Investment agent is open
-   and a search is running, drawn from the search's own progress notes. */
+   happening; this sits at the foot of the conversation, under the agent's
+   reply, drawn from the search's own progress notes.
+
+   Sized to the message column and indented past the avatar so it reads as
+   part of the exchange rather than a banner bolted onto it. */
 .scan-progress {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin: 0 0 10px;
-  padding: 10px 14px;
+  width: min(43rem, 100%);
+  margin: -0.6rem auto 1.45rem;
+  padding: 10px 14px 10px 1.125rem;
   border: 1px solid var(--line);
   border-radius: 12px;
   background: var(--panel);
+  animation: message-in 240ms ease both;
 }
 
 .scan-progress[hidden] {
