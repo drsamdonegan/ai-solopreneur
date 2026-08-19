@@ -382,50 +382,39 @@
     return attachment;
   }
 
-  // Google's callback lands in a different tab, so the chat finds out by
-  // asking. Polling starts only once a connect link has actually been shown,
-  // and stops as soon as the answer is yes.
+  // Connecting Gmail happens in n8n, in another tab, because the Google client
+  // secret lives in n8n's encrypted credential store and nothing can read it
+  // back out. So the chat cannot watch the connection directly. What it can
+  // see is the learner coming back, which is the moment worth acting on: the
+  // agent then checks for itself and either starts the run or says it is still
+  // not connected.
   let gmailConnectOffered = false;
-  let gmailWatchTimer = null;
 
-  function startGmailConnectionWatch() {
-    if (gmailWatchTimer !== null) {
+  function noteGmailConnectOffered() {
+    if (gmailConnectOffered) {
       return;
     }
-    gmailWatchTimer = setInterval(async () => {
-      if (document.hidden || requestInProgress) {
-        return;
-      }
-      let status;
-      try {
-        const response = await fetch("/api/gmail/status", { headers: { Accept: "application/json" } });
-        if (!response.ok) {
-          return;
-        }
-        status = await response.json();
-      } catch {
-        return;
-      }
-      if (status?.connected !== true) {
-        return;
-      }
-      clearInterval(gmailWatchTimer);
-      gmailWatchTimer = null;
-      if (!gmailConnectOffered) {
-        return;
-      }
-      gmailConnectOffered = false;
-      const mailbox = typeof status.emailAddress === "string" && status.emailAddress !== ""
-        ? ` as ${status.emailAddress}`
-        : "";
-      // Sent as the learner, and shown in the transcript, so the handover is
-      // visible rather than something that happened behind their back.
-      void sendMessage(`I have connected Gmail${mailbox}. Please start the monthly update now.`, true);
-    }, 2_500);
+    gmailConnectOffered = true;
+    document.addEventListener("visibilitychange", resumeAfterGmailConnect);
+  }
+
+  function resumeAfterGmailConnect() {
+    if (document.hidden || !gmailConnectOffered || requestInProgress) {
+      return;
+    }
+    gmailConnectOffered = false;
+    document.removeEventListener("visibilitychange", resumeAfterGmailConnect);
+    // Sent as the learner and shown in the transcript, so the handover is
+    // visible rather than something that happened behind their back. If they
+    // did not finish, the agent's own check says so and nothing is wasted.
+    void sendMessage(
+      "I am back from connecting Gmail. Please check the connection and start the monthly update if it worked.",
+      true,
+    );
   }
 
   // Agent replies are plain text. Two local paths, and only these two, become
-  // links: an article download, and the Gmail connect route. Nothing else is
+  // links: an article download, and the n8n credential screen. Nothing else is
   // linkified — an agent that reads a stranger's email must never be able to
   // turn a URL from that email into something clickable.
   const SAFE_LINKS = [
@@ -441,17 +430,19 @@
       },
     },
     {
-      pattern: /(?:http:\/\/localhost:\d{2,5})?\/api\/gmail\/connect\b/g,
+      // One fixed literal, matched exactly. Not "any n8n URL" and certainly not
+      // any URL: an agent that reads a stranger's email must never be able to
+      // turn an address from that email into something clickable.
+      pattern: /http:\/\/localhost:5678\/home\/credentials\b/g,
       build() {
         const link = document.createElement("a");
         link.className = "message__connect";
         // A new tab, so the conversation is still here when they come back.
-        link.href = "/api/gmail/connect";
+        link.href = "http://localhost:5678/home/credentials";
         link.target = "_blank";
         link.rel = "noopener noreferrer";
-        link.textContent = "Connect Gmail (read-only)";
-        gmailConnectOffered = true;
-        startGmailConnectionWatch();
+        link.textContent = "Open Gmail credential in n8n";
+        noteGmailConnectOffered();
         return link;
       },
     },

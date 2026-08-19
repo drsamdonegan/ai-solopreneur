@@ -29,13 +29,13 @@ That creates three local tables and nothing else:
 
 All three start empty and stay on your computer. Running the setup again is safe.
 
-## Step 2 — set up Google sign-in, once
+## Step 2 — connect Gmail, read-only
 
-Your agent connects Gmail with a button in the chat. Before that button can work, this computer needs its own Google app. That is the ten-minute part, and you only ever do it once.
+This is the ten-minute part. You are creating your own Google app, so that the only thing your agent can ever do with your mail is read it.
 
-### Why your own Google app
+### Why not the built-in Gmail node
 
-There is no shared one. A template anybody can download cannot ship a Google client secret, so each install creates its own. The upside is that the app is yours: nobody else's project can see your mail, and you can revoke it from your Google account whenever you like.
+n8n ships a Gmail node with its own credential. It is one step easier, and it asks Google for `https://mail.google.com/` — full access, including send and delete. This skill only ever needs to read, so it asks for `gmail.readonly` and nothing else. That is enforced by Google, not by a rule in a prompt: even if something went badly wrong, this credential cannot send a message.
 
 ### In Google Cloud
 
@@ -43,39 +43,40 @@ There is no shared one. A template anybody can download cannot ship a Google cli
 2. Open **APIs & Services → Library**, search for **Gmail API**, and enable it.
 3. Open **APIs & Services → OAuth consent screen**. Choose **External**, fill in the app name and your own email, and save.
 4. On **Audience**, add your own Google account under **Test users**.
-5. Then **publish the app**. While an app sits in Testing, Google expires its sign-in after seven days — the update would work, then quietly stop a week later. Publishing an app used only by you needs no verification; Google shows an "unverified app" warning at sign-in, which you click through.
+5. Then **publish the app**. While an app sits in Testing, Google expires its refresh token after seven days — the update would work, then silently stop a week later. Publishing an app used only by you does not require verification; Google shows an "unverified app" warning at sign-in, which you click through.
 6. Open **APIs & Services → Credentials → Create credentials → OAuth client ID**. Choose **Web application**.
-7. Under **Authorised redirect URIs**, add exactly:
+7. Leave the redirect URL blank for a moment — the next step gives you the exact one to paste.
 
-   ```
-   http://localhost:3000/api/gmail/callback
-   ```
+### In n8n
 
-   That address is printed in your terminal when the chat starts. If yours differs, use the one printed.
-8. Copy the **Client ID** and **Client secret**.
+8. Open **Credentials → Create credential**, and choose **Google OAuth2 API**. Not "Gmail OAuth2 API" — the generic Google one, which is the one with an editable scope.
+9. Name it exactly **`Gmail (read-only)`**. The workflows look it up by that name.
+10. Copy the **OAuth Redirect URL** that n8n shows you, paste it into your Google OAuth client's **Authorised redirect URIs**, and save in Google.
+11. Paste the **Client ID** and **Client Secret** from Google into n8n.
+12. In the **Scope** field, put exactly this and nothing else:
 
-### On your computer
+    ```
+    https://www.googleapis.com/auth/gmail.readonly
+    ```
 
-9. Open `.env` in the project folder and fill in the two values:
+13. Select **Connect my account**, sign in, click through the unverified-app warning, and grant access. Google's consent screen will say the app wants to *view* your email. If it says anything about sending or deleting, the scope field is wrong — go back to step 12.
+14. Save.
 
-   ```
-   GOOGLE_OAUTH_CLIENT_ID=...
-   GOOGLE_OAUTH_CLIENT_SECRET=...
-   ```
+### Checking it worked
 
-10. Restart the services — `./start.command` on macOS, `start-windows.cmd` on Windows.
+Ask your agent:
 
-The chat prints one of two lines at startup. `Gmail: read-only OAuth ready` means step 2 is done. `Gmail: no Google OAuth client set` means the two values did not load; check `.env` and restart again.
-
-Keep those two values in `.env`. Never paste them into the chat, a skill file, or a screenshot — `.env` is Git-ignored for this reason.
-
-### The only permission it ever asks for
-
-```
-https://www.googleapis.com/auth/gmail.readonly
+```text
+Is my email connected?
 ```
 
-Google's consent screen will say the app wants to **view** your email. If it ever mentions sending, composing, or deleting, stop: something is wrong. The gateway also refuses to store a token that came back with more than read access, so a misconfiguration fails closed rather than quietly granting more than you meant.
+It checks and tells you which mailbox it is connected to. It will also refuse to start an update run while the connection is missing, rather than spending several minutes and a couple of dollars failing.
+
+### Reconnecting later, without hunting for the screen
+
+When the connection is missing or has lapsed, your agent gives you a button straight to `http://localhost:5678/home/credentials`. Open **Gmail (read-only)**, select **Connect my account**, and grant access. You do not need to come back and say so — when you return to the chat tab, the agent checks again and carries on.
+
+Your agent cannot connect Gmail for you and cannot make Google's sign-in window appear. The Google client secret lives in n8n's encrypted credential store, and nothing can read it back out, so n8n is the only thing that can run the sign-in. That is also why the secret is not in a `.env` file. Your agent will never ask you for a Google password or a verification code; if anything ever does, something is wrong.
 
 ## Step 3 — tell your agent about your company
 
@@ -124,12 +125,6 @@ messages, mentions, or direct messages.
 ```text
 Write my monthly update for last month.
 ```
-
-The first time, your agent will not start straight away. It checks the Gmail connection, finds none, and gives you a **Connect Gmail (read-only)** button.
-
-Click it. Google opens in a new tab and asks whether to let your app view your email. Allow it, and the tab tells you it worked. Go back to your chat — it has already noticed, and the run starts on its own. You do not have to tell it you are done.
-
-After that first time, the button never appears again unless the connection lapses.
 
 Your agent starts a background run and tells you so. It takes a few minutes: it lists the month's mail, filters it, reads the threads that survive, and writes the update. Ask again in a few minutes:
 
@@ -185,11 +180,7 @@ Turning both down gives you a shorter update built on less. Turning `maxThreads`
 
 **"No company profile is saved yet."** Step 3. Describe your company in the chat.
 
-**"Gmail is not connected."** Ask your agent "is my email connected?" and click the button it gives you. If it says this computer has no Google sign-in configured, step 2 has not been completed or the services were not restarted after editing `.env`.
-
-**It worked, then stopped about a week later.** The Google consent screen is still in Testing. Go back to step 2 and publish the app, then reconnect once.
-
-**You want to revoke access.** Two ways, and both work: ask your agent to disconnect, or remove the app at [myaccount.google.com/permissions](https://myaccount.google.com/permissions). The stored token lives in `data/gmail/`, which is Git-ignored and readable only by you.
+**"Gmail refused the request."** The credential needs reconnecting. Ask your agent "is my email connected?" for the specific diagnosis, or open **Gmail (read-only)** in n8n and select **Connect my account** again. If this happens about a week after setup, the Google consent screen is still in Testing — go back to step 2 and publish the app.
 
 **"Nothing looked like company news."** Almost always a thin profile. If the scan does not know your customers, investors, or product names, it cannot tell their email apart from everything else. Add more and run it again.
 

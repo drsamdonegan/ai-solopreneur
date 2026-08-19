@@ -93,9 +93,11 @@
     },
     {
       "parameters": {
-        "url": "http://127.0.0.1:3000/api/gmail/status",
+        "url": "https://gmail.googleapis.com/gmail/v1/users/me/profile",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleOAuth2Api",
         "options": {
-          "timeout": 10000,
+          "timeout": 15000,
           "response": {
             "response": {
               "fullResponse": true,
@@ -112,6 +114,12 @@
       ],
       "id": "95670000-0000-4000-8000-000000000013",
       "name": "Probe Gmail",
+      "credentials": {
+        "googleOAuth2Api": {
+          "id": "phase16GmailReadonly",
+          "name": "Gmail (read-only)"
+        }
+      },
       "alwaysOutputData": true,
       "onError": "continueRegularOutput"
     },
@@ -119,7 +127,7 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "const raw = $input.first().json ?? {};\nconst status = Number(raw.statusCode ?? 0);\nconst body = raw.body ?? {};\nconst CONNECT_PATH = '/api/gmail/connect';\n\nlet state = 'unknown';\nlet message = '';\n\nif (status !== 200) {\n  state = 'unknown';\n  message = 'I could not reach the part of this app that holds the Gmail connection. If you have just restarted, give it a moment and ask again.';\n} else if (body.configured !== true) {\n  state = 'not_configured';\n  message = 'This computer has no Google sign-in set up yet. That is a one-off job: create a Google Cloud OAuth client, then put its ID and secret in the .env file and restart. docs/MONTHLY_UPDATE.md walks through it.';\n} else if (body.connected !== true) {\n  state = 'not_connected';\n  message = 'Gmail is not connected yet. One click does it, and Google will ask you to allow read-only access to your email.';\n} else if (String(body.lastError ?? '') !== '') {\n  state = 'needs_reauth';\n  message = 'Gmail was connected but Google has stopped renewing it. Connecting again fixes it. If this is about a week after you set it up, the cause is a Google consent screen still in Testing rather than published.';\n} else {\n  state = 'connected';\n  message = body.emailAddress ? `Gmail is connected as ${body.emailAddress}.` : 'Gmail is connected.';\n}\n\nreturn [{ json: {\n  connected: state === 'connected',\n  state,\n  message,\n  emailAddress: String(body.emailAddress ?? ''),\n  connectUrl: CONNECT_PATH,\n  scope: 'https://www.googleapis.com/auth/gmail.readonly',\n  // The chat turns this exact path into a button. Any other wording renders as\n  // plain text and the learner has nothing to click.\n  linkInstruction: `Include the exact text ${CONNECT_PATH} in your reply. The chat turns it into a Connect Gmail button. Do not rewrite it, wrap it in markdown, or describe it instead.`,\n} }];"
+        "jsCode": "const raw = $input.first().json ?? {};\nconst status = Number(raw.statusCode ?? 0);\nconst body = raw.body ?? {};\n// When no credential is selected at all, n8n fails the node rather than\n// returning a status, and onError passes the item through with `error` set.\nconst nodeError = String(raw.error?.message ?? raw.error ?? '');\n\nconst CONNECT_STEPS = [\n  'Open n8n at http://localhost:5678',\n  'Go to Credentials and open the one named \"Gmail (read-only)\". If it is not there yet, create it: Create credential, choose Google OAuth2 API, and name it exactly Gmail (read-only).',\n  'Select Connect my account. Google opens its own sign-in and permission window.',\n  'Grant access. The permission screen should say the app wants to view your email. If it mentions sending or deleting, the Scope field is wrong.',\n].join(' | ');\n\nlet state = 'unknown';\nlet message = '';\n\nif (status === 200 && body.emailAddress) {\n  state = 'connected';\n  message = `Gmail is connected as ${body.emailAddress}.`;\n} else if (status === 401 || status === 403 || /insufficient|unauthor/i.test(String(body?.error?.message ?? ''))) {\n  state = 'needs_reauth';\n  message = 'Gmail is set up but Google is refusing the connection. It usually needs reconnecting: this happens about a week after setup if the Google consent screen is still in Testing rather than published.';\n} else if (!status || /credential/i.test(nodeError)) {\n  state = 'not_connected';\n  message = 'There is no working Gmail connection yet. It has to be created once in n8n; it cannot be done from this chat.';\n} else {\n  state = 'unknown';\n  message = `Gmail did not answer as expected (${status || 'no response'}). It may be a temporary network problem.`;\n}\n\nreturn [{ json: {\n  connected: state === 'connected',\n  state,\n  message,\n  emailAddress: state === 'connected' ? String(body.emailAddress) : '',\n  messagesTotal: state === 'connected' ? Number(body.messagesTotal ?? 0) : 0,\n  credentialUrl: 'http://localhost:5678/home/credentials',\n  connectSteps: CONNECT_STEPS,\n  scope: 'https://www.googleapis.com/auth/gmail.readonly',\n  // The chat turns this one exact address into a button. Any other wording,\n  // including a markdown link, renders as plain text and the learner has\n  // nothing to click.\n  linkInstruction: 'Include the exact text http://localhost:5678/home/credentials in your reply. The chat turns it into a button that opens the credential screen. Do not rewrite it, wrap it in markdown, or describe it instead.',\n} }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -134,7 +142,7 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "const input = $('Validate Connection Input').first().json;\nconst probe = $input.first().json;\n\nconst NEXT = {\n  connected: 'Tell the user which mailbox it is connected to. Nothing more is needed.',\n  not_connected: 'Include the exact text /api/gmail/connect in your reply. The chat turns it into a Connect Gmail button, Google asks them to allow read-only access, and the update starts on its own once they are back. Do not send them to n8n, and never ask for a password or a verification code.',\n  needs_reauth: 'The connection has lapsed. Include the exact text /api/gmail/connect so they can reconnect in one click. If this is about a week after they set it up, add that publishing the Google consent screen stops it expiring every seven days.',\n  not_configured: 'This computer has no Google sign-in configured yet, which is a one-off job in the .env file. Point them at docs/MONTHLY_UPDATE.md. Do not offer a connect link: it cannot work until the client ID and secret exist.',\n  unknown: 'Say it could not be checked right now and offer to try again. Do not tell the user to reconfigure anything on the strength of one failed check.',\n};\n\nreturn [{ json: { ...input, response: {\n  ok: true,\n  connected: probe.connected,\n  state: probe.state,\n  emailAddress: probe.emailAddress,\n  connectUrl: probe.connectUrl,\n  linkInstruction: probe.linkInstruction,\n  requiredScope: probe.scope,\n  message: probe.message,\n  nextStep: NEXT[probe.state] ?? NEXT.unknown,\n} } }];"
+        "jsCode": "const input = $('Validate Connection Input').first().json;\nconst probe = $input.first().json;\n\nconst NEXT = {\n  connected: 'Tell the user which mailbox it is connected to. Nothing more is needed.',\n  not_connected: 'Include the exact text http://localhost:5678/home/credentials in your reply so the chat shows a button straight to the credential screen. Then tell them, briefly: open the one named Gmail (read-only), select Connect my account, and grant access when Google asks. Say the permission screen should mention viewing email and nothing about sending or deleting. When they come back to this tab the update carries on by itself, so they do not need to report back.',\n  needs_reauth: 'The connection has lapsed. Include the exact text http://localhost:5678/home/credentials so they can reopen the credential and select Connect my account again. If this is about a week after they set it up, add that publishing the Google consent screen stops it expiring every seven days.',\n  unknown: 'Say it could not be checked right now and offer to try again. Do not tell the user to reconfigure anything on the strength of one failed check.',\n};\n\nreturn [{ json: { ...input, response: {\n  ok: true,\n  connected: probe.connected,\n  state: probe.state,\n  emailAddress: probe.emailAddress,\n  mailboxSize: probe.messagesTotal,\n  credentialUrl: probe.credentialUrl,\n  connectSteps: probe.connectSteps,\n  linkInstruction: probe.linkInstruction,\n  requiredScope: probe.scope,\n  message: probe.message,\n  nextStep: NEXT[probe.state] ?? NEXT.unknown,\n} } }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,

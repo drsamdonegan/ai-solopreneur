@@ -87,9 +87,5 @@ run("agent-scoped skill bundle", process.execPath, [
 run("SEO article integration test", process.execPath, [
   "scripts/test-seo-article.mjs",
 ]);
-run("Gmail OAuth endpoints", process.execPath, [
-  "scripts/test-gmail-oauth.mjs",
-]);
-
 
 process.stdout.write("\n[verify] All release checks passed.\n");

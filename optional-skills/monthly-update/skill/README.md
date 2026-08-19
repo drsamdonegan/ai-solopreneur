@@ -65,14 +65,15 @@ update. That is a real answer, not a failure.
 Two things:
 
 - The Anthropic key you already saved in n8n.
-- Your own Google sign-in, which takes about ten minutes to set up once. **docs/MONTHLY_UPDATE.md** walks through it.
+- A read-only Gmail connection, which takes about ten minutes to set up once. **docs/MONTHLY_UPDATE.md** walks through it.
 
 Then, in order:
 
 1. Run the setup workflow once. It creates three local tables.
-2. Do the Google sign-in setup and restart.
+2. Create the Gmail credential.
 3. Tell your agent about your company, in the chat, in your own words. It saves a profile.
-4. Ask it for last month's update. It hands you a **Connect Gmail** button, you allow read-only access in Google's own window, and it picks up on its own from there.
+4. Ask it whether Gmail is connected. It checks, and talks you through it if not.
+5. Ask it for last month's update.
 
 The monthly schedule ships switched off. Turn it on once you have seen an update you are happy with.
 
@@ -84,9 +85,7 @@ That is not a promise in a prompt. It is what Google will let this credential do
 
 n8n ships its own Gmail node, which is one step easier to set up and asks Google for full mailbox access including send and delete. This skill deliberately does not use it.
 
-Connecting takes one click in the chat. Your agent gives you a button, Google asks whether to allow read-only access, and the update starts by itself once you are back. If Google ever returns more than read access, the connection is refused rather than saved.
-
-To revoke it: ask your agent to disconnect, or remove the app at [myaccount.google.com/permissions](https://myaccount.google.com/permissions).
+Your agent can tell you whether the connection is working, and will refuse to start a run without it. It cannot connect it for you — the Google client secret lives in n8n's encrypted credential store, so n8n is what runs the sign-in — but it will hand you a button straight to the right screen, and pick the update back up on its own when you return to the chat.
 
 ## What it costs
 
