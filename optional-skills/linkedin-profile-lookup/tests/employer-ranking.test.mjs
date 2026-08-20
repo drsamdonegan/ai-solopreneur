@@ -194,6 +194,55 @@ check(
   "the reply can say which search produced it",
 );
 
+// --- the work email as an employer, from #20 --------------------------------
+// The other half of knowing where someone works. An address at the company
+// domain says it as plainly as the owner naming it, and for a name shared by
+// forty-eight people it is the difference between a match and a shrug.
+const byEmail = validate({ email_address: "caitlin@stoneandchalk.com.au" });
+check(
+  byEmail.employerHint === "stoneandchalk",
+  `the registrable label is the employer, got ${byEmail.employerHint}`,
+);
+check(
+  validate({ email_address: "caitlin@gmail.com" }).employerHint === "",
+  "a free-mail address says nothing about an employer and is not treated as one",
+);
+check(
+  validate({ email_address: "caitlin@stone-chalk.co.uk" }).employerHint === "stonechalk",
+  "a two-part suffix is stripped to the registrable label, not the country",
+);
+check(
+  validate({}).employerHint === "",
+  "no email is no hint, not a crash",
+);
+
+const domainMatch = rank(byEmail, [
+  ...namesakes,
+  profile("Caitlin Shepard", "Stoneandchalk", ""),
+]);
+check(
+  domainMatch.match_status === "matched",
+  `a work email domain matching the employer is enough to decide it, got ${domainMatch.match_status}`,
+);
+check(
+  (domainMatch.evidence ?? []).includes("work email domain matches employer"),
+  "the reply can say the email domain is why",
+);
+
+// Both signals point at one fact, so they are worth 22 between them, not 44.
+const both = rank(
+  validate({ company_name: "Stone & Chalk", email_address: "caitlin@stoneandchalk.com.au" }),
+  [profile("Caitlin Shepard", "Stone & Chalk", "")],
+);
+check(
+  both.score === 76,
+  `the owner saying it and the email saying it is one fact scored once, got ${both.score}`,
+);
+check(
+  (both.evidence ?? []).includes("named employer"),
+  "the evidence still names why, even when only one of the two signals lands",
+);
+
 if (failures.length > 0) {
   for (const failure of failures) console.error(`- ${failure}`);
   process.exit(1);
