@@ -141,6 +141,67 @@ check(
   "half an employer name is not a match on its own",
 );
 
+// --- what the provider is actually asked ------------------------------------
+// The whole search was one condition on the name. Location is deliberately not
+// a filter — it makes Crustdata return nobody — so "in Melbourne" only ever
+// re-ranked whoever the name brought back. The employer now narrows the search
+// itself, with the name-only search kept as a fallback so a filter the
+// provider does not honour can never leave the owner worse off than before.
+const narrowed = validate({ company_name: "Stone & Chalk", city_location: "Melbourne", country_region: "Australia" });
+const conditions = narrowed.searchBody.filters.conditions ?? [narrowed.searchBody.filters];
+check(
+  conditions.some((c) => c.field === "basic_profile.name"),
+  "the name is still asked for",
+);
+check(
+  conditions.some((c) => String(c.field).includes("employment_details.current")),
+  "the employer is asked of the provider, not just scored over what comes back",
+);
+check(
+  !JSON.stringify(narrowed.searchBody).includes("location"),
+  "location stays out of the filters, which is what empties the result set",
+);
+check(
+  JSON.stringify(narrowed.fallbackBody?.filters) ===
+    JSON.stringify({ field: "basic_profile.name", type: "(.)", value: "Caitlin Shepard" }),
+  "a name-only search is kept ready for when the narrowed one finds nobody",
+);
+check(
+  narrowed.maxCredits === 0.6,
+  `two searches means two searches' worth of ceiling, got ${narrowed.maxCredits}`,
+);
+
+const plain = validate({ city_location: "Melbourne" });
+check(
+  (plain.fallbackBody ?? null) === null && plain.maxCredits === 0.3,
+  "no employer named means one search and the ceiling it always had",
+);
+check(
+  JSON.stringify(plain.searchBody.filters) ===
+    JSON.stringify({ field: "basic_profile.name", type: "(.)", value: "Caitlin Shepard" }),
+  "without an employer the search is what it always was",
+);
+
+// --- how much the agent is allowed to see -----------------------------------
+// It was shown three of forty-eight and told the owner none of the forty-eight
+// were at Stone & Chalk or in Melbourne, which it had no way of knowing.
+const many = Array.from({ length: 20 }, (_, index) =>
+  profile("Caitlin Shepard", `Company ${index}`, "Somewhere"),
+);
+const shown = rank(validate({}), many);
+check(
+  (shown.candidates ?? []).length === 10,
+  `ten candidates reach the agent, not three, got ${(shown.candidates ?? []).length}`,
+);
+check(
+  shown.candidates_shown === 10 && shown.total_matches === 20,
+  "the agent is told how many it is looking at against how many exist, so it stops describing the rest",
+);
+check(
+  typeof shown.searched_on === "string" && shown.searched_on.length > 0,
+  "the reply can say which search produced it",
+);
+
 if (failures.length > 0) {
   for (const failure of failures) console.error(`- ${failure}`);
   process.exit(1);

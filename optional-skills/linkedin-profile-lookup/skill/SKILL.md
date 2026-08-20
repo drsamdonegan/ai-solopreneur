@@ -47,7 +47,9 @@ Set `paid_lookup_confirmed: true` only after that approval. Never claim it is tr
 
 - For `match_status: matched` with high confidence, present the selected profile as the likely match and include the strongest evidence.
 - For medium confidence, say “possible match” and state what supports and weakens the match.
-- For low confidence or `match_status: ambiguous`, do not select a person. Show at most three candidate profile URLs with names, roles, locations, and match evidence, then ask for a stronger discriminator.
+- For low confidence or `match_status: ambiguous`, do not select a person. Show the candidates returned with names, roles, locations, and match evidence, then ask for a stronger discriminator.
+- Say only what you were shown. `candidates_shown` is how many profiles you are looking at and `total_matches` is how many exist; when the first is smaller than the second, never characterise the rest. "None of them are at that company" is a claim about profiles you were not given.
+- `searched_on` says how the search was run. "name only" means the employer was not used to narrow it, so a lot of people who share the name came back; say that plainly rather than implying the person does not exist.
 - For `match_status: not_found`, say no sufficiently supported match was found. Do not turn the top result into a match.
 - For `match_status: unavailable`, say the provider lookup was unavailable and do not fabricate a fallback.
 - Describe confidence as match confidence, not proof that the profile belongs to the person.
