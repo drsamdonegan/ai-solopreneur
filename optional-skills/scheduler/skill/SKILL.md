@@ -87,8 +87,11 @@ against a metered API key gets expensive without anyone noticing.
 - It cannot confirm a write. Task creation and updates are confirmation-gated,
   and a confirmation phrase has to come from a person, so those still wait.
   Say this when someone schedules work that would need confirming.
-- It cannot reach the owner. The answer is saved, not delivered. Tell them to
-  ask you what their schedules have turned up.
+- It cannot reach the owner while it runs. The answer is saved, and the chat
+  page reads it back on its own the next time they have that agent open — so a
+  question about a task that has just run is the page asking on their behalf.
+  Answer it exactly as though they had typed it. Nothing is sent anywhere else:
+  no email, no notification. If they are not in the chat, it waits.
 
 ## Reading results back
 

@@ -267,6 +267,7 @@
   let sessionId = loadOrCreateSession();
   let requestInProgress = false;
   let documentRequestInProgress = false;
+  let switchingConversation = false;
   let loadingMessage = null;
   let agents = DEFAULT_AGENTS;
   let activeAgentId = "project-manager";
@@ -1285,15 +1286,25 @@
     if (sessionDocuments.length > 0) {
       discardPendingDocuments(previousSessionId);
     }
-    const response = await fetch("/api/conversations", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ agentId }),
-    });
-    const body = await parseResponse(response, "A new chat could not be created.");
-    await loadConversationList();
-    await loadConversation(body.conversation.id);
-    elements.requestStatus.textContent = "New conversation started";
+    // Switching agent changes activeAgentId first and builds the conversation
+    // afterwards, so for a moment the open conversation belongs to the agent
+    // being left. A background delivery that sent into that gap was rejected
+    // with "Conversation belongs to a different agent" — right of the server,
+    // and a result nobody would have seen.
+    switchingConversation = true;
+    try {
+      const response = await fetch("/api/conversations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agentId }),
+      });
+      const body = await parseResponse(response, "A new chat could not be created.");
+      await loadConversationList();
+      await loadConversation(body.conversation.id);
+      elements.requestStatus.textContent = "New conversation started";
+    } finally {
+      switchingConversation = false;
+    }
   }
 
   async function renameConversation(conversation) {
@@ -1927,11 +1938,16 @@
   // that saw it running meant the owner still had to ask. Delivery is now
   // decided by what this browser has already read out, kept where it survives
   // a reload, rather than by what one page happened to witness.
-  const DELIVERED_KEY = "funding-scan-delivered";
+  // One list of everything this browser has already read out, funding searches
+  // and scheduled tasks alike, so neither can arrive twice and a reload does
+  // not undo the memory of it.
+  const DELIVERED_KEY = "chat-results-delivered";
   // Old enough and it is not news any more: the owner has moved on, and an
-  // unprompted read-out of yesterday's search is noise. They can still ask.
+  // unprompted read-out of yesterday's work is noise. They can still ask.
   const DELIVER_WITHIN_MS = 12 * 60 * 60 * 1000;
+  const DELIVERED_REMEMBERED = 60;
   let scanPollTimer = null;
+  let resultsPollTimer = null;
   let scanWasRunning = false;
   let scanDoneUntil = 0;
   let deliveringScan = false;
@@ -1942,20 +1958,75 @@
   let lastDeliveredAt = 0;
   let scanCard = null;
 
-  function alreadyDelivered(finishedAt) {
+  function deliveredList() {
     try {
-      return window.localStorage.getItem(DELIVERED_KEY) === finishedAt;
+      const raw = JSON.parse(window.localStorage.getItem(DELIVERED_KEY) ?? "[]");
+      return Array.isArray(raw) ? raw.map(String) : [];
     } catch {
-      return false;
+      return [];
     }
   }
 
-  function markDelivered(finishedAt) {
+  function alreadyDelivered(id) {
+    return deliveredList().includes(id);
+  }
+
+  function markDelivered(id) {
     try {
-      window.localStorage.setItem(DELIVERED_KEY, finishedAt);
+      const kept = [id, ...deliveredList().filter((seen) => seen !== id)];
+      window.localStorage.setItem(
+        DELIVERED_KEY,
+        JSON.stringify(kept.slice(0, DELIVERED_REMEMBERED)),
+      );
     } catch {
       // A browser refusing storage gets one read-out per page load rather
       // than none, which is the better way round to fail.
+    }
+  }
+
+  function forgetDelivered(id) {
+    try {
+      window.localStorage.setItem(
+        DELIVERED_KEY,
+        JSON.stringify(deliveredList().filter((seen) => seen !== id)),
+      );
+    } catch {}
+  }
+
+  // Both kinds of result come back the same way: ask the agent, in words the
+  // owner might have used, and let its answer land in the conversation. One at
+  // a time, never twice in a minute, and never on top of someone mid-sentence.
+  async function deliverViaAgent(id, prompt) {
+    if (
+      deliveringScan ||
+      switchingConversation ||
+      requestInProgress ||
+      documentRequestInProgress
+    ) {
+      // Left unmarked on purpose: a person mid-sentence is not interrupted,
+      // and the next poll picks it up twelve seconds later.
+      return;
+    }
+    if (Date.now() - lastDeliveredAt < 60_000) {
+      return;
+    }
+    deliveringScan = true;
+    lastDeliveredAt = Date.now();
+    try {
+      // Marked before sending, because sending re-polls and an unmarked
+      // result would deliver again on that poll and every one after it.
+      markDelivered(id);
+      // Shown, not hidden: the server stores it either way, so hiding it now
+      // only means it appears out of nowhere on the next reload.
+      const sent = await sendMessage(prompt, true);
+      if (!sent) {
+        // A send that never arrived would otherwise lose the result in
+        // silence. Forget it and let the next poll try; the minute floor
+        // above is what keeps that from becoming a storm.
+        forgetDelivered(id);
+      }
+    } finally {
+      deliveringScan = false;
     }
   }
 
@@ -1968,7 +2039,52 @@
     if (Number.isNaN(finished) || Date.now() - finished > DELIVER_WITHIN_MS) {
       return false;
     }
-    return !alreadyDelivered(finishedAt);
+    return !alreadyDelivered(`scan:${finishedAt}`);
+  }
+
+  // --- tasks that ran on a schedule ---------------------------------------
+  // A schedule runs with nobody watching and saves its answer, and until now
+  // that was the end of it: the owner had to know to ask, and to know which
+  // task to ask about. Any finished task belonging to the agent on screen now
+  // reads itself back, once.
+  async function refreshScheduleResults() {
+    let payload;
+    try {
+      const response = await fetch("/api/schedule-results", {
+        headers: { Accept: "application/json" },
+      });
+      if (!response.ok) {
+        return;
+      }
+      payload = await response.json();
+    } catch {
+      return;
+    }
+    if (!payload || payload.available === false || !Array.isArray(payload.runs)) {
+      return;
+    }
+    for (const run of payload.runs) {
+      if (String(run.agentId ?? "") !== activeAgentId) {
+        continue;
+      }
+      const id = `sched:${run.scheduleId}@${run.ranAt}`;
+      if (alreadyDelivered(id)) {
+        continue;
+      }
+      const name = String(run.name ?? "").trim();
+      // Named, so the answer is not a reply to a question nobody can see, and
+      // phrased as a person would: the turn is stored and comes back on every
+      // reload, so it has to read like something the owner might have typed.
+      await deliverViaAgent(
+        id,
+        name === ""
+          ? "What did my scheduled task turn up?"
+          : `What did my scheduled task "${name}" turn up?`,
+      );
+      // One per pass. The next poll takes the next one, so two tasks landing
+      // together arrive as two messages rather than a burst.
+      return;
+    }
   }
 
   function scanProgressCard() {
@@ -2073,7 +2189,7 @@
     }
     if (worthDelivering(scan)) {
       scanDoneUntil = Date.now() + 90_000;
-      void deliverScanResults(String(scan.finishedAt));
+      void deliverViaAgent(`scan:${scan.finishedAt}`, SCAN_RESULT_PROMPT);
     }
     if (Date.now() >= scanDoneUntil) {
       hideScanCard();
@@ -2097,35 +2213,6 @@
   // in four seconds, each one triggering the next. So the search is marked
   // before anything is sent, never unmarked, and only one send is ever in the
   // air at a time.
-  async function deliverScanResults(finishedAt) {
-    if (deliveringScan || requestInProgress || documentRequestInProgress) {
-      // Left unmarked on purpose: a person mid-sentence is not interrupted,
-      // and the next poll picks it up twelve seconds later.
-      return;
-    }
-    if (Date.now() - lastDeliveredAt < 60_000) {
-      return;
-    }
-    deliveringScan = true;
-    lastDeliveredAt = Date.now();
-    try {
-      // Marked before sending, because sending re-polls and an unmarked
-      // search would deliver again on that poll and every one after it.
-      markDelivered(finishedAt);
-      // Shown, not hidden: the server stores it either way, so hiding it now
-      // only means it appears out of nowhere on the next reload.
-      const sent = await sendMessage(SCAN_RESULT_PROMPT, true);
-      if (!sent) {
-        // A send that never arrived would otherwise lose the results in
-        // silence. Unmark it and let the next poll try; the minute floor
-        // above is what keeps that from becoming a storm.
-        markDelivered("");
-      }
-    } finally {
-      deliveringScan = false;
-    }
-  }
-
   async function refreshScanProgress() {
     // No visibility guard: the browser already throttles background-tab
     // timers, the poll is a couple of hundred bytes, and a guard here is one
@@ -2148,6 +2235,16 @@
   }
 
   function syncScanProgress() {
+    // Scheduled work belongs to every agent, not just this one, so its poll
+    // runs whoever is on screen. The funding progress bar is Investment's
+    // alone and starts and stops with it.
+    if (resultsPollTimer === null) {
+      resultsPollTimer = window.setInterval(() => {
+        void refreshScheduleResults();
+      }, SCAN_POLL_MS);
+    }
+    void refreshScheduleResults();
+
     if (activeAgentId === FUNDING_AGENT_ID) {
       if (scanPollTimer === null) {
         scanPollTimer = window.setInterval(() => {
@@ -2169,6 +2266,7 @@
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden) {
       void refreshScanProgress();
+      void refreshScheduleResults();
     }
   });
 

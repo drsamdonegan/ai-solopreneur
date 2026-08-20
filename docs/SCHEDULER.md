@@ -119,8 +119,13 @@ change.
 
 ## What you get back
 
-Nothing arrives in your inbox. A scheduled run has nobody to send anything to,
-so the answer is saved and waits for you.
+Nothing arrives in your inbox — a scheduled run has nobody to send anything to.
+The answer is saved, and the next time you have that agent open in the chat it
+reads itself back to you without being asked. You will see the question it
+answered, then the answer, as an ordinary exchange.
+
+Only the agent the task belonged to reads it back, only once, and only for work
+finished in the last twelve hours. Older than that and it waits until you ask.
 
 > What have my schedules turned up?
 
