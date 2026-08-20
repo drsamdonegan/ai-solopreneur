@@ -142,44 +142,36 @@ check(
 );
 
 // --- what the provider is actually asked ------------------------------------
-// The whole search was one condition on the name. Location is deliberately not
-// a filter — it makes Crustdata return nobody — so "in Melbourne" only ever
-// re-ranked whoever the name brought back. The employer now narrows the search
-// itself, with the name-only search kept as a fallback so a filter the
-// provider does not honour can never leave the owner worse off than before.
+// Nothing but the name, and that is now a measured fact rather than an
+// assumption. Location filters make Crustdata return nobody, and a live search
+// for "Caitlin Shepard" at "Stone & Chalk" filtered on
+// experience.employment_details.current.name came back empty the same way. So
+// the employer is scored over the results instead, and the search body has to
+// stay a single name condition or every search silently finds no one.
 const narrowed = validate({ company_name: "Stone & Chalk", city_location: "Melbourne", country_region: "Australia" });
-const conditions = narrowed.searchBody.filters.conditions ?? [narrowed.searchBody.filters];
 check(
-  conditions.some((c) => c.field === "basic_profile.name"),
-  "the name is still asked for",
-);
-check(
-  conditions.some((c) => String(c.field).includes("employment_details.current")),
-  "the employer is asked of the provider, not just scored over what comes back",
-);
-check(
-  !JSON.stringify(narrowed.searchBody).includes("location"),
-  "location stays out of the filters, which is what empties the result set",
-);
-check(
-  JSON.stringify(narrowed.fallbackBody?.filters) ===
+  JSON.stringify(narrowed.searchBody.filters) ===
     JSON.stringify({ field: "basic_profile.name", type: "(.)", value: "Caitlin Shepard" }),
-  "a name-only search is kept ready for when the narrowed one finds nobody",
+  "the search asks for the name and nothing else, whatever else the owner gave",
+);
+// Only the filters, not the fields: the employer is still *retrieved* from
+// each result, which is what the local scoring reads.
+check(
+  !JSON.stringify(narrowed.searchBody.filters).toLowerCase().includes("location") &&
+    !JSON.stringify(narrowed.searchBody.filters).includes("employment_details"),
+  "neither location nor employer goes back into the filters, which empties them",
 );
 check(
-  narrowed.maxCredits === 0.6,
-  `two searches means two searches' worth of ceiling, got ${narrowed.maxCredits}`,
-);
-
-const plain = validate({ city_location: "Melbourne" });
-check(
-  (plain.fallbackBody ?? null) === null && plain.maxCredits === 0.3,
-  "no employer named means one search and the ceiling it always had",
+  JSON.stringify(narrowed.searchBody.fields).includes("employment_details.current"),
+  "the employer is still asked for in the results, or there is nothing to score",
 );
 check(
-  JSON.stringify(plain.searchBody.filters) ===
-    JSON.stringify({ field: "basic_profile.name", type: "(.)", value: "Caitlin Shepard" }),
-  "without an employer the search is what it always was",
+  narrowed.maxCredits === 0.3,
+  `one search, one ceiling, got ${narrowed.maxCredits}`,
+);
+check(
+  narrowed.searchScope === "name only",
+  "the scope says name only, so a wide result is never read as a targeted one",
 );
 
 // --- how much the agent is allowed to see -----------------------------------

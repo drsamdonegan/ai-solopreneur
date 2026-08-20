@@ -950,7 +950,7 @@ if (linkedInLookupWorkflow) {
       validationCode,
     ) &&
       /PAID_LOOKUP_APPROVAL_REQUIRED/.test(validationCode) &&
-      /maxCredits: employerCondition \? 0\.60 : 0\.30/.test(validationCode) &&
+      /maxCredits: 0\.30/.test(validationCode) &&
       /basic_profile\.name', type: '\(\.\)'/.test(validationCode) &&
       /australianCapitalRegions/.test(validationCode) &&
       /inferredRegion/.test(validationCode) &&
