@@ -52,7 +52,6 @@
         "columns": {
           "column": [
             { "name": "profileId", "type": "string" },
-            { "name": "updatedAt", "type": "date" },
             { "name": "companyName", "type": "string" },
             { "name": "oneLiner", "type": "string" },
             { "name": "domainAliases", "type": "string" },
