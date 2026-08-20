@@ -1,0 +1,563 @@
+{
+  "name": "999 - SPIKE - Xero API check (not part of the skill)",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Xero API spike — run this once, by hand\n\n**This is not part of the skill.** It is never installed and never runs on its\nown. It exists to answer one question that cannot be answered from the\noutside: does Xero hand back bank statement lines through the ordinary\nAccounting API for *your* organisation?\n\nBefore running it you need the `Xero (read-only)` credential from\n`docs/XERO_RECONCILIATION.md` Step 2, connected to a real or demo\norganisation.\n\nSelect **Execute workflow**, then open the last node and copy the `summary`\nvalue. That text is the answer.\n\nIt only ever reads. There is no create, update or delete anywhere in it.",
+        "height": 440,
+        "width": 520,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -900,
+        -420
+      ],
+      "id": "97900999-0000-4000-8000-000000000001",
+      "name": "Sticky 1"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -880,
+        0
+      ],
+      "id": "97900999-0000-4000-8000-000000000010",
+      "name": "Run The Spike Once"
+    },
+    {
+      "parameters": {
+        "url": "https://api.xero.com/connections",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "options": {
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -660,
+        0
+      ],
+      "id": "97900999-0000-4000-8000-000000000012",
+      "name": "Get Connections",
+      "credentials": {
+        "oAuth2Api": {
+          "id": "phase19XeroReadonly",
+          "name": "Xero (read-only)"
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json ?? {};\nconst status = Number(raw.statusCode ?? 0);\nconst orgs = status === 200 && Array.isArray(raw.body) ? raw.body : [];\nconst from = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);\nconst to = new Date().toISOString().slice(0, 10);\nreturn [{ json: {\n  connectionsStatus: status,\n  tenantId: orgs[0]?.tenantId ?? '',\n  organisationName: orgs[0]?.tenantName ?? '',\n  organisationCount: orgs.length,\n  fromDate: from, toDate: to,\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -440,
+        0
+      ],
+      "id": "97900999-0000-4000-8000-000000000011",
+      "name": "Read Tenant"
+    },
+    {
+      "parameters": {
+        "url": "={{ \"https://api.xero.com/api.xro/2.0/Accounts\" }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Xero-tenant-id",
+              "value": "={{ $json.tenantId }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -220,
+        0
+      ],
+      "id": "97900999-0000-4000-8000-000000000014",
+      "name": "Get Accounts",
+      "credentials": {
+        "oAuth2Api": {
+          "id": "phase19XeroReadonly",
+          "name": "Xero (read-only)"
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const tenant = $('Read Tenant').first().json;\nconst raw = $input.first().json ?? {};\nconst status = Number(raw.statusCode ?? 0);\nconst accounts = status === 200 ? (raw.body?.Accounts ?? []) : [];\nconst banks = accounts.filter((a) => String(a.Type ?? '') === 'BANK' && String(a.Status ?? '') === 'ACTIVE');\nreturn [{ json: { ...tenant,\n  accountsStatus: status,\n  accountsTotal: accounts.length,\n  bankAccountCount: banks.length,\n  bankAccountId: banks[0]?.AccountID ?? '',\n  bankAccountName: banks[0]?.Name ?? '',\n  sampleAccount: accounts[0] ? { Code: accounts[0].Code, Name: accounts[0].Name, Type: accounts[0].Type } : null,\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "97900999-0000-4000-8000-000000000013",
+      "name": "Pick First Bank Account"
+    },
+    {
+      "parameters": {
+        "url": "=https://api.xero.com/api.xro/2.0/Reports/BankStatement?bankAccountID={{ encodeURIComponent($json.bankAccountId) }}&fromDate={{ $json.fromDate }}&toDate={{ $json.toDate }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Xero-tenant-id",
+              "value": "={{ $json.tenantId }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        220,
+        -200
+      ],
+      "id": "97900999-0000-4000-8000-000000000015",
+      "name": "Try Bank Statement Report",
+      "credentials": {
+        "oAuth2Api": {
+          "id": "phase19XeroReadonly",
+          "name": "Xero (read-only)"
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "={{ \"https://api.xero.com/api.xro/2.0/BankTransactions?where=IsReconciled%3D%3Dfalse&page=1\" }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Xero-tenant-id",
+              "value": "={{ $json.tenantId }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        440,
+        -200
+      ],
+      "id": "97900999-0000-4000-8000-000000000016",
+      "name": "Try Unreconciled BankTransactions",
+      "credentials": {
+        "oAuth2Api": {
+          "id": "phase19XeroReadonly",
+          "name": "Xero (read-only)"
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "={{ \"https://api.xero.com/api.xro/2.0/Invoices?Statuses=AUTHORISED&page=1\" }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Xero-tenant-id",
+              "value": "={{ $json.tenantId }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        660,
+        -200
+      ],
+      "id": "97900999-0000-4000-8000-000000000017",
+      "name": "Try Unpaid Invoices",
+      "credentials": {
+        "oAuth2Api": {
+          "id": "phase19XeroReadonly",
+          "name": "Xero (read-only)"
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "={{ \"https://api.xero.com/api.xro/2.0/TaxRates\" }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Xero-tenant-id",
+              "value": "={{ $json.tenantId }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        880,
+        -200
+      ],
+      "id": "97900999-0000-4000-8000-000000000018",
+      "name": "Try Tax Rates",
+      "credentials": {
+        "oAuth2Api": {
+          "id": "phase19XeroReadonly",
+          "name": "Xero (read-only)"
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "={{ \"https://api.xero.com/api.xro/2.0/Contacts?summaryOnly=true&page=1\" }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Xero-tenant-id",
+              "value": "={{ $json.tenantId }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1100,
+        -200
+      ],
+      "id": "97900999-0000-4000-8000-000000000019",
+      "name": "Try Contacts",
+      "credentials": {
+        "oAuth2Api": {
+          "id": "phase19XeroReadonly",
+          "name": "Xero (read-only)"
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "=https://api.xero.com/finance.xro/1.0/BankStatementsPlus/statements?BankAccountID={{ encodeURIComponent($json.bankAccountId) }}&FromDate={{ $json.fromDate }}&ToDate={{ $json.toDate }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Xero-tenant-id",
+              "value": "={{ $json.tenantId }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1100,
+        -60
+      ],
+      "id": "97900999-0000-4000-8000-000000000021",
+      "name": "Try Finance BankStatementsPlus",
+      "credentials": {
+        "oAuth2Api": {
+          "id": "phase19XeroReadonly",
+          "name": "Xero (read-only)"
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('Pick First Bank Account').first().json;\nconst grab = (name) => { try { return $(name).first().json ?? {}; } catch { return { _unexecuted: true }; } };\nconst statusOf = (raw) => Number(raw.statusCode ?? 0) || (raw._unexecuted ? 'not run' : 'no response');\n\nconst statement = grab('Try Bank Statement Report');\nconst unreconciled = grab('Try Unreconciled BankTransactions');\nconst invoices = grab('Try Unpaid Invoices');\nconst taxRates = grab('Try Tax Rates');\nconst contacts = grab('Try Contacts');\nconst finance = grab('Try Finance BankStatementsPlus');\n\n// The whole point of the spike: does the ordinary Accounting API hand back\n// bank statement lines with a reconciled flag, or does it not?\nconst report0 = (statement.body?.Reports ?? [])[0] ?? {};\nconst headerRow = (report0.Rows ?? []).find((r) => String(r.RowType ?? '') === 'Header');\nconst columns = (headerRow?.Cells ?? []).map((c) => String(c?.Value ?? ''));\nconst dataRows = (report0.Rows ?? []).flatMap((s) => s.Rows ?? []);\nconst hasReconciled = columns.some((c) => /reconciled/i.test(c));\nconst sampleRow = dataRows[0] ? (dataRows[0].Cells ?? []).map((c) => String(c?.Value ?? '')) : [];\n\nconst statementOk = Number(statement.statusCode ?? 0) === 200 && columns.length > 0;\nconst outcome = statementOk && hasReconciled ? 'A2' : 'B';\n\nconst lines = [];\nlines.push('=== XERO SPIKE RESULT ===');\nlines.push('');\nlines.push(`OUTCOME: ${outcome}`);\nlines.push(outcome === 'A2'\n  ? 'The Bank Statement report returns statement lines with a Reconciled column, so the skill can work from the real queue and the write lane is worth having.'\n  : 'The Bank Statement report did not return usable statement lines. Build outcome B: coding review over unreconciled BankTransactions and unpaid invoices, and drop the write lane (108, the write credential, policy rule 6 and its policy entry).');\nlines.push('');\nlines.push(`Organisation: ${ctx.organisationName || '(none)'}  (${ctx.organisationCount} authorised)`);\nlines.push(`Bank accounts: ${ctx.bankAccountCount}  first: ${ctx.bankAccountName || '(none)'}`);\nlines.push('');\nlines.push('Endpoint results:');\nlines.push(`- GET /connections                      ${ctx.connectionsStatus}`);\nlines.push(`- GET /Accounts                         ${ctx.accountsStatus}  (${ctx.accountsTotal} accounts)`);\nlines.push(`- GET /Reports/BankStatement            ${statusOf(statement)}  (${dataRows.length} rows, ${columns.length} columns)`);\nlines.push(`- GET /BankTransactions IsReconciled==false  ${statusOf(unreconciled)}  (${(unreconciled.body?.BankTransactions ?? []).length} rows)`);\nlines.push(`- GET /Invoices AUTHORISED              ${statusOf(invoices)}  (${(invoices.body?.Invoices ?? []).length} rows)`);\nlines.push(`- GET /TaxRates                         ${statusOf(taxRates)}  (${(taxRates.body?.TaxRates ?? []).length} rates)`);\nlines.push(`- GET /Contacts                         ${statusOf(contacts)}  (${(contacts.body?.Contacts ?? []).length} rows)`);\nlines.push(`- GET finance.xro BankStatementsPlus    ${statusOf(finance)}  (403 is expected and fine: it needs Xero financial-services partner approval)`);\nlines.push('');\nlines.push('Bank Statement report columns, in order:');\nlines.push(columns.length ? `  ${JSON.stringify(columns)}` : '  (none returned)');\nlines.push(`  Reconciled column present: ${hasReconciled ? 'yes' : 'NO'}`);\nlines.push('First data row, as cell values:');\nlines.push(sampleRow.length ? `  ${JSON.stringify(sampleRow)}` : '  (no rows in this date range)');\nlines.push('');\nlines.push('Tax types available (the skill may only ever use these):');\nlines.push(`  ${JSON.stringify((taxRates.body?.TaxRates ?? []).map((r) => r.TaxType).slice(0, 12))}`);\nlines.push('');\nlines.push('Rate limit headroom at the end of this run:');\nlines.push(`  day ${contacts.headers?.['x-daylimit-remaining'] ?? '?'}  minute ${contacts.headers?.['x-minlimit-remaining'] ?? '?'}`);\nlines.push('');\nlines.push('If the columns above are not Date, Description, Reference, Reconciled,');\nlines.push('Source, Amount, Balance, that is fine: the parser reads them by name.');\nlines.push('Paste this whole block back to whoever is building the skill.');\n\nreturn [{ json: { outcome, columns, hasReconciled, sampleRow, statementRowCount: dataRows.length,\n  summary: lines.join('\\n') } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        0
+      ],
+      "id": "97900999-0000-4000-8000-000000000020",
+      "name": "What The Spike Found"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Run The Spike Once": {
+      "main": [
+        [
+          {
+            "node": "Get Connections",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Connections": {
+      "main": [
+        [
+          {
+            "node": "Read Tenant",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Tenant": {
+      "main": [
+        [
+          {
+            "node": "Get Accounts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Accounts": {
+      "main": [
+        [
+          {
+            "node": "Pick First Bank Account",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick First Bank Account": {
+      "main": [
+        [
+          {
+            "node": "Try Bank Statement Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Try Bank Statement Report": {
+      "main": [
+        [
+          {
+            "node": "Try Unreconciled BankTransactions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Try Unreconciled BankTransactions": {
+      "main": [
+        [
+          {
+            "node": "Try Unpaid Invoices",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Try Unpaid Invoices": {
+      "main": [
+        [
+          {
+            "node": "Try Tax Rates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Try Tax Rates": {
+      "main": [
+        [
+          {
+            "node": "Try Contacts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Try Contacts": {
+      "main": [
+        [
+          {
+            "node": "Try Finance BankStatementsPlus",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Try Finance BankStatementsPlus": {
+      "main": [
+        [
+          {
+            "node": "What The Spike Found",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "executionTimeout": 300
+  },
+  "versionId": "97900999-0000-4000-8000-000000000900",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "phase": 19,
+    "testedWithN8n": "2.30.5",
+    "toolRisk": "read",
+    "authorization": "manual-run-once-by-the-builder",
+    "externalWrite": "none",
+    "externalRead": "xero-accounting-read-only"
+  },
+  "id": "phase19XeroApiSpike",
+  "tags": []
+}

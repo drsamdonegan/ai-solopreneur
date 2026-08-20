@@ -1,0 +1,446 @@
+{
+  "name": "103 - TOOL - get_reconciliation_suggestions",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## What did the review find?\n\nReads back what a finished review saved. Instant, free, and it never looks\nat Xero on the spot: if no review has finished, it says so rather than\nguessing.\n\nThe order is deliberate. The ones needing a person come first, then the\nones to match by hand in Xero, then the ones ready to prepare.",
+        "height": 300,
+        "width": 460,
+        "color": 6
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -900,
+        -300
+      ],
+      "id": "97900103-0000-4000-8000-000000000001",
+      "name": "Sticky 1"
+    },
+    {
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "sessionId",
+              "type": "string"
+            },
+            {
+              "name": "requestId",
+              "type": "string"
+            },
+            {
+              "name": "filter",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -880,
+        0
+      ],
+      "id": "97900103-0000-4000-8000-000000000010",
+      "name": "Tool Input"
+    },
+    {
+      "parameters": {
+        "jsCode": "const sessionId = typeof $json.sessionId === 'string' ? $json.sessionId.trim() : '';\nconst requestId = typeof $json.requestId === 'string' ? $json.requestId.trim() : '';\nconst uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;\nconst ALLOWED = ['all', 'ready', 'uncertain', 'accepted', 'executed'];\nconst raw = typeof $json.filter === 'string' ? $json.filter.trim().toLowerCase() : '';\nconst filter = ALLOWED.includes(raw) ? raw : 'all';\nconst error = (uuidPattern.test(sessionId) && uuidPattern.test(requestId))\n  ? null\n  : { code: 'INVALID_SESSION', message: 'Reading the suggestions needs a valid conversation and request ID.' };\nreturn [{ json: {\n  valid: error === null, sessionId, requestId, filter,\n  proposedInput: { sessionId, requestId, filter },\n  ...(error ? { response: { ok: false, error } } : {}),\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -660,
+        0
+      ],
+      "id": "97900103-0000-4000-8000-000000000011",
+      "name": "Validate Read Input"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "97900103-0000-4000-8000-000000000016-c1",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -440,
+        0
+      ],
+      "id": "97900103-0000-4000-8000-000000000016",
+      "name": "Input Is Valid?"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "reconciliation_runs",
+          "mode": "name"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": []
+        },
+        "returnAll": false,
+        "limit": 5,
+        "orderBy": true,
+        "sort": {
+          "field": "startedAt",
+          "direction": "DESC"
+        }
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -440,
+        -200
+      ],
+      "id": "97900103-0000-4000-8000-000000000012",
+      "name": "Read Recent Runs"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $('Validate Read Input').first().json;\nconst rows = $input.all().map((item) => item.json).filter((row) => row && row.runId);\n\nconst minutesSince = (value) => {\n  const parsed = Date.parse(String(value ?? ''));\n  if (Number.isNaN(parsed)) return null;\n  return Math.round((Date.now() - parsed) / 60000);\n};\n// Same number as the guard in 102: past the run workflow's own timeout, n8n\n// has certainly stopped it, so a row still saying 'running' is wreckage.\nconst DEAD_AFTER = 31;\n\nconst finished = rows.filter((row) => ['completed', 'partial'].includes(String(row.status ?? '')));\nconst running = rows.filter((row) => String(row.status ?? '') === 'running')\n  .map((row) => ({ ...row, age: minutesSince(row.startedAt) }))\n  .filter((row) => row.age !== null);\n\nconst live = running.find((row) => row.age < DEAD_AFTER) ?? null;\nconst wreck = running.find((row) => row.age >= DEAD_AFTER) ?? null;\nconst latest = finished[0] ?? null;\n\nreturn [{ json: { ...input,\n  runId: latest ? String(latest.runId) : '',\n  hasRun: latest !== null,\n  running: live !== null,\n  runningMinutes: live ? live.age : 0,\n  interrupted: latest === null && wreck !== null,\n  interruptedMinutes: wreck ? wreck.age : 0,\n  run: latest ?? null } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -220,
+        0
+      ],
+      "id": "97900103-0000-4000-8000-000000000013",
+      "name": "Pick Run"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "reconciliation_suggestions",
+          "mode": "name"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "runId",
+              "condition": "eq",
+              "keyValue": "={{ $json.runId }}"
+            }
+          ]
+        },
+        "returnAll": true,
+        "orderBy": false
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "97900103-0000-4000-8000-000000000014",
+      "name": "Read Suggestions"
+    },
+    {
+      "parameters": {
+        "jsCode": "const picked = $('Pick Run').first().json;\nconst rows = $input.all().map((item) => item.json).filter((row) => row && row.suggestionId);\n\nif (!picked.hasRun) {\n  const message = picked.running\n    ? `A review has been running for ${picked.runningMinutes} minute${picked.runningMinutes === 1 ? '' : 's'} and has not finished yet. Say so and offer to read it back shortly.`\n    : (picked.interrupted\n      ? `A review started ${picked.interruptedMinutes} minutes ago and never finished, which usually means the agent restarted while it was working. Nothing was saved from it. Offer to run another one.`\n      : 'No review has finished yet. Say so plainly and offer to run one, rather than guessing at what is in their books.');\n  return [{ json: { ...picked, response: { ok: true, hasRun: false, running: picked.running,\n    interrupted: picked.interrupted, suggestions: [], message } } }];\n}\n\nconst money = (row) => {\n  const value = Number(row.amount ?? 0);\n  const sign = value < 0 ? '-' : '';\n  return `${sign}$${Math.abs(value).toFixed(2)}`;\n};\nconst who = (row) => String(row.contactName || row.suggestedContact || row.description || 'unnamed').slice(0, 60);\nconst line = (row) => `${String(row.occurredAt ?? '').slice(0, 10)}  ${money(row)}  ${who(row)}`;\n\n// The groups are mutually exclusive by construction. A transaction shown in two\n// of them reads as two transactions, and the one thing somebody going through\n// their books cannot afford is to lose count.\nconst executed = rows.filter((row) => String(row.executionStatus ?? '') === 'created');\nconst done = new Set(executed);\nconst accepted = rows.filter((row) => !done.has(row) && String(row.userDecision ?? '') === 'accepted');\nconst decided = new Set([...done, ...accepted, ...rows.filter((row) => String(row.userDecision ?? '') !== '')]);\nconst uncertain = rows.filter((row) => !decided.has(row) && String(row.needsHuman ?? '') === 'yes');\nconst matchInXero = rows.filter((row) => !decided.has(row) && String(row.needsHuman ?? '') !== 'yes'\n  && (String(row.matchedInvoiceId ?? '') !== '' || String(row.basis ?? '') === 'existing-match'));\nconst ready = rows.filter((row) => !decided.has(row) && String(row.needsHuman ?? '') !== 'yes'\n  && String(row.matchedInvoiceId ?? '') === '' && String(row.basis ?? '') !== 'existing-match');\n\nconst render = (row, kind) => ({\n  suggestionId: String(row.suggestionId),\n  line: line(row),\n  date: String(row.occurredAt ?? '').slice(0, 10),\n  amount: money(row),\n  counterparty: who(row),\n  account: kind === 'ready' || kind === 'accepted' ? `${row.suggestedAccountCode} ${row.suggestedAccountName}`.trim() : '',\n  taxType: kind === 'ready' || kind === 'accepted' ? String(row.suggestedTaxType ?? '') : '',\n  createsNewContact: String(row.suggestedContactId ?? '') === '' && String(row.suggestedContact ?? '') !== '',\n  invoice: String(row.matchedInvoiceNumber ?? ''),\n  basis: String(row.basis ?? ''),\n  whatToCheck: String(row.whatToCheck ?? ''),\n  confidence: Number(row.confidence ?? 0),\n  executionStatus: String(row.executionStatus ?? ''),\n});\n\nconst wanted = {\n  all: { uncertain, matchInXero, ready, accepted, executed },\n  uncertain: { uncertain, matchInXero: [], ready: [], accepted: [], executed: [] },\n  ready: { uncertain: [], matchInXero: [], ready, accepted: [], executed: [] },\n  accepted: { uncertain: [], matchInXero: [], ready: [], accepted, executed: [] },\n  executed: { uncertain: [], matchInXero: [], ready: [], accepted: [], executed },\n}[picked.filter];\n\nreturn [{ json: { ...picked, response: {\n  ok: true,\n  hasRun: true,\n  runId: picked.runId,\n  status: String(picked.run?.status ?? ''),\n  reportText: String(picked.run?.reportText ?? ''),\n  counts: { total: rows.length, uncertain: uncertain.length, matchInXero: matchInXero.length,\n            ready: ready.length, accepted: accepted.length, executed: executed.length },\n  needsYou: wanted.uncertain.map((row) => render(row, 'uncertain')),\n  matchInXero: wanted.matchInXero.map((row) => render(row, 'match')),\n  readyToPrepare: wanted.ready.map((row) => render(row, 'ready')),\n  alreadyAccepted: wanted.accepted.map((row) => render(row, 'accepted')),\n  alreadyCreated: wanted.executed.map((row) => render(row, 'accepted')),\n  errorSummary: String(picked.run?.errorSummary ?? ''),\n  nextStep: 'Read reportText back as it is written; it is already in plain language and in the right order. Lead with the ones that need them. Every line names the date, the exact amount and who it was with, because that is how somebody recognises a transaction. Never round an amount, and never say anything here is reconciled: it is reconciled when they click OK in Xero, and not before.',\n} } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ],
+      "id": "97900103-0000-4000-8000-000000000015",
+      "name": "Shape Suggestions Result"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $('Validate Read Input').first().json;\nconst response = $json.response ?? { ok: false, error: { code: 'TOOL_FAILED', message: 'The tool did not return a result.' } };\nreturn { json: {\n  occurredAt: new Date().toISOString(),\n  sessionId: input.sessionId,\n  requestId: input.requestId,\n  toolName: 'get_reconciliation_suggestions',\n  proposedInput: JSON.stringify(input.proposedInput ?? {}),\n  result: JSON.stringify(response),\n  error: response.ok === false ? String(response.error?.message ?? 'Tool failed') : '',\n  response\n} };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ],
+      "id": "97900103-0000-4000-8000-000000000090",
+      "name": "Prepare Audit"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "value": "tool_audit",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "occurredAt": "={{ $json.occurredAt }}",
+            "sessionId": "={{ $json.sessionId }}",
+            "requestId": "={{ $json.requestId }}",
+            "toolName": "={{ $json.toolName }}",
+            "proposedInput": "={{ $json.proposedInput }}",
+            "result": "={{ $json.result }}",
+            "error": "={{ $json.error }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "occurredAt",
+              "displayName": "occurredAt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "sessionId",
+              "displayName": "sessionId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "requestId",
+              "displayName": "requestId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "toolName",
+              "displayName": "toolName",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "proposedInput",
+              "displayName": "proposedInput",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "result",
+              "displayName": "result",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "error",
+              "displayName": "error",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        0
+      ],
+      "id": "97900103-0000-4000-8000-000000000091",
+      "name": "Write Tool Audit",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const prepared = $('Prepare Audit').first().json;\nconst response = { ...prepared.response };\nif (!Number.isInteger($json.id)) {\n  response.auditWarning = 'The tool result could not be written to the local audit table.';\n}\nreturn { json: response };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        0
+      ],
+      "id": "97900103-0000-4000-8000-000000000092",
+      "name": "Return Tool Result"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Tool Input": {
+      "main": [
+        [
+          {
+            "node": "Validate Read Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Read Input": {
+      "main": [
+        [
+          {
+            "node": "Input Is Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Input Is Valid?": {
+      "main": [
+        [
+          {
+            "node": "Read Recent Runs",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Recent Runs": {
+      "main": [
+        [
+          {
+            "node": "Pick Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick Run": {
+      "main": [
+        [
+          {
+            "node": "Read Suggestions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Suggestions": {
+      "main": [
+        [
+          {
+            "node": "Shape Suggestions Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shape Suggestions Result": {
+      "main": [
+        [
+          {
+            "node": "Prepare Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Audit": {
+      "main": [
+        [
+          {
+            "node": "Write Tool Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Tool Audit": {
+      "main": [
+        [
+          {
+            "node": "Return Tool Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "executionTimeout": 30
+  },
+  "versionId": "97900103-0000-4000-8000-000000000900",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "phase": 19,
+    "testedWithN8n": "2.30.5",
+    "toolRisk": "read",
+    "authorization": "automatic-current-context-read",
+    "externalWrite": "none",
+    "externalRead": "none"
+  },
+  "id": "phase19GetReconciliationSuggestions",
+  "tags": [
+    {
+      "id": "tagAgentCanDo",
+      "name": "What your agent can do"
+    }
+  ]
+}

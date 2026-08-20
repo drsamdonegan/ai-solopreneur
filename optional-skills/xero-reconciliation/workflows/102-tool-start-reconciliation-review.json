@@ -1,0 +1,681 @@
+{
+  "name": "102 - TOOL - start_reconciliation_review",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Go through my Xero transactions\n\nStarts a review in the background and answers straight away, because the\nreview takes minutes and the chat cannot wait that long. It never returns\nsuggestions: `get_reconciliation_suggestions` does that once the review\nhas finished.\n\nIt refuses three ways, all of them on purpose: with no bookkeeping profile\nsaved, with no Xero connection, and while another review is already\nrunning.",
+        "height": 360,
+        "width": 460,
+        "color": 6
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -900,
+        -360
+      ],
+      "id": "97900102-0000-4000-8000-000000000001",
+      "name": "Sticky 1"
+    },
+    {
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "sessionId",
+              "type": "string"
+            },
+            {
+              "name": "requestId",
+              "type": "string"
+            },
+            {
+              "name": "period",
+              "type": "string"
+            },
+            {
+              "name": "force",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -880,
+        0
+      ],
+      "id": "97900102-0000-4000-8000-000000000010",
+      "name": "Tool Input"
+    },
+    {
+      "parameters": {
+        "jsCode": "const sessionId = typeof $json.sessionId === 'string' ? $json.sessionId.trim() : '';\nconst requestId = typeof $json.requestId === 'string' ? $json.requestId.trim() : '';\nconst uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;\nconst rawPeriod = typeof $json.period === 'string' ? $json.period.trim() : '';\nconst force = $json.force === true || String($json.force ?? '').trim().toLowerCase() === 'true';\n\nlet error = null;\nif (!uuidPattern.test(sessionId) || !uuidPattern.test(requestId)) {\n  error = { code: 'INVALID_SESSION', message: 'Starting a review needs a valid conversation and request ID.' };\n}\n\n// '' means the default window, 2026-07 means that calendar month, 90d means\n// the last ninety days. Anything past 180 days is refused rather than\n// silently trimmed: a review of two years of transactions is not what\n// somebody meant to ask for, and it would cost accordingly.\nlet period = '';\nif (!error && rawPeriod !== '') {\n  if (/^\\d{4}-(0[1-9]|1[0-2])$/.test(rawPeriod)) {\n    period = rawPeriod;\n  } else if (/^\\d{1,3}d$/i.test(rawPeriod)) {\n    const days = Number(rawPeriod.slice(0, -1));\n    if (days < 1 || days > 180) {\n      error = { code: 'INVALID_PERIOD', message: 'Ask for up to 180 days at a time, like 90d, or a single month like 2026-07.' };\n    } else { period = `${days}d`; }\n  } else {\n    error = { code: 'INVALID_PERIOD', message: 'A period is either a month like 2026-07 or a number of days like 90d.' };\n  }\n}\n\nconst runId = `run-${Date.now()}-${requestId.slice(0, 8)}`;\nreturn [{ json: {\n  valid: error === null, sessionId, requestId, period, force, runId,\n  proposedInput: { sessionId, requestId, period, force },\n  ...(error ? { response: { ok: false, error } } : {}),\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -660,
+        0
+      ],
+      "id": "97900102-0000-4000-8000-000000000011",
+      "name": "Validate Start Input"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "reconciliation_runs",
+          "mode": "name"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": []
+        },
+        "returnAll": false,
+        "limit": 10,
+        "orderBy": true,
+        "sort": {
+          "field": "startedAt",
+          "direction": "DESC"
+        }
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -440,
+        0
+      ],
+      "id": "97900102-0000-4000-8000-000000000012",
+      "name": "Read Recent Runs"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $('Validate Start Input').first().json;\nconst rows = $input.all().map((item) => item.json).filter((row) => row && row.runId);\n\nif (!input.valid) {\n  return [{ json: { ...input, shouldQueue: false } }];\n}\n\nconst minutesSince = (value) => {\n  const parsed = Date.parse(String(value ?? ''));\n  if (Number.isNaN(parsed)) return null;\n  return Math.round((Date.now() - parsed) / 60000);\n};\n\n// A review takes minutes and spends real money, so one already in flight is\n// reported rather than started twice. Nothing here can ask whether that run is\n// still alive: a restart, or an execution deleted by hand, leaves exactly the\n// same row behind with nobody working on it. So age decides, and the only\n// honest number is the one past which n8n has certainly stopped it — the\n// executionTimeout on 105, which is 30 minutes. Anything shorter calls a\n// working run wreckage and quietly pays for a second one on top of it.\nconst DEAD_AFTER = 31;\n\nconst open = rows\n  .filter((row) => String(row.status ?? '') === 'running')\n  .map((row) => ({ runId: row.runId, age: minutesSince(row.startedAt) }))\n  .filter((entry) => entry.age !== null)\n  .sort((a, b) => a.age - b.age);\n\nconst live = open.find((entry) => entry.age < DEAD_AFTER) ?? null;\n\nif (live && !input.force) {\n  return [{ json: { ...input, shouldQueue: false, response: { ok: true, status: 'already-running',\n    runId: live.runId, startedMinutesAgo: live.age,\n    message: `A review started ${live.age} minute${live.age === 1 ? '' : 's'} ago and is still going. Reading it back with get_reconciliation_suggestions will show it when it finishes. Say so rather than starting another one, unless they ask you to go again anyway.` } } }];\n}\n\nconst stale = open.find((entry) => entry.age >= DEAD_AFTER) ?? null;\nconst replacing = live\n  ? { reason: 'asked-again', runId: live.runId, age: live.age }\n  : (stale ? { reason: 'interrupted', runId: stale.runId, age: stale.age } : null);\n\nreturn [{ json: { ...input, shouldQueue: true, replacing } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -220,
+        0
+      ],
+      "id": "97900102-0000-4000-8000-000000000013",
+      "name": "Decide Run"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "bookkeeping_profile",
+          "mode": "name"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "profileId",
+              "condition": "eq",
+              "keyValue": "default"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 1,
+        "orderBy": false
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "97900102-0000-4000-8000-000000000014",
+      "name": "Read Bookkeeping Profile"
+    },
+    {
+      "parameters": {
+        "jsCode": "const decided = $('Decide Run').first().json;\nconst rows = $input.all().map((item) => item.json).filter((row) => row && row.profileId === 'default');\nconst profile = rows[0] ?? null;\n\nif (!decided.shouldQueue) {\n  return [{ json: { ...decided } }];\n}\n\n// Unlike the funding search, this one never assumes a profile. A guessed\n// always-check-with-me amount decides how much money the agent is willing to\n// be confident about, and a guessed coding rule is wrong on every transaction\n// from that supplier. Both are silent. So it refuses and asks instead.\nif (!profile || !profile.organisationName) {\n  return [{ json: { ...decided, shouldQueue: false, response: { ok: false,\n    error: { code: 'NO_PROFILE', message: 'There is no bookkeeping profile saved yet.' },\n    nextStep: 'Ask the user for three things before starting a review, and save them with set_bookkeeping_profile: what the organisation is called, any coding rules they already follow in their own words, and the dollar amount above which they always want to decide themselves rather than have a code suggested. Without those the review has nothing to reason from.' } } }];\n}\n\nreturn [{ json: { ...decided, profileName: String(profile.organisationName), neverGuessAbove: Number(profile.neverGuessAbove ?? 0) } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ],
+      "id": "97900102-0000-4000-8000-000000000015",
+      "name": "Check Profile Exists"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "97900102-0000-4000-8000-000000000016-c1",
+              "leftValue": "={{ $json.shouldQueue }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        440,
+        0
+      ],
+      "id": "97900102-0000-4000-8000-000000000016",
+      "name": "Should Start?"
+    },
+    {
+      "parameters": {
+        "url": "https://api.xero.com/connections",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "options": {
+          "timeout": 15000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        660,
+        -200
+      ],
+      "id": "97900102-0000-4000-8000-000000000017",
+      "name": "Probe Xero",
+      "credentials": {
+        "oAuth2Api": {
+          "id": "phase19XeroReadonly",
+          "name": "Xero (read-only)"
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json ?? {};\nconst status = Number(raw.statusCode ?? 0);\nconst body = raw.body ?? {};\nconst nodeError = String(raw.error?.message ?? raw.error ?? '');\nconst orgs = Array.isArray(body) ? body : [];\nconst connected = status === 200 && orgs.length > 0;\nreturn [{ json: { ...$('Check Profile Exists').first().json, xeroConnected: connected,\n  xeroProblem: connected ? '' : (status === 401 || status === 403 ? 'needs_reauth'\n    : (!status || /credential/i.test(nodeError) ? 'not_connected' : 'unknown')) } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        -200
+      ],
+      "id": "97900102-0000-4000-8000-000000000018",
+      "name": "Read Start Probe"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "97900102-0000-4000-8000-000000000019-c1",
+              "leftValue": "={{ $json.xeroConnected }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        880,
+        -200
+      ],
+      "id": "97900102-0000-4000-8000-000000000019",
+      "name": "Xero Ready?"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $('Read Start Probe').first().json;\nconst CONNECT_STEPS = \"Open n8n at http://localhost:5678 | Go to Credentials and open the one named \\\"Xero (read-only)\\\". If it is not there yet it has to be created once, and it needs a Xero developer app first: docs/XERO_RECONCILIATION.md has every click. | Select Connect my account, then grant access. The permission screen should say view, never create or delete.\";\nconst why = {\n  not_connected: 'Xero is not connected yet, so there is nothing to review.',\n  needs_reauth: 'Xero is set up but is refusing the connection. A Xero refresh token stops working after 60 days without use, so this is usually just a reconnect.',\n  unknown: 'Xero did not answer when I checked just now.',\n};\nreturn [{ json: { ...input, response: { ok: false,\n  error: { code: 'XERO_NOT_CONNECTED', message: why[input.xeroProblem] ?? why.unknown },\n  connectSteps: CONNECT_STEPS,\n  credentialUrl: 'http://localhost:5678/home/credentials',\n  nextStep: 'Do not start a review. Include the exact text http://localhost:5678/home/credentials in your reply: the chat turns that one address into a button to the credential screen, which is where the Xero sign-in window comes from. Read the steps out one at a time. Never ask the user for a Xero password, a verification code, or a client secret.' } } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        -320
+      ],
+      "id": "97900102-0000-4000-8000-000000000020",
+      "name": "Shape Auth Needed"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "phase19RunReconciliationReview",
+          "mode": "list",
+          "cachedResultName": "105 - RUN - Reconciliation Review"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "runId": "={{ $json.runId }}",
+            "period": "={{ $json.period }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "runId",
+              "displayName": "runId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "period",
+              "displayName": "period",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": false
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1100,
+        -80
+      ],
+      "id": "97900102-0000-4000-8000-000000000021",
+      "name": "Start Review In Background"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $('Read Start Probe').first().json;\nconst lines = [];\n\nif (input.replacing && input.replacing.reason === 'interrupted') {\n  lines.push(`The review before this one stopped ${input.replacing.age} minutes ago without finishing, which usually means the agent restarted while it was working. Nothing was saved from it, so I have started again.`);\n} else if (input.replacing) {\n  lines.push('Starting a fresh review now, as you asked.');\n}\n\nlines.push('I am going through your Xero transactions now. It takes a few minutes: I read what is still unreconciled, your chart of accounts and how you have coded things before, and work out what each one probably is.');\nlines.push('Ask me for it again in a few minutes and I will read it back.');\n\nreturn [{ json: { ...input, response: {\n  ok: true,\n  status: 'started',\n  runId: input.runId,\n  period: input.period || 'the last 90 days',\n  restarted: input.replacing ? input.replacing.reason : null,\n  message: lines.join(' ')\n} } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        -80
+      ],
+      "id": "97900102-0000-4000-8000-000000000022",
+      "name": "Shape Start Result"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $('Validate Start Input').first().json;\nconst response = $json.response ?? { ok: false, error: { code: 'TOOL_FAILED', message: 'The tool did not return a result.' } };\nreturn { json: {\n  occurredAt: new Date().toISOString(),\n  sessionId: input.sessionId,\n  requestId: input.requestId,\n  toolName: 'start_reconciliation_review',\n  proposedInput: JSON.stringify(input.proposedInput ?? {}),\n  result: JSON.stringify(response),\n  error: response.ok === false ? String(response.error?.message ?? 'Tool failed') : '',\n  response\n} };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        0
+      ],
+      "id": "97900102-0000-4000-8000-000000000090",
+      "name": "Prepare Audit"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "value": "tool_audit",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "occurredAt": "={{ $json.occurredAt }}",
+            "sessionId": "={{ $json.sessionId }}",
+            "requestId": "={{ $json.requestId }}",
+            "toolName": "={{ $json.toolName }}",
+            "proposedInput": "={{ $json.proposedInput }}",
+            "result": "={{ $json.result }}",
+            "error": "={{ $json.error }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "occurredAt",
+              "displayName": "occurredAt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "sessionId",
+              "displayName": "sessionId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "requestId",
+              "displayName": "requestId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "toolName",
+              "displayName": "toolName",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "proposedInput",
+              "displayName": "proposedInput",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "result",
+              "displayName": "result",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "error",
+              "displayName": "error",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1540,
+        0
+      ],
+      "id": "97900102-0000-4000-8000-000000000091",
+      "name": "Write Tool Audit",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const prepared = $('Prepare Audit').first().json;\nconst response = { ...prepared.response };\nif (!Number.isInteger($json.id)) {\n  response.auditWarning = 'The tool result could not be written to the local audit table.';\n}\nreturn { json: response };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        0
+      ],
+      "id": "97900102-0000-4000-8000-000000000092",
+      "name": "Return Tool Result"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Tool Input": {
+      "main": [
+        [
+          {
+            "node": "Validate Start Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Start Input": {
+      "main": [
+        [
+          {
+            "node": "Read Recent Runs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Recent Runs": {
+      "main": [
+        [
+          {
+            "node": "Decide Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decide Run": {
+      "main": [
+        [
+          {
+            "node": "Read Bookkeeping Profile",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Bookkeeping Profile": {
+      "main": [
+        [
+          {
+            "node": "Check Profile Exists",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Profile Exists": {
+      "main": [
+        [
+          {
+            "node": "Should Start?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Should Start?": {
+      "main": [
+        [
+          {
+            "node": "Probe Xero",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Probe Xero": {
+      "main": [
+        [
+          {
+            "node": "Read Start Probe",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Start Probe": {
+      "main": [
+        [
+          {
+            "node": "Xero Ready?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Xero Ready?": {
+      "main": [
+        [
+          {
+            "node": "Start Review In Background",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Shape Auth Needed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start Review In Background": {
+      "main": [
+        [
+          {
+            "node": "Shape Start Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shape Start Result": {
+      "main": [
+        [
+          {
+            "node": "Prepare Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shape Auth Needed": {
+      "main": [
+        [
+          {
+            "node": "Prepare Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Audit": {
+      "main": [
+        [
+          {
+            "node": "Write Tool Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Tool Audit": {
+      "main": [
+        [
+          {
+            "node": "Return Tool Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "executionTimeout": 60
+  },
+  "versionId": "97900102-0000-4000-8000-000000000900",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "phase": 19,
+    "testedWithN8n": "2.30.5",
+    "toolRisk": "bounded_external_read_and_local_write",
+    "authorization": "explicit-current-user-request",
+    "externalWrite": "none",
+    "externalRead": "xero-accounting-read-gmail-readonly-and-anthropic-api"
+  },
+  "id": "phase19StartReconciliationReview",
+  "tags": [
+    {
+      "id": "tagAgentCanDo",
+      "name": "What your agent can do"
+    }
+  ]
+}

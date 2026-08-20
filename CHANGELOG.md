@@ -14,6 +14,23 @@ versioning for local workshop releases.
   0.30 credits after fresh approval for every call.
 - Package-aware surgical installation, dependency resolution, optional
   extensions, GitHub package links, and legacy module-ID compatibility.
+- A Xero Coding Review skill for the Bookkeeping agent, its first: it reads the
+  transactions sitting unreconciled in the learner's own Xero organisation,
+  works out what each one probably is from their chart of accounts, their own
+  coding history and the rules they have stated, and asks one plain question
+  about the rest. A deterministic pass settles what it can before any model is
+  asked, and an account code or tax type outside the organisation's own lists is
+  discarded rather than used.
+- An optional write lane in that skill, behind a separate `Xero (read-write)`
+  credential the learner consents to on its own: it creates accepted suggestions
+  as new unreconciled Xero transactions. It never reconciles, edits or deletes
+  anything, and it refuses any row that changed after the learner accepted it.
+- Receipt evidence from the learner's own mailbox when the Monthly Update
+  skill's `Gmail (read-only)` credential happens to be connected. Reviews work
+  unchanged without it.
+- `docs/XERO_RECONCILIATION.md`, covering the Xero developer app for both the
+  local and Railway callbacks, why the built-in Xero node is not used, and what
+  a review sends where.
 
 ### Changed
 

@@ -168,6 +168,7 @@ try {
     "funding-radar",
     "monthly-update",
     "scheduler",
+    "xero-reconciliation",
   ];
   for (const skillId of installed) {
     install(root, skillId);

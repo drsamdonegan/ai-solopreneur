@@ -1,0 +1,242 @@
+// What the agent is handed, and therefore what the learner reads.
+//
+// These nodes are mostly string-shaping, which makes them look not worth
+// testing right up until one of them reads a node that did not execute and the
+// whole tool returns nothing. That has happened in this repo before, so the
+// branches that skip nodes are exercised here on purpose.
+// Run with: node tests/replies.test.mjs
+import { loadWorkflow, codeOf, runCode, makeChecker } from "./_harness.mjs";
+
+const { check, done } = makeChecker("replies");
+const connection = loadWorkflow("100-tool-check-xero-connection.json");
+const profile = loadWorkflow("101-tool-set-bookkeeping-profile.json");
+const start = loadWorkflow("102-tool-start-reconciliation-review.json");
+const get = loadWorkflow("103-tool-get-reconciliation-suggestions.json");
+const decide = loadWorkflow("104-tool-record-reconciliation-decision.json");
+const review = loadWorkflow("105-run-reconciliation-review.json");
+const receipt = loadWorkflow("109-run-receipt-lookup.json");
+const prepare = loadWorkflow("108-tool-prepare-green-matches.json");
+
+// --- the four connection states -------------------------------------------
+const probeSrc = codeOf(connection, "Read Xero Probe");
+const probe = (input) => runCode(probeSrc, { input: [input] })[0];
+
+const connected = probe({ statusCode: 200, body: [{ tenantId: "t-1", tenantName: "Acme Studio" }] });
+check("a live connection names the organisation", connected.state === "connected" && connected.organisationName === "Acme Studio");
+check("a live connection carries the tenant id", connected.tenantId === "t-1");
+check("401 is a reauth, not a missing credential", probe({ statusCode: 401, body: {} }).state === "needs_reauth");
+check("403 is a reauth too", probe({ statusCode: 403, body: {} }).state === "needs_reauth");
+check("the reauth message explains the 60-day expiry", /60 days/.test(probe({ statusCode: 401, body: {} }).message));
+check("a missing credential is not_connected", probe({ error: { message: "Credentials not found" } }).state === "not_connected");
+check("no response at all is not_connected", probe({}).state === "not_connected");
+check("an unexpected status is unknown rather than a guess", probe({ statusCode: 503, body: {} }).state === "unknown");
+check("200 with no organisations is not a connection", probe({ statusCode: 200, body: [] }).state === "not_connected");
+check("the connect steps mention the exact credential name", /Xero \(read-only\)/.test(probe({}).connectSteps));
+check("the connect steps warn about the permission screen", /view/i.test(probe({}).connectSteps));
+
+const shapeConnSrc = codeOf(connection, "Shape Connection Result");
+const shapeConn = (p, w) => runCode(shapeConnSrc, {
+  nodes: { "Validate Connection Input": [{ sessionId: "s", requestId: "r", proposedInput: {} }], "Read Xero Probe": [p] },
+  input: [w],
+})[0].response;
+
+const notConnected = shapeConn(probe({}), { writeState: "not_connected", writeConnected: false, writeConnectSteps: "x", writeScope: "y" });
+check("a disconnected reply offers the clickable credential address", notConnected.connectSteps.length > 0);
+check("a disconnected reply tells the agent it cannot do it itself", /cannot do any of it for them/i.test(notConnected.nextStep));
+const multi = shapeConn(probe({ statusCode: 200, body: [{ tenantId: "t-1", tenantName: "A" }, { tenantId: "t-2", tenantName: "B" }] }),
+  { writeState: "connected", writeConnected: true, writeConnectSteps: "", writeScope: "" });
+check("more than one organisation is disclosed", multi.multipleOrganisations === true && /first one/i.test(multi.message));
+check("the write credential state is reported separately", multi.writeConnected === true);
+
+// --- the profile merge discipline ------------------------------------------
+const mergeSrc = codeOf(profile, "Validate And Merge");
+const UUID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const merge = (input, existing = {}) => runCode(mergeSrc, {
+  nodes: { "Tool Input": [{ sessionId: UUID, requestId: UUID, ...input }] },
+  input: [{ profileId: "default", ...existing }],
+})[0];
+
+const kept = merge({ organisationName: "" }, { organisationName: "Acme", accountCodeNotes: "Uber is 429" });
+check("a blank field keeps the previous value", kept.organisationName === "Acme");
+check("an untouched field is kept too", kept.accountCodeNotes === "Uber is 429");
+check("a supplied field overwrites", merge({ organisationName: "New Co" }, { organisationName: "Acme" }).organisationName === "New Co");
+check("the threshold parses from digits", merge({ neverGuessAbove: "2000" }).neverGuessAbove === 2000);
+check("the threshold tolerates a dollar sign and commas", merge({ neverGuessAbove: "$2,000" }).neverGuessAbove === 2000);
+check("a negative threshold is refused", merge({ neverGuessAbove: "-5" }).response?.error?.code === "INVALID_THRESHOLD");
+check("a nonsense threshold is refused", merge({ neverGuessAbove: "lots" }).response?.error?.code === "INVALID_THRESHOLD");
+check("a blank threshold keeps the previous one", merge({ neverGuessAbove: "" }, { neverGuessAbove: 500 }).neverGuessAbove === 500);
+check("the currency is upper-cased", merge({ baseCurrency: "aud" }).baseCurrency === "AUD");
+check("a bad session is refused", runCode(mergeSrc, { nodes: { "Tool Input": [{ sessionId: "no", requestId: "no" }] }, input: [{}] })[0].valid === false);
+check("tenantId is never taken from the model", merge({ tenantId: "injected" }, { tenantId: "real" }).tenantId === "real");
+
+const shapeProfileSrc = codeOf(profile, "Shape Profile Result");
+const shaped = runCode(shapeProfileSrc, { nodes: { "Validate And Merge": [merge({ organisationName: "Acme" })] }, input: [{}] })[0].response;
+check("the saved values are read back", shaped.savedProfile.organisationName === "Acme");
+check("what is still missing is named", shaped.stillMissing.length > 0);
+check("the threshold is asked for by name", shaped.stillMissing.some((item) => /decide yourself/i.test(item)));
+check("the reply tells the agent to read it back", /read the saved values back/i.test(shaped.message));
+
+// --- the refusals before spending anything ---------------------------------
+const checkProfileSrc = codeOf(start, "Check Profile Exists");
+const noProfile = runCode(checkProfileSrc, {
+  nodes: { "Decide Run": [{ shouldQueue: true, runId: "r" }] }, input: [],
+})[0];
+check("no profile refuses the run", noProfile.shouldQueue === false && noProfile.response.error.code === "NO_PROFILE");
+check("the refusal says what to collect first", /always want to decide themselves/i.test(noProfile.response.nextStep));
+const withProfile = runCode(checkProfileSrc, {
+  nodes: { "Decide Run": [{ shouldQueue: true, runId: "r" }] },
+  input: [{ profileId: "default", organisationName: "Acme", neverGuessAbove: 2000 }],
+})[0];
+check("a saved profile lets the run proceed", withProfile.shouldQueue !== false);
+
+const authSrc = codeOf(start, "Shape Auth Needed");
+const auth = runCode(authSrc, { nodes: { "Read Start Probe": [{ xeroProblem: "not_connected" }] }, input: [{}] })[0].response;
+check("no Xero connection refuses before spending", auth.ok === false && auth.error.code === "XERO_NOT_CONNECTED");
+check("the refusal carries the clickable address", auth.credentialUrl === "http://localhost:5678/home/credentials");
+check("the refusal forbids asking for a password", /never ask the user for a xero password/i.test(auth.nextStep));
+
+const startShapeSrc = codeOf(start, "Shape Start Result");
+const started = runCode(startShapeSrc, { nodes: { "Read Start Probe": [{ runId: "r-1", period: "90d", replacing: null }] }, input: [{}] })[0].response;
+check("starting reports a run id", started.runId === "r-1" && started.status === "started");
+check("starting never claims findings", !/found|suggest/i.test(started.message));
+const restarted = runCode(startShapeSrc, {
+  nodes: { "Read Start Probe": [{ runId: "r-2", period: "", replacing: { reason: "interrupted", age: 44 } }] }, input: [{}],
+})[0].response;
+check("an interrupted predecessor is explained honestly", /stopped 44 minutes ago/.test(restarted.message));
+
+// --- what the learner reads back -------------------------------------------
+const suggestSrc = codeOf(get, "Shape Suggestions Result");
+const row = (over = {}) => ({ suggestionId: "sug-1", occurredAt: "2026-07-15", amount: -42.35,
+  contactName: "UBER *TRIP", suggestedContact: "Uber", description: "UBER", needsHuman: "no",
+  basis: "user-rule", suggestedAccountCode: "429", suggestedAccountName: "Travel - National",
+  suggestedTaxType: "INPUT", matchedInvoiceId: "", userDecision: "", executionStatus: "",
+  confidence: 0.98, whatToCheck: "", ...over });
+
+const noRun = runCode(suggestSrc, { nodes: { "Pick Run": [{ hasRun: false, running: false, interrupted: false, filter: "all" }] }, input: [] })[0].response;
+check("no finished review says so plainly", noRun.hasRun === false && /offer to run one/i.test(noRun.message));
+const running = runCode(suggestSrc, { nodes: { "Pick Run": [{ hasRun: false, running: true, runningMinutes: 3, filter: "all" }] }, input: [] })[0].response;
+check("a running review is reported as running", /running for 3 minutes/.test(running.message));
+const interrupted = runCode(suggestSrc, { nodes: { "Pick Run": [{ hasRun: false, running: false, interrupted: true, interruptedMinutes: 44, filter: "all" }] }, input: [] })[0].response;
+check("an interrupted review is not called running", /never finished/i.test(interrupted.message));
+
+const full = runCode(suggestSrc, {
+  nodes: { "Pick Run": [{ hasRun: true, runId: "run-1", filter: "all", run: { status: "completed", reportText: "REPORT", errorSummary: "" } }] },
+  input: [
+    row({ suggestionId: "ready-1" }),
+    row({ suggestionId: "uncertain-1", needsHuman: "yes", suggestedAccountCode: "", whatToCheck: "Who is 8841?" }),
+    row({ suggestionId: "match-1", basis: "exact-invoice", matchedInvoiceId: "inv-1", matchedInvoiceNumber: "INV-0042" }),
+    row({ suggestionId: "done-1", executionStatus: "created" }),
+    row({ suggestionId: "accepted-1", userDecision: "accepted" }),
+  ],
+})[0].response;
+check("every group is separated", full.needsYou.length === 1 && full.readyToPrepare.length === 1
+  && full.matchInXero.length === 1 && full.alreadyCreated.length === 1 && full.alreadyAccepted.length === 1,
+  JSON.stringify(full.counts));
+check("the saved report is returned verbatim", full.reportText === "REPORT");
+check("the amount is not rounded", full.readyToPrepare[0].amount === "-$42.35");
+check("each line names date, amount and counterparty", /2026-07-15/.test(full.readyToPrepare[0].line) && /42\.35/.test(full.readyToPrepare[0].line));
+check("an uncertain row carries its question", full.needsYou[0].whatToCheck === "Who is 8841?");
+check("an uncertain row shows no account", full.needsYou[0].account === "");
+check("a new contact is disclosed", full.readyToPrepare[0].createsNewContact === true);
+check("the agent is told to lead with the uncertain ones", /lead with the ones that need them/i.test(full.nextStep));
+check("the agent is told never to claim reconciled", /never say anything here is reconciled/i.test(full.nextStep));
+const uncertainOnly = runCode(suggestSrc, {
+  nodes: { "Pick Run": [{ hasRun: true, runId: "run-1", filter: "uncertain", run: { status: "completed", reportText: "", errorSummary: "" } }] },
+  input: [row({ suggestionId: "ready-1" }), row({ suggestionId: "u-1", needsHuman: "yes" })],
+})[0].response;
+const groups = [full.needsYou, full.readyToPrepare, full.matchInXero, full.alreadyAccepted, full.alreadyCreated];
+const shownIds = groups.flatMap((group) => group.map((entry) => entry.suggestionId));
+check("no transaction appears in two groups", new Set(shownIds).size === shownIds.length, shownIds.join(","));
+check("every transaction appears somewhere", new Set(shownIds).size === full.counts.total);
+check("the uncertain filter hides the rest", uncertainOnly.readyToPrepare.length === 0 && uncertainOnly.needsYou.length === 1);
+
+// --- the report itself ------------------------------------------------------
+const reportSrc = codeOf(review, "Compose Report");
+const composed = runCode(reportSrc, {
+  nodes: { "Merge All Suggestions": [{ runId: "run-1", receiptsSearched: 6, receiptsFound: 2, truncated: false,
+    problems: [], maxLines: 200, rows: [
+      row({ suggestionId: "a" }),
+      row({ suggestionId: "b", needsHuman: "yes", suggestedAccountCode: "", whatToCheck: "Who is 8841?" }),
+      row({ suggestionId: "c", basis: "exact-invoice", whatToCheck: "This looks like invoice INV-0042." }),
+    ] }] },
+  input: [{}],
+})[0];
+check("the headline counts what it can and cannot do", /I checked 3 outstanding transactions\. I can prepare 1 now, and I need your help with 1\./.test(composed.reportText), composed.reportText.split("\n")[0]);
+check("a ready line explains why", /Why: it follows a rule you already gave me/.test(composed.reportText));
+check("an uncertain line says it was left alone", /I left this untouched\. Who is 8841\?/.test(composed.reportText));
+check("the mailbox search is disclosed", /looked in your mailbox for receipts on 6 of these and found 2/.test(composed.reportText));
+check("the closing line is always there", composed.reportText.trim().endsWith("A transaction is reconciled when you click OK in Xero, and not before."));
+check("no markdown table is emitted", !composed.reportText.includes("|"));
+check("no markdown heading is emitted", !/^#/m.test(composed.reportText));
+const truncated = runCode(reportSrc, {
+  nodes: { "Merge All Suggestions": [{ runId: "r", receiptsSearched: 0, receiptsFound: 0, truncated: true, maxLines: 200,
+    problems: ["the tax rates did not answer (500)"], rows: [row()] }] }, input: [{}],
+})[0];
+check("truncation is disclosed", /more than 200 unreconciled lines/.test(truncated.reportText));
+check("a partial failure is disclosed", /did not come back cleanly/.test(truncated.reportText));
+check("the closing line survives a partial run", truncated.reportText.trim().endsWith("and not before."));
+
+// --- the write-lane reply, including the branch where nothing ran -----------
+const prepShapeSrc = codeOf(prepare, "Shape Prepare Result");
+const created = runCode(prepShapeSrc, {
+  nodes: {
+    "Summarise Outcomes": [{ counts: { created: 2, skipped: 1, failed: 0 },
+      createdRows: [{ suggestionId: "a", line: "L1", xeroBankTransactionId: "x1" }, { suggestionId: "b", line: "L2", xeroBankTransactionId: "x2" }],
+      failedRows: [] }],
+    "Select Executable Rows": [{ refusals: [{ suggestionId: "z", reason: "NOT_ACCEPTED", message: "no" }] }],
+  }, input: [{}],
+})[0].response;
+check("the created count is reported", created.created === 2);
+check("the reply says the learner still reconciles it", /Open the bank account in Xero to reconcile them/.test(created.message));
+check("the reply does not promise a green match", !/shows as a green match/i.test(created.message));
+check("the reply names Find and Match as the fallback", /Find and Match/.test(created.message));
+check("the reply refuses to click OK itself", /I cannot and will not click OK for you/.test(created.message));
+check("duplicates are disclosed", /already in Xero from a previous run/.test(created.message));
+check("refusals are carried back", created.refused.length === 1);
+check("the agent is told never to retry a refusal", /never retry one/i.test(created.nextStep));
+// The path where Summarise Outcomes never executed: reading it must not throw.
+const nothingRan = runCode(prepShapeSrc, {
+  nodes: { "Select Executable Rows": [{ refusals: [{ suggestionId: "z", reason: "MATCH_IN_XERO", message: "no" }] }] },
+  input: [{}],
+})[0].response;
+check("an unexecuted summarise node does not kill the reply", nothingRan.ok === true && nothingRan.created === 0);
+check("the nothing-created reply still explains itself", /did not create anything in Xero/i.test(nothingRan.message));
+
+const connectNeededSrc = codeOf(prepare, "Shape Connect Needed");
+const needsWrite = runCode(connectNeededSrc, { nodes: { "Read Write Probe": [{ writeState: "not_connected" }] }, input: [{}] })[0].response;
+check("a missing write credential creates nothing", needsWrite.ok === false && needsWrite.error.code === "WRITE_NOT_CONNECTED");
+check("it says the acceptances are still saved", /still saved/i.test(needsWrite.nextStep));
+check("it warns the consent screen differs", /view AND update/.test(needsWrite.nextStep));
+
+// --- decisions --------------------------------------------------------------
+const validateDecisionSrc = codeOf(decide, "Validate Decision Input");
+const vd = (input) => runCode(validateDecisionSrc, { input: [{ sessionId: UUID, requestId: UUID, ...input }] })[0];
+check("an unknown decision word is refused", vd({ suggestionIds: "a", decision: "maybe" }).response.error.code === "INVALID_DECISION");
+check("no ids is refused", vd({ suggestionIds: "", decision: "accepted" }).response.error.code === "NO_SUGGESTIONS");
+check("more than twenty ids is refused", vd({ suggestionIds: Array.from({ length: 21 }, (_, i) => `s${i}`).join(","), decision: "accepted" }).response.error.code === "TOO_MANY_IDS");
+check("changed needs exactly one id", vd({ suggestionIds: "a,b", decision: "changed", userAccountCode: "429" }).response.error.code === "INVALID_DECISION");
+check("changed needs an account code", vd({ suggestionIds: "a", decision: "changed" }).response.error.code === "INVALID_ACCOUNT_CODE");
+check("a valid change is accepted", vd({ suggestionIds: "a", decision: "changed", userAccountCode: "429" }).valid === true);
+check("ids are trimmed and split", JSON.stringify(vd({ suggestionIds: " a , b ", decision: "accepted" }).ids) === '["a","b"]');
+
+const decisionShapeSrc = codeOf(decide, "Shape Decision Result");
+const recorded = runCode(decisionShapeSrc, {
+  nodes: { "Evaluate Decisions": [{ decision: "accepted", recorded: [{ suggestionId: "a", line: "L1" }], refused: [] }] },
+  input: [{}],
+})[0].response;
+check("recording says nothing reached Xero", /nothing has been sent to Xero yet/i.test(recorded.message));
+check("recording points at the next step", /prepare_green_matches/.test(recorded.nextStep));
+
+// --- the mailbox query ------------------------------------------------------
+const querySrc = codeOf(receipt, "Build Gmail Query");
+const query = runCode(querySrc, { input: [{ sourceId: "s", amountText: "42.35", occurredAt: "2026-07-15",
+  merchantHint: "UBER *TRIP HELP.UBER.COM", referenceHint: "" }] })[0];
+check("the exact amount is quoted in the query", query.queries[0].includes('"42.35"'));
+check("card noise is stripped from the merchant", query.merchant === "uber trip", query.merchant);
+check("spam and promotions are excluded", /-in:spam/.test(query.queries[0]) && /-category:promotions/.test(query.queries[0]));
+check("the search is bounded by date", /after:\d+/.test(query.queries[0]) && /before:\d+/.test(query.queries[0]));
+check("there is a fallback query", query.queries.length === 2);
+const noMerchant = runCode(querySrc, { input: [{ sourceId: "s", amountText: "", occurredAt: "", merchantHint: "12345", referenceHint: "" }] })[0];
+check("nothing searchable means no query", noMerchant.hasQuery === false);
+
+done();

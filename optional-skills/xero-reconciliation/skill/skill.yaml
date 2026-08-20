@@ -1,0 +1,5 @@
+id: xero-reconciliation
+agent: bookkeeping
+name: Xero Coding Review
+version: 1.0.0
+description: Works out what the unreconciled transactions in your Xero organisation probably are, prepares the ones it is sure about, and asks about the rest.

@@ -1,0 +1,491 @@
+{
+  "name": "17 - SETUP - Bookkeeping Data",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Run this once\n\nSelect **Execute workflow** below. It creates three local tables:\n\n- `bookkeeping_profile` — the facts about your books that decide a suggestion: your usual suppliers, the coding rules you already follow, and the amount above which you always want to decide yourself\n- `reconciliation_suggestions` — one row for every transaction the review looked at, what it thinks, and what you decided\n- `reconciliation_runs` — a copy of each review, and what that review cost\n\nNothing leaves your computer. All three start empty.",
+        "height": 420,
+        "width": 420,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -660,
+        -260
+      ],
+      "id": "97900000-0000-4000-8000-000000000001",
+      "name": "Sticky Start Here"
+    },
+    {
+      "parameters": {
+        "content": "## Then what\n\nConnecting Xero is the next step, and it is a one-off. `docs/XERO_RECONCILIATION.md` walks through every click: the Xero developer app first, then the credential in n8n named exactly `Xero (read-only)`.\n\nThe permission screen should say the app wants to **view** your accounting data. If it offers to create, update or delete anything, stop — the Scope field is wrong.",
+        "height": 320,
+        "width": 420,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -200,
+        -260
+      ],
+      "id": "97900000-0000-4000-8000-000000000002",
+      "name": "Sticky Next Step"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -660,
+        220
+      ],
+      "id": "97900000-0000-4000-8000-000000000010",
+      "name": "Run Setup Once"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "setup-bookkeeping-data",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -660,
+        420
+      ],
+      "id": "97900000-0000-4000-8000-000000000015",
+      "name": "Temporary Setup Webhook"
+    },
+    {
+      "parameters": {
+        "resource": "table",
+        "operation": "create",
+        "tableName": "bookkeeping_profile",
+        "columns": {
+          "column": [
+            {
+              "name": "profileId",
+              "type": "string"
+            },
+            {
+              "name": "profileSavedAt",
+              "type": "date"
+            },
+            {
+              "name": "organisationName",
+              "type": "string"
+            },
+            {
+              "name": "tenantId",
+              "type": "string"
+            },
+            {
+              "name": "baseCurrency",
+              "type": "string"
+            },
+            {
+              "name": "financialYearEnd",
+              "type": "string"
+            },
+            {
+              "name": "commonSuppliers",
+              "type": "string"
+            },
+            {
+              "name": "commonCustomers",
+              "type": "string"
+            },
+            {
+              "name": "accountCodeNotes",
+              "type": "string"
+            },
+            {
+              "name": "gstTreatmentNotes",
+              "type": "string"
+            },
+            {
+              "name": "neverGuessAbove",
+              "type": "number"
+            },
+            {
+              "name": "queueMode",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {
+          "createIfNotExists": true
+        }
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -420,
+        320
+      ],
+      "id": "97900000-0000-4000-8000-000000000011",
+      "name": "Create Profile Table"
+    },
+    {
+      "parameters": {
+        "resource": "table",
+        "operation": "create",
+        "tableName": "reconciliation_suggestions",
+        "columns": {
+          "column": [
+            {
+              "name": "suggestionId",
+              "type": "string"
+            },
+            {
+              "name": "runId",
+              "type": "string"
+            },
+            {
+              "name": "sourceType",
+              "type": "string"
+            },
+            {
+              "name": "sourceId",
+              "type": "string"
+            },
+            {
+              "name": "bankAccountId",
+              "type": "string"
+            },
+            {
+              "name": "occurredAt",
+              "type": "string"
+            },
+            {
+              "name": "amount",
+              "type": "number"
+            },
+            {
+              "name": "direction",
+              "type": "string"
+            },
+            {
+              "name": "currency",
+              "type": "string"
+            },
+            {
+              "name": "contactName",
+              "type": "string"
+            },
+            {
+              "name": "reference",
+              "type": "string"
+            },
+            {
+              "name": "description",
+              "type": "string"
+            },
+            {
+              "name": "suggestedContact",
+              "type": "string"
+            },
+            {
+              "name": "suggestedContactId",
+              "type": "string"
+            },
+            {
+              "name": "suggestedAccountCode",
+              "type": "string"
+            },
+            {
+              "name": "suggestedAccountName",
+              "type": "string"
+            },
+            {
+              "name": "suggestedTaxType",
+              "type": "string"
+            },
+            {
+              "name": "matchedInvoiceId",
+              "type": "string"
+            },
+            {
+              "name": "matchedInvoiceNumber",
+              "type": "string"
+            },
+            {
+              "name": "confidence",
+              "type": "number"
+            },
+            {
+              "name": "identityConfidence",
+              "type": "number"
+            },
+            {
+              "name": "accountingConfidence",
+              "type": "number"
+            },
+            {
+              "name": "documentConfidence",
+              "type": "number"
+            },
+            {
+              "name": "basis",
+              "type": "string"
+            },
+            {
+              "name": "needsHuman",
+              "type": "string"
+            },
+            {
+              "name": "whatToCheck",
+              "type": "string"
+            },
+            {
+              "name": "receiptJson",
+              "type": "string"
+            },
+            {
+              "name": "payloadHash",
+              "type": "string"
+            },
+            {
+              "name": "acceptedHash",
+              "type": "string"
+            },
+            {
+              "name": "userDecision",
+              "type": "string"
+            },
+            {
+              "name": "userAccountCode",
+              "type": "string"
+            },
+            {
+              "name": "decidedAt",
+              "type": "date"
+            },
+            {
+              "name": "executionStatus",
+              "type": "string"
+            },
+            {
+              "name": "xeroBankTransactionId",
+              "type": "string"
+            },
+            {
+              "name": "executedAt",
+              "type": "date"
+            },
+            {
+              "name": "executionError",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {
+          "createIfNotExists": true
+        }
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -200,
+        320
+      ],
+      "id": "97900000-0000-4000-8000-000000000012",
+      "name": "Create Suggestions Table"
+    },
+    {
+      "parameters": {
+        "resource": "table",
+        "operation": "create",
+        "tableName": "reconciliation_runs",
+        "columns": {
+          "column": [
+            {
+              "name": "runId",
+              "type": "string"
+            },
+            {
+              "name": "startedAt",
+              "type": "date"
+            },
+            {
+              "name": "finishedAt",
+              "type": "date"
+            },
+            {
+              "name": "status",
+              "type": "string"
+            },
+            {
+              "name": "period",
+              "type": "string"
+            },
+            {
+              "name": "queueMode",
+              "type": "string"
+            },
+            {
+              "name": "transactionsRead",
+              "type": "number"
+            },
+            {
+              "name": "transactionsSuggested",
+              "type": "number"
+            },
+            {
+              "name": "highConfidence",
+              "type": "number"
+            },
+            {
+              "name": "needsHuman",
+              "type": "number"
+            },
+            {
+              "name": "receiptsSearched",
+              "type": "number"
+            },
+            {
+              "name": "receiptsFound",
+              "type": "number"
+            },
+            {
+              "name": "greenMatchesCreated",
+              "type": "number"
+            },
+            {
+              "name": "lastExecutionAt",
+              "type": "date"
+            },
+            {
+              "name": "inputTokens",
+              "type": "number"
+            },
+            {
+              "name": "outputTokens",
+              "type": "number"
+            },
+            {
+              "name": "reportText",
+              "type": "string"
+            },
+            {
+              "name": "errorSummary",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {
+          "createIfNotExists": true
+        }
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        20,
+        320
+      ],
+      "id": "97900000-0000-4000-8000-000000000013",
+      "name": "Create Runs Table"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: {\n  ok: true,\n  tables: ['bookkeeping_profile', 'reconciliation_suggestions', 'reconciliation_runs'],\n  message: 'The three bookkeeping tables are ready. Next: connect Xero in n8n as docs/XERO_RECONCILIATION.md describes, then tell your agent about your books.'\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        320
+      ],
+      "id": "97900000-0000-4000-8000-000000000014",
+      "name": "Confirm Setup"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Run Setup Once": {
+      "main": [
+        [
+          {
+            "node": "Create Profile Table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Profile Table": {
+      "main": [
+        [
+          {
+            "node": "Create Suggestions Table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Suggestions Table": {
+      "main": [
+        [
+          {
+            "node": "Create Runs Table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Runs Table": {
+      "main": [
+        [
+          {
+            "node": "Confirm Setup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Temporary Setup Webhook": {
+      "main": [
+        [
+          {
+            "node": "Create Profile Table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "executionTimeout": 60
+  },
+  "versionId": "97900000-0000-4000-8000-000000000900",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "phase": 19,
+    "testedWithN8n": "2.30.5",
+    "toolRisk": "bounded_local_write",
+    "authorization": "manual-run-once",
+    "externalRead": "none",
+    "externalWrite": "none"
+  },
+  "id": "phase19BookkeepingSetup",
+  "tags": [
+    {
+      "id": "tagSetupOnce",
+      "name": "Set up once"
+    }
+  ]
+}
