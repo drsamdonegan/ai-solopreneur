@@ -145,5 +145,8 @@
         "61-tool-lookup-linkedin-profile.json"
       ]
     }
+  ],
+  "tests": [
+    "tests/employer-ranking.test.mjs"
   ]
 }

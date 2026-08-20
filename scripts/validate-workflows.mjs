@@ -933,6 +933,7 @@ if (linkedInLookupWorkflow) {
         "request_id",
         "email_address",
         "full_name",
+        "company_name",
         "country_region",
         "state_province",
         "city_location",

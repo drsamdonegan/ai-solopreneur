@@ -1979,6 +1979,7 @@
             "request_id": "={{ $('Validate and Normalise').first().json.requestId }}",
             "email_address": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('email_address', 'Optional work email supplied by the current user; use an empty string when omitted. Never invent an email.', 'string') }}",
             "full_name": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('full_name', 'Required name for one person. Copy it exactly from the current user, preserving professional titles such as Dr or Professor and any credentials. Do not normalize or shorten it.', 'string') }}",
+            "company_name": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('company_name', `The employer the current user named, such as Stone & Chalk. Pass it whenever they say where the person works: it separates the right person from everyone who shares their name. Empty string when they did not say.`, 'string') }}",
             "country_region": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('country_region', 'Optional country or region supplied by the current user; use an empty string when omitted.', 'string') }}",
             "state_province": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('state_province', 'Optional state or province supplied by the current user; use an empty string when omitted.', 'string') }}",
             "city_location": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('city_location', 'Optional city supplied by the current user; use an empty string when omitted.', 'string') }}",
@@ -2017,6 +2018,15 @@
             {
               "id": "full_name",
               "displayName": "full_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "company_name",
+              "displayName": "company_name",
               "required": false,
               "defaultMatch": false,
               "display": true,
