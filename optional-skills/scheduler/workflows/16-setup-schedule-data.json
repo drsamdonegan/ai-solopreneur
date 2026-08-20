@@ -3,7 +3,7 @@
   "nodes": [
     {
       "parameters": {
-        "content": "## Run this once\n\nSelect **Execute workflow** below. It creates two local tables:\n\n- `scheduled_runs` \u2014 one row per thing you have asked your agent to do on a schedule\n- `schedule_results` \u2014 what your agent said each time one of them ran\n\nNothing leaves your computer. Both start empty.\n\nRunning this again is safe and changes nothing.",
+        "content": "## Run this once\n\nSelect **Execute workflow** below. It creates two local tables:\n\n- `scheduled_runs` — one row per thing you have asked your agent to do on a schedule\n- `schedule_results` — what your agent said each time one of them ran\n\nNothing leaves your computer. Both start empty.\n\nRunning this again is safe and changes nothing.",
         "height": 380,
         "width": 420,
         "color": 4
@@ -113,7 +113,7 @@
               "type": "string"
             },
             {
-              "name": "createdAt",
+              "name": "savedAt",
               "type": "string"
             },
             {

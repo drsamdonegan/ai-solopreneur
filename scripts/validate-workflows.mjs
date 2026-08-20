@@ -205,6 +205,48 @@ for (const file of filedWorkflows.keys()) {
   );
 }
 
+// n8n reserves a few column names on its own tables, and a dataTable create
+// that asks for one fails outright — which takes the whole skill with it: the
+// tables never appear, every tool built on them errors, and the only clue is a
+// line in the n8n log. The scheduler shipped with createdAt and monthly-update
+// with updatedAt, and both were dead on arrival for exactly this reason. It is
+// a one-word mistake that costs an afternoon to find, so it is checked here,
+// across every skill, installed or not.
+const RESERVED_COLUMN_NAMES = new Set(["id", "createdAt", "updatedAt"]);
+
+async function checkReservedColumns(label, path) {
+  let workflow;
+  try {
+    workflow = JSON.parse(await readFile(path, "utf8"));
+  } catch {
+    return;
+  }
+  for (const node of workflow.nodes ?? []) {
+    const columns = node.parameters?.columns?.column;
+    if (node.parameters?.operation !== "create" || !Array.isArray(columns)) {
+      continue;
+    }
+    for (const column of columns) {
+      check(
+        !RESERVED_COLUMN_NAMES.has(column.name),
+        `${label}: table "${node.parameters.tableName}" declares "${column.name}", which n8n reserves — the table is never created and the skill cannot work`,
+      );
+    }
+  }
+}
+
+for (const file of actualFiles) {
+  await checkReservedColumns(file, join(workflowDirectory, file));
+}
+for (const skill of optionalSkills) {
+  for (const file of skill.workflowFiles) {
+    await checkReservedColumns(
+      `optional-skills/${skill.id}/workflows/${file}`,
+      join(projectRoot, "optional-skills", skill.id, "workflows", file),
+    );
+  }
+}
+
 const workflows = new Map();
 for (const file of expectedFiles) {
   const raw = await readFile(join(workflowDirectory, file), "utf8");
