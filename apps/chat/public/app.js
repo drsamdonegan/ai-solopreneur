@@ -175,6 +175,7 @@
     ledger: "M5 4h11l3 3v13H5V4Zm3 5h6M8 13h8M8 17h5",
   };
   const SKILL_ICON_BY_ID = {
+    "meeting-to-actions": "checklist",
     "project-assistant": "checklist",
     "meeting-analysis": "checklist",
     "task-capture": "checklist",
@@ -184,7 +185,9 @@
     "domain-research": "globe",
     "paid-domain-research": "globe",
     "seo-article-writer": "article",
+    "seo-aeo-article-writer": "article",
     "funding-radar": "grant",
+    "funding-and-investor-updates": "grant",
     "monthly-update": "calendar",
     "xero-coding-review": "ledger",
   };
@@ -1380,6 +1383,28 @@
     return svg;
   }
 
+  function skillPackageState(skill) {
+    const modules = Array.isArray(skill.modules) ? skill.modules : [];
+    const missingExtensions = modules.filter(
+      (module) => module.role === "extension" && module.installed !== true,
+    );
+    let label;
+    if (skill.installed === true) {
+      label =
+        missingExtensions.length > 0
+          ? `Installed. Optional additions not installed: ${missingExtensions.map((module) => module.name).join(", ")}.`
+          : "Installed.";
+    } else if (skill.partiallyInstalled === true) {
+      label = "Partly installed.";
+    } else {
+      label = skill.installable === false ? "Included with the base agent." : "Not installed.";
+    }
+    if (skill.needsSync === true) {
+      label += " Run npm run sync-skills before relying on it in chat.";
+    }
+    return label;
+  }
+
   function agentStatusLabel(agent) {
     const availability =
       agent.status === "active"
@@ -1419,16 +1444,14 @@
 
       const skills = document.createElement("span");
       skills.className = "agent-card__skills";
-      const installedSkills = Array.isArray(agent.skills) ? agent.skills : [];
-      for (const skill of installedSkills) {
+      const skillPackages = Array.isArray(agent.skills) ? agent.skills : [];
+      for (const skill of skillPackages) {
         const chip = document.createElement("span");
         chip.className = "agent-card__skill";
+        chip.dataset.installed = String(skill.installed === true);
+        chip.dataset.partial = String(skill.partiallyInstalled === true);
         chip.setAttribute("aria-hidden", "true");
-        chip.dataset.tooltip = `${skill.name}: ${skill.description}${
-          agent.syncRequired
-            ? " Run npm run sync-skills before relying on this skill in chat."
-            : ""
-        }`;
+        chip.dataset.tooltip = `${skill.name}: ${skill.description} ${skillPackageState(skill)}`;
         chip.append(skillIcon(skill.id));
         skills.append(chip);
       }
@@ -1436,9 +1459,9 @@
       const summary = document.createElement("span");
       summary.className = "visually-hidden";
       summary.textContent =
-        installedSkills.length > 0
-          ? `Skills: ${installedSkills.map((skill) => skill.name).join(", ")}.`
-          : "No skills installed yet.";
+        skillPackages.length > 0
+          ? `Skill packages: ${skillPackages.map((skill) => `${skill.name}, ${skillPackageState(skill)}`).join(" ")}`
+          : "No packaged skills yet.";
 
       card.append(name, status, description, skills, summary);
       card.addEventListener("click", () => {
@@ -1464,11 +1487,13 @@
     if (skills.length === 0) {
       const empty = document.createElement("li");
       empty.className = "agent-dialog__empty";
-      empty.textContent = "No skills are installed for this agent yet.";
+      empty.textContent = "No packaged skills are available for this agent yet.";
       elements.agentDialogSkills.append(empty);
     } else {
       for (const skill of skills) {
         const item = document.createElement("li");
+        item.dataset.installed = String(skill.installed === true);
+        item.dataset.partial = String(skill.partiallyInstalled === true);
         const icon = document.createElement("span");
         icon.className = "agent-dialog__skill-icon";
         icon.setAttribute("aria-hidden", "true");
@@ -1478,7 +1503,22 @@
         name.textContent = skill.name;
         const description = document.createElement("span");
         description.textContent = skill.description;
-        copy.append(name, description);
+        const state = document.createElement("span");
+        state.className = "agent-dialog__skill-state";
+        state.textContent = skillPackageState(skill);
+        copy.append(name, description, state);
+        const modules = Array.isArray(skill.modules) ? skill.modules : [];
+        if (modules.length > 1) {
+          const capabilityList = document.createElement("span");
+          capabilityList.className = "agent-dialog__skill-modules";
+          capabilityList.textContent = `Includes: ${modules
+            .map(
+              (module) =>
+                `${module.name}${module.role === "extension" ? " (optional)" : ""}`,
+            )
+            .join(", ")}.`;
+          copy.append(capabilityList);
+        }
         item.append(icon, copy);
         elements.agentDialogSkills.append(item);
       }

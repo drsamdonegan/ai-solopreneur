@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "id": "linkedin-prospect-search",
+  "agent": "sales",
+  "name": "LinkedIn Prospect Search",
+  "description": "Finds a short, evidence-backed list of public professional prospects by role, sector, location, and company size after explicit paid-search approval.",
+  "icon": "search",
+  "installable": true,
+  "requires": [],
+  "modules": [
+    { "id": "linkedin-prospect-search", "name": "Prospect search", "role": "core", "source": "optional" }
+  ]
+}

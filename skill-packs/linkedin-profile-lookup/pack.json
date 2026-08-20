@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "id": "linkedin-profile-lookup",
+  "agent": "sales",
+  "name": "LinkedIn Profile Lookup",
+  "description": "Matches one named person to likely public professional details using a separately connected provider and explicit paid-search approval.",
+  "icon": "profile",
+  "installable": true,
+  "requires": [],
+  "modules": [
+    { "id": "linkedin-profile-lookup", "name": "Profile lookup", "role": "core", "source": "optional" }
+  ]
+}

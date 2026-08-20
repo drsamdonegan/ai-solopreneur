@@ -1,5 +1,6 @@
-// Makes a clean copy of the base agent: no optional skills, no optional tools,
-// and no catalogue folder either.
+// Makes a clean copy of the base agent: no installed optional modules, no
+// optional tools, and no large module catalogue. Small skill-package contracts
+// remain so learners can see and surgically fetch the supported packages.
 //
 // This is an instructor tool. It reads from the last commit rather than the
 // working folder, so whatever you have installed or half-edited locally cannot
@@ -61,7 +62,13 @@ function git(args) {
 }
 
 function shouldInclude(path) {
-  // The catalogue itself never ships in a base copy.
+  // Keep the small surgical installer, but not the module catalogue itself.
+  if (
+    path === "optional-skills/_installer" ||
+    path.startsWith("optional-skills/_installer/")
+  ) {
+    return true;
+  }
   if (path === "optional-skills" || path.startsWith("optional-skills/")) {
     return false;
   }
@@ -135,7 +142,8 @@ await writeFile(
   "utf8",
 );
 
-// Optional installers make surgical additions to three shared JSON files.
+// Optional installers make surgical additions to the shared workflow, policy,
+// enabled-list, and folder-manifest files.
 // Excluding the skill's own files is therefore not enough: reverse every
 // catalogue-declared addition so the output is a physically clean base even
 // when the release checkout has optional skills installed.

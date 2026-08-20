@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "id": "seo-aeo-article-writer",
+  "agent": "marketing",
+  "name": "SEO/AEO Article Writer",
+  "description": "Drafts a grounded search- and answer-engine-friendly article from saved domain research and verified public sources.",
+  "icon": "article",
+  "installable": true,
+  "requires": ["domain-research"],
+  "modules": [
+    { "id": "seo-article-writer", "name": "SEO/AEO article writing", "role": "core", "source": "optional" }
+  ]
+}

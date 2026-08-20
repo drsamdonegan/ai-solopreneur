@@ -5,6 +5,24 @@ versioning for local workshop releases.
 
 ## Unreleased
 
+### Added
+
+- Six learner-facing skill packages with the intended agent-card inventory:
+  Project Manager 1, Sales 2, Marketing 2, Investment 1, and Bookkeeping 0.
+- A real Crustdata-backed LinkedIn Prospect Search for role, sector, location,
+  and company-size discovery, capped at ten public professional results and
+  0.30 credits after fresh approval for every call.
+- Package-aware surgical installation, dependency resolution, optional
+  extensions, GitHub package links, and legacy module-ID compatibility.
+
+### Changed
+
+- Agent cards now show stable packages and installation/sync state instead of
+  exposing every internal Markdown skill as a separate product feature.
+- Existing capabilities are retained as package modules or add-ons: paid
+  domain research and Monthly Update are optional extensions; Scheduler and
+  Telegram remain separate cross-cutting add-ons.
+
 ## 0.3.0 — 2026-08-19
 
 ### Added

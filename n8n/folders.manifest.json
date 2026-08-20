@@ -46,7 +46,10 @@
         "52-tool-get-business-memory.json",
         "53-tool-start-paid-domain-research.json",
         "54-tool-complete-paid-domain-research.json",
-        "55-tool-get-paid-domain-research.json"
+        "55-tool-get-paid-domain-research.json",
+        "56-tool-start-seo-article.json",
+        "57-internal-write-seo-article.json",
+        "58-tool-get-seo-article.json"
       ]
     },
     {
@@ -54,7 +57,8 @@
       "name": "4. Finding customers",
       "description": "Matching one named person to a likely public professional profile after the user explicitly requests a paid lookup.",
       "workflows": [
-        "61-tool-lookup-linkedin-profile.json"
+        "61-tool-lookup-linkedin-profile.json",
+        "59-tool-search-linkedin-prospects.json"
       ]
     },
     {

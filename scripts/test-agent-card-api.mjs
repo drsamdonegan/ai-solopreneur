@@ -16,6 +16,7 @@ const temporary = await mkdtemp(join(tmpdir(), "agent-card-api-test-"));
 const skillsDirectory = join(temporary, "skills");
 const profileDirectory = join(temporary, "profile");
 const publicDirectory = join(temporary, "public");
+const skillPacksDirectory = join(process.cwd(), "skill-packs");
 await mkdir(skillsDirectory, { recursive: true });
 await mkdir(publicDirectory, { recursive: true });
 await writeFile(join(publicDirectory, "index.html"), "<!doctype html><title>test</title>");
@@ -37,11 +38,14 @@ async function addSkill(id, agent, name) {
   await writeFile(join(directory, "SKILL.md"), `# ${name}\n\n${name} instructions.\n`);
 }
 
+await addSkill("project-assistant", "project-manager", "Project Assistant");
 await addSkill("meeting-analysis", "project-manager", "Meeting Analysis");
+await addSkill("task-capture", "project-manager", "Task Capture");
+await addSkill("weekly-status", "project-manager", "Weekly Status");
 await addSkill("linkedin-profile-lookup", "sales", "LinkedIn Lookup");
 await writeFile(
   join(skillsDirectory, "enabled.txt"),
-  "meeting-analysis\nlinkedin-profile-lookup\n",
+  "project-assistant\nmeeting-analysis\ntask-capture\nweekly-status\nlinkedin-profile-lookup\n",
 );
 const bundle = await compileSkills(skillsDirectory, { profileDirectory });
 await writeSkillSyncState(profileDirectory, bundle.sourceHash);
@@ -62,6 +66,7 @@ const server = createChatServer({
   chatStore,
   profileStore: new ProfileStore(profileDirectory),
   skillsDirectory,
+  skillPacksDirectory,
   profileDirectory,
   publicDirectory,
   upstreamUrl: "http://127.0.0.1:9/webhook/chat",
@@ -85,8 +90,17 @@ try {
   assert.equal(result.body.schemaVersion, 2);
   assert.equal(result.body.agents.length, 5);
   assert.equal(result.body.agents[0].syncRequired, false);
-  assert.equal(result.body.agents[0].skills[0].id, "meeting-analysis");
+  assert.deepEqual(
+    result.body.agents.map((agent) => agent.skills.length),
+    [1, 2, 2, 1, 0],
+  );
+  assert.equal(result.body.agents[0].skills[0].id, "meeting-to-actions");
+  assert.equal(result.body.agents[0].skills[0].installed, true);
+  assert.equal(result.body.agents[0].skills[0].modules.length, 4);
   assert.equal(result.body.agents[1].skills[0].id, "linkedin-profile-lookup");
+  assert.equal(result.body.agents[1].skills[0].installed, true);
+  assert.equal(result.body.agents[1].skills[1].id, "linkedin-prospect-search");
+  assert.equal(result.body.agents[1].skills[1].installed, false);
   assert.equal(Object.hasOwn(result.body.agents[0], "workflowPath"), false);
 
   const malformedDirectory = join(skillsDirectory, "malformed-skill");
@@ -94,11 +108,11 @@ try {
   await writeFile(join(malformedDirectory, "skill.yaml"), "id: wrong\n");
   await writeFile(
     join(skillsDirectory, "enabled.txt"),
-    "meeting-analysis\nlinkedin-profile-lookup\nmalformed-skill\n../escape\n",
+    "project-assistant\nmeeting-analysis\ntask-capture\nweekly-status\nlinkedin-profile-lookup\nmalformed-skill\n../escape\n",
   );
   result = await jsonRequest("/api/agents");
   assert.equal(result.body.agents[0].syncRequired, true);
-  assert.equal(result.body.agents.flatMap((agent) => agent.skills).length, 2);
+  assert.equal(result.body.agents.flatMap((agent) => agent.skills).length, 6);
   assert(warnings.length >= 2 && warnings.length <= 3);
 
   result = await jsonRequest("/api/agent-settings");
@@ -154,8 +168,11 @@ try {
     DEFAULT_AGENTS,
     emptySkills,
     profileDirectory,
+    undefined,
+    skillPacksDirectory,
   );
-  assert(emptyCards.every((agent) => agent.skills.length === 0));
+  assert.deepEqual(emptyCards.map((agent) => agent.skills.length), [1, 2, 2, 1, 0]);
+  assert(emptyCards.flatMap((agent) => agent.skills).every((pack) => !pack.installed));
   assert(emptyCards.every((agent) => agent.syncRequired));
 
   process.stdout.write("Agent card inventory, sync state, and settings API checks passed.\n");

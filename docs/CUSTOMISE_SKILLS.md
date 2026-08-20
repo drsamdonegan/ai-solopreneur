@@ -53,12 +53,14 @@ Run the skill-sync helper after every change. Only IDs in this file are compiled
 
 At least one skill must remain enabled.
 
-## Optional extra skills
+## Optional skill packages
 
-Eight further skills are available in the catalogue. A full repository checkout
-keeps them in [`optional-skills/`](../optional-skills/); a generated learner base
-omits that catalogue and installs the same skill from its GitHub folder URL.
-None is part of the four-skill base until you add it.
+The agent card deliberately groups the internal modules into one Project
+Manager package, two Sales packages, two Marketing packages, one Investment
+package, and no Bookkeeping package. A full repository checkout keeps nine
+optional modules in [`optional-skills/`](../optional-skills/). A generated
+learner base omits that large catalogue but retains the small `skill-packs/`
+contracts, so it can fetch only the requested modules from GitHub.
 
 Open [`optional-skills/README.md`](../optional-skills/README.md) for the full list, what each one costs, and what it needs.
 
@@ -67,23 +69,27 @@ Open [`optional-skills/README.md`](../optional-skills/README.md) for the full li
 Ask Claude Code, in plain English:
 
 ```text
-Add the funding-radar optional skill to my agent.
+Add the funding-and-investor-updates package to my agent.
 ```
 
 Or run it yourself from the top of your project folder:
 
 ```bash
-npm run add-skill -- funding-radar
+npm run add-skill -- funding-and-investor-updates
 ```
 
 Then sync the skills and restart the services, exactly as you would after editing a skill by hand.
 
-The installer copies the skill's files in, wires up any workflows it needs, and adds its line to `skills/enabled.txt` for you. It never overwrites anything you have already changed, and running it twice does nothing the second time.
+The installer resolves package dependencies, copies each core module, wires up
+its workflows, and adds the module IDs to `skills/enabled.txt`. It preflights
+the cumulative shared-file changes, never overwrites customised files, and is
+idempotent. Add optional extensions such as Monthly Update with
+`--with-extensions`. Direct legacy module IDs remain supported.
 
 ### One rule makes these work well
 
-- **Add one at a time.** Each enabled skill is loaded only for its owning agent,
-  but two skills for the same role can still contain competing reply formats.
+- **Add one package at a time.** Every enabled module is loaded only for its
+  owning agent; the package boundary keeps related modules and formats together.
 
 Remove a skill's line from `skills/enabled.txt` to switch it off again without deleting anything.
 

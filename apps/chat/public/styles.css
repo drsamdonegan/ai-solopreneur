@@ -476,6 +476,16 @@ textarea:focus-visible,
   color: var(--agent-ink);
 }
 
+.agent-card__skill[data-installed="false"][data-partial="false"] {
+  border-style: dashed;
+  background: white;
+}
+
+.agent-card__skill[data-partial="true"] {
+  border-style: dotted;
+  border-width: 2px;
+}
+
 .agent-card__skill svg {
   width: 0.95rem;
   height: 0.95rem;
@@ -1571,6 +1581,11 @@ textarea:focus-visible,
   background: var(--agent-tint);
 }
 
+.agent-dialog__skills li[data-installed="false"][data-partial="false"] {
+  border: 1px dashed color-mix(in srgb, var(--agent-accent) 28%, #ded8e7);
+  background: white;
+}
+
 .agent-dialog__skills li > span:last-child {
   display: grid;
   gap: 0.15rem;
@@ -1585,6 +1600,15 @@ textarea:focus-visible,
   color: #655f6e;
   font-size: 0.66rem;
   line-height: 1.4;
+}
+
+.agent-dialog__skills .agent-dialog__skill-state {
+  color: var(--agent-ink);
+  font-weight: 750;
+}
+
+.agent-dialog__skills .agent-dialog__skill-modules {
+  font-size: 0.62rem;
 }
 
 .agent-dialog__skill-icon {

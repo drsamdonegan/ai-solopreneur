@@ -31,9 +31,14 @@ import {
   AGENT_NODE_BY_ID,
   AGENT_NODE_NAMES,
 } from "../../scripts/agent-runtime-contract.mjs";
+import {
+  loadSkillPacks,
+  moduleIdsForPackage,
+} from "../../scripts/skill-packages.mjs";
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const optionalSkillsDirectory = join(projectRoot, "optional-skills");
+const skillPacksDirectory = join(projectRoot, "skill-packs");
 const agentWorkflowPath = join(
   projectRoot,
   "n8n",
@@ -80,6 +85,15 @@ async function listSkillIds() {
     .filter((entry) => entry.isDirectory() && !entry.name.startsWith("_"))
     .map((entry) => entry.name)
     .sort();
+}
+
+async function listSkillPacks() {
+  try {
+    return await loadSkillPacks(skillPacksDirectory);
+  } catch (error) {
+    if (error?.code === "ENOENT") return [];
+    throw error;
+  }
 }
 
 async function copyTree(from, to) {
@@ -313,24 +327,34 @@ function addFolderPlacements(folderManifest, placements) {
   }
 }
 
-async function enableSkill(id) {
+async function enableSkills(ids) {
   const source = await readFile(enabledPath, "utf8");
-  const alreadyEnabled = source
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .includes(id);
-
-  if (alreadyEnabled) {
-    note(skipped, `"${id}" is already listed in skills/enabled.txt`);
-    return;
+  const enabled = enabledIdsFromSource(source);
+  const additions = [];
+  for (const id of ids) {
+    if (enabled.has(id)) {
+      note(skipped, `"${id}" is already listed in skills/enabled.txt`);
+      continue;
+    }
+    enabled.add(id);
+    additions.push(id);
+    note(done, `Switched "${id}" on in skills/enabled.txt`);
   }
-
+  if (additions.length === 0) return;
   const separator = source.endsWith("\n") ? "" : "\n";
-  await writeFile(enabledPath, `${source}${separator}${id}\n`);
-  note(done, `Switched "${id}" on in skills/enabled.txt`);
+  await writeFile(enabledPath, `${source}${separator}${additions.join("\n")}\n`);
 }
 
-// --- fetching one skill from GitHub ----------------------------------------
+function enabledIdsFromSource(source) {
+  return new Set(
+    source
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line && !line.startsWith("#")),
+  );
+}
+
+// --- fetching one package or module from GitHub -----------------------------
 
 // A learner who made their project before a skill existed has no folder for it.
 // Rather than copy the whole catalogue down, this fetches exactly the one
@@ -341,19 +365,30 @@ const DEFAULT_SOURCE = {
   ref: "main",
 };
 
-function parseSkillUrl(value) {
-  // https://github.com/<owner>/<repo>/tree/<ref>/optional-skills/<id>
+function parseGithubFolderUrl(value) {
+  // https://github.com/<owner>/<repo>/tree/<ref>/(optional-skills|skill-packs)/<id>
   const match =
     /^https?:\/\/github\.com\/([^/]+)\/([^/]+)\/tree\/([^/]+)\/(.+?)\/?$/.exec(value);
   if (!match) {
     throw new Error(
       `That does not look like a GitHub folder link:\n  ${value}\n\n` +
-        "Open the skill's folder on GitHub and copy the address from the browser.",
+        "Open the package or module folder on GitHub and copy the address from the browser.",
     );
   }
   const [, owner, repo, ref, path] = match;
+  const pathParts = path.split("/");
+  const kind = pathParts.includes("skill-packs")
+    ? "package"
+    : pathParts.includes("optional-skills")
+      ? "module"
+      : null;
+  if (!kind) {
+    throw new Error(
+      "The GitHub folder must be inside skill-packs/ or optional-skills/.",
+    );
+  }
   const id = path.split("/").pop();
-  return { owner, repo, ref, path, id };
+  return { owner, repo, ref, path, id, kind };
 }
 
 async function githubJson(url) {
@@ -401,34 +436,37 @@ async function downloadFolder(source, path, target) {
   }
 }
 
-async function fetchSkill(request) {
-  const skillDirectory = join(optionalSkillsDirectory, request.id);
+async function fetchFolder(request) {
+  const parent = request.kind === "package" ? skillPacksDirectory : optionalSkillsDirectory;
+  const folder = join(parent, request.id);
+  const relativeFolder = `${request.kind === "package" ? "skill-packs" : "optional-skills"}/${request.id}`;
+  const contractFile = request.kind === "package" ? "pack.json" : "manifest.json";
 
-  if (await exists(skillDirectory)) {
-    note(skipped, `optional-skills/${request.id} is already here, so nothing was downloaded`);
+  if (await exists(folder)) {
+    note(skipped, `${relativeFolder} is already here, so nothing was downloaded`);
     return request.id;
   }
 
-  process.stdout.write(`Downloading the ${request.id} skill from GitHub...\n`);
+  process.stdout.write(`Downloading ${relativeFolder} from GitHub...\n`);
   try {
-    await downloadFolder(request, request.path, skillDirectory);
-    if (!(await exists(join(skillDirectory, "manifest.json")))) {
+    await downloadFolder(request, request.path, folder);
+    if (!(await exists(join(folder, contractFile)))) {
       throw new Error(
-        `The folder downloaded, but it has no manifest.json, so it is not a skill:\n  ${request.path}`,
+        `The folder downloaded, but it has no ${contractFile}:\n  ${request.path}`,
       );
     }
   } catch (error) {
     // Leave nothing half-downloaded behind for the next run to trip over.
-    await rm(skillDirectory, { recursive: true, force: true });
+    await rm(folder, { recursive: true, force: true });
     throw error;
   }
-  note(done, `Downloaded optional-skills/${request.id} from GitHub`);
+  note(done, `Downloaded ${relativeFolder} from GitHub`);
   return request.id;
 }
 
 // --- main ------------------------------------------------------------------
 
-async function addSkill(id) {
+async function validateModule(id, plannedIds) {
   const skillDirectory = join(optionalSkillsDirectory, id);
   if (!(await exists(skillDirectory))) {
     const available = await listSkillIds();
@@ -464,77 +502,222 @@ async function addSkill(id) {
   }
 
   for (const required of manifest.requires ?? []) {
-    if (!(await exists(join(projectRoot, "skills", required)))) {
+    if (
+      !plannedIds.has(required) &&
+      !(await exists(join(projectRoot, "skills", required)))
+    ) {
       throw new Error(
         `"${id}" needs the "${required}" skill first.\n` +
           `Run: node optional-skills/_installer/add-skill.mjs ${required}`,
       );
     }
   }
+  return { id, manifest, skillDirectory };
+}
 
-  // Validate and prepare every shared-file edit before copying anything. An
-  // old base workflow therefore fails cleanly instead of leaving half a skill.
+async function addSkills(ids) {
+  const uniqueIds = [...new Set(ids)];
+  if (uniqueIds.length === 0) return [];
+  const plannedIds = new Set(uniqueIds);
+  const modules = [];
+  for (const id of uniqueIds) {
+    modules.push(await validateModule(id, plannedIds));
+  }
+
+  // Validate and prepare every shared-file edit for the whole package before
+  // copying anything. An old base workflow therefore fails cleanly instead of
+  // leaving half a package.
   const workflow = await readJson(agentWorkflowPath);
-  for (const toolNode of manifest.agentTools ?? []) {
-    addToolNode(workflow, toolNode, manifest.agent);
-  }
-  patchBasePolicy(workflow, manifest);
-
   const policy = await readJson(policyPath);
-  addPolicyEntries(policy, manifest.policyEntries ?? []);
+  const needsFolders = modules.some(
+    ({ manifest }) => (manifest.folders ?? []).length > 0,
+  );
+  const folderManifest = needsFolders ? await readJson(folderManifestPath) : null;
 
-  let folderManifest = null;
-  if ((manifest.folders ?? []).length > 0) {
-    folderManifest = await readJson(folderManifestPath);
-    addFolderPlacements(folderManifest, manifest.folders);
+  for (const { manifest } of modules) {
+    for (const toolNode of manifest.agentTools ?? []) {
+      addToolNode(workflow, toolNode, manifest.agent);
+    }
+    patchBasePolicy(workflow, manifest);
+    addPolicyEntries(policy, manifest.policyEntries ?? []);
+    if (folderManifest !== null) {
+      addFolderPlacements(folderManifest, manifest.folders ?? []);
+    }
   }
 
-  // 1. The skill's own files.
-  await copyTree(join(skillDirectory, "skill"), join(projectRoot, "skills", id));
-
-  // 2. Its tool workflows.
-  const workflowsDirectory = join(skillDirectory, "workflows");
-  if (await exists(workflowsDirectory)) {
-    await copyTree(workflowsDirectory, join(projectRoot, "n8n", "workflows"));
+  for (const { id, skillDirectory } of modules) {
+    await copyTree(join(skillDirectory, "skill"), join(projectRoot, "skills", id));
+    const workflowsDirectory = join(skillDirectory, "workflows");
+    if (await exists(workflowsDirectory)) {
+      await copyTree(workflowsDirectory, join(projectRoot, "n8n", "workflows"));
+    }
   }
 
-  // 3. The four shared files, already validated in memory above.
+  // The four shared files are written once, after the cumulative edits pass.
   await writeJson(agentWorkflowPath, workflow);
   await writeJson(policyPath, policy);
   if (folderManifest !== null) {
     await writeJson(folderManifestPath, folderManifest);
   }
-  await enableSkill(id);
+  await enableSkills(uniqueIds);
 
-  return manifest;
+  return modules.map(({ manifest }) => manifest);
 }
 
-const requested = process.argv[2];
+async function ensureOptionalModule(id, source = DEFAULT_SOURCE) {
+  if (await exists(join(optionalSkillsDirectory, id))) return;
+  await fetchFolder({
+    ...source,
+    id,
+    kind: "module",
+    path: `optional-skills/${id}`,
+  });
+}
 
-if (!requested || requested === "--list") {
+async function installPackage(
+  id,
+  { includeExtensions = false, source = DEFAULT_SOURCE } = {},
+) {
+  const packs = await listSkillPacks();
+  const byId = new Map(packs.map((pack) => [pack.id, pack]));
+  const requestedPack = byId.get(id);
+  if (!requestedPack) {
+    throw new Error(`There is no skill package called "${id}".`);
+  }
+  if (!requestedPack.installable) {
+    throw new Error(
+      `"${requestedPack.name}" is part of the base project and is not installed separately.`,
+    );
+  }
+
+  const packagePlan = [];
+  const resolved = new Set();
+  function resolvePackage(packageId) {
+    if (resolved.has(packageId)) return;
+    const pack = byId.get(packageId);
+    if (!pack) {
+      throw new Error(`The package dependency "${packageId}" is not available.`);
+    }
+    for (const requirement of pack.requires) resolvePackage(requirement);
+    resolved.add(packageId);
+    packagePlan.push(pack);
+  }
+  resolvePackage(id);
+
+  const selectedModules = packagePlan.flatMap((pack) =>
+    pack.modules.filter(
+      (module) => includeExtensions || module.role === "core",
+    ),
+  );
+  for (const module of selectedModules) {
+    if (module.source === "base") {
+      if (!(await exists(join(projectRoot, "skills", module.id)))) {
+        throw new Error(
+          `The package plan expects the base module "${module.id}", but it is missing.`,
+        );
+      }
+    } else {
+      await ensureOptionalModule(module.id, source);
+    }
+  }
+
+  const optionalIds = [...new Set(
+    selectedModules
+      .filter((module) => module.source === "optional")
+      .map((module) => module.id),
+  )];
+  const manifests = await addSkills(optionalIds);
+  for (const pack of packagePlan) {
+    note(done, `Installed the "${pack.name}" package`);
+  }
+  return manifests;
+}
+
+async function addModule(id) {
+  const [manifest] = await addSkills([id]);
+  return [manifest];
+}
+
+async function printCatalogue() {
+  const packs = await listSkillPacks();
+  const enabled = enabledIdsFromSource(await readFile(enabledPath, "utf8"));
+  process.stdout.write("Skill packages shown in the agent card:\n");
+  for (const pack of packs) {
+    const core = moduleIdsForPackage(pack);
+    const installed = (
+      await Promise.all(
+        core.map(async (id) =>
+          enabled.has(id) && (await exists(join(projectRoot, "skills", id))),
+        ),
+      )
+    ).every(Boolean);
+    const status = !pack.installable
+      ? " (included in base)"
+      : installed
+        ? " (installed)"
+        : "";
+    process.stdout.write(`  ${pack.id.padEnd(31)} ${pack.name}${status}\n`);
+  }
+
+  const packagedModules = new Set(
+    packs.flatMap((pack) => pack.modules.map((module) => module.id)),
+  );
   const ids = await listSkillIds();
-  process.stdout.write("Optional skills you can add:\n");
+  process.stdout.write("\nUnderlying modules and add-ons:\n");
   for (const id of ids) {
     const manifest = await readJson(join(optionalSkillsDirectory, id, "manifest.json"));
-    const installed = (await exists(join(projectRoot, "skills", id))) ? " (installed)" : "";
-    process.stdout.write(`  ${id.padEnd(26)} ${manifest.name}${installed}\n`);
+    const installed = enabled.has(id) && (await exists(join(projectRoot, "skills", id)))
+      ? " (installed)"
+      : "";
+    const relationship = packagedModules.has(id) ? " [package module]" : " [add-on]";
+    process.stdout.write(
+      `  ${id.padEnd(31)} ${manifest.name}${relationship}${installed}\n`,
+    );
   }
   process.stdout.write(
-    "\nAdd one with:\n" +
-      "  npm run add-skill -- <skill-id>\n\n" +
-      "Or paste a skill's GitHub folder address to download just that one first:\n" +
-      `  npm run add-skill -- https://github.com/${DEFAULT_SOURCE.owner}/${DEFAULT_SOURCE.repo}/tree/${DEFAULT_SOURCE.ref}/optional-skills/<skill-id>\n`,
+    "\nAdd a package (core modules only):\n" +
+      "  npm run add-skill -- <package-id>\n" +
+      "Add its optional extensions too:\n" +
+      "  npm run add-skill -- <package-id> --with-extensions\n\n" +
+      "Legacy module IDs and GitHub folder links still work for surgical installs.\n",
   );
+}
+
+const args = process.argv.slice(2);
+const includeExtensions = args.includes("--with-extensions");
+const requested = args.find((argument) => argument !== "--with-extensions");
+
+if (!requested || requested === "--list") {
+  await printCatalogue();
   process.exit(0);
 }
 
-let manifest;
+let manifests = [];
+let installedName = requested;
 try {
-  // A GitHub folder address means fetch that one skill, then install it.
-  const id = requested.startsWith("http")
-    ? await fetchSkill(parseSkillUrl(requested))
-    : requested;
-  manifest = await addSkill(id);
+  let id = requested;
+  let source = DEFAULT_SOURCE;
+  let requestedKind = null;
+  if (requested.startsWith("http")) {
+    const request = parseGithubFolderUrl(requested);
+    await fetchFolder(request);
+    id = request.id;
+    requestedKind = request.kind;
+    source = { owner: request.owner, repo: request.repo, ref: request.ref };
+  }
+
+  const packs = await listSkillPacks();
+  const pack = packs.find((entry) => entry.id === id);
+  if (requestedKind === "package" || (!requestedKind && pack)) {
+    manifests = await installPackage(id, { includeExtensions, source });
+    installedName = pack?.name ?? id;
+  } else {
+    if (requestedKind !== "module") {
+      await ensureOptionalModule(id, source);
+    }
+    manifests = await addModule(id);
+    installedName = manifests[0].name;
+  }
 } catch (error) {
   // A learner should see the problem, not a stack trace.
   process.stderr.write(`\nCould not add "${requested}".\n\n${error.message}\n\n`);
@@ -544,7 +727,7 @@ try {
   process.exit(1);
 }
 
-process.stdout.write(`\n${manifest.name} is installed.\n\n`);
+process.stdout.write(`\n${installedName} is installed.\n\n`);
 if (done.length > 0) {
   process.stdout.write("Changed:\n");
   for (const line of done) process.stdout.write(`  ${line}\n`);
@@ -558,6 +741,6 @@ process.stdout.write(
     "  macOS:   ./sync-skills.command  then  ./start.command\n" +
     "  Windows: sync-skills-windows.cmd  then  start-windows.cmd\n",
 );
-if (manifest.setup) {
-  process.stdout.write(`\n${manifest.setup}\n`);
+for (const manifest of manifests) {
+  if (manifest.setup) process.stdout.write(`\n${manifest.setup}\n`);
 }

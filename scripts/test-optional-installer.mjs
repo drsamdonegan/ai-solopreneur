@@ -18,7 +18,14 @@ const temporary = await mkdtemp(join(tmpdir(), "optional-installer-test-"));
 
 async function makeScratch(name) {
   const root = join(temporary, name);
-  for (const directory of ["optional-skills", "scripts", "n8n", "skills", "tools"]) {
+  for (const directory of [
+    "optional-skills",
+    "skill-packs",
+    "scripts",
+    "n8n",
+    "skills",
+    "tools",
+  ]) {
     await cp(join(projectRoot, directory), join(root, directory), {
       recursive: true,
     });
@@ -26,10 +33,14 @@ async function makeScratch(name) {
   return root;
 }
 
-function install(root, skillId, expectSuccess = true) {
+function install(root, skillId, expectSuccess = true, extraArgs = []) {
   const result = spawnSync(
     process.execPath,
-    [join(root, "optional-skills", "_installer", "add-skill.mjs"), skillId],
+    [
+      join(root, "optional-skills", "_installer", "add-skill.mjs"),
+      skillId,
+      ...extraArgs,
+    ],
     { cwd: root, encoding: "utf8" },
   );
   if (expectSuccess) {
@@ -63,6 +74,63 @@ async function snapshot(root) {
 }
 
 try {
+  const packageRoot = await makeScratch("packages");
+  for (const id of ["linkedin-prospect-search", "seo-article-writer"]) {
+    await rm(join(packageRoot, "skills", id), { recursive: true, force: true });
+  }
+  const packageEnabledPath = join(packageRoot, "skills", "enabled.txt");
+  const packageEnabled = (await readFile(packageEnabledPath, "utf8"))
+    .split(/\r?\n/)
+    .filter((line) => !["linkedin-prospect-search", "seo-article-writer"].includes(line))
+    .join("\n");
+  await writeFile(packageEnabledPath, `${packageEnabled.replace(/\n+$/, "")}\n`);
+  install(packageRoot, "linkedin-prospect-search");
+  install(packageRoot, "seo-aeo-article-writer");
+  await readFile(
+    join(packageRoot, "skills", "linkedin-prospect-search", "SKILL.md"),
+    "utf8",
+  );
+  await readFile(
+    join(packageRoot, "skills", "seo-article-writer", "SKILL.md"),
+    "utf8",
+  );
+  assert.match(
+    await readFile(packageEnabledPath, "utf8"),
+    /linkedin-prospect-search[\s\S]*seo-article-writer/,
+    "package installs must enable their core modules",
+  );
+
+  const atomicRoot = await makeScratch("package-preflight");
+  for (const id of ["domain-research", "seo-article-writer"]) {
+    await rm(join(atomicRoot, "skills", id), { recursive: true, force: true });
+  }
+  const atomicEnabledPath = join(atomicRoot, "skills", "enabled.txt");
+  const atomicEnabled = (await readFile(atomicEnabledPath, "utf8"))
+    .split(/\r?\n/)
+    .filter((line) => !["domain-research", "seo-article-writer"].includes(line))
+    .join("\n");
+  await writeFile(atomicEnabledPath, `${atomicEnabled.replace(/\n+$/, "")}\n`);
+  const invalidSeoMetadataPath = join(
+    atomicRoot,
+    "optional-skills",
+    "seo-article-writer",
+    "skill",
+    "skill.yaml",
+  );
+  await writeFile(
+    invalidSeoMetadataPath,
+    (await readFile(invalidSeoMetadataPath, "utf8")).replace(
+      "agent: marketing",
+      "agent: sales",
+    ),
+  );
+  install(atomicRoot, "seo-aeo-article-writer", false);
+  await assert.rejects(
+    readFile(join(atomicRoot, "skills", "domain-research", "SKILL.md"), "utf8"),
+    /ENOENT/,
+    "a package dependency must not copy before every selected module passes preflight",
+  );
+
   const freeFirstRoot = await makeScratch("free-first-seo");
   // This release checkout may have the paid upgrade installed for integration
   // testing. Remove only its installed skill copy so this fixture still proves
@@ -93,6 +161,7 @@ try {
   const root = await makeScratch("valid");
   const installed = [
     "linkedin-profile-lookup",
+    "linkedin-prospect-search",
     "domain-research",
     "paid-domain-research",
     "seo-article-writer",

@@ -66,10 +66,17 @@ async function declaredOptionalTests() {
   return tests.sort((left, right) => left.path.localeCompare(right.path));
 }
 
+run("public skill-package contract", process.execPath, [
+  "scripts/test-skill-packages.mjs",
+]);
 run("workflow validation", process.execPath, ["scripts/validate-workflows.mjs"]);
 run("agent runtime isolation", process.execPath, ["scripts/test-agent-runtime.mjs"]);
 try {
-  await readFile(join(optionalRoot, "_installer", "add-skill.mjs"), "utf8");
+  const optionalEntries = await readdir(optionalRoot, { withFileTypes: true });
+  const hasCatalogue = optionalEntries.some(
+    (entry) => entry.isDirectory() && !entry.name.startsWith("_"),
+  );
+  if (!hasCatalogue) throw Object.assign(new Error("catalogue omitted"), { code: "ENOENT" });
   run("agent-aware optional installer", process.execPath, [
     "scripts/test-optional-installer.mjs",
   ]);

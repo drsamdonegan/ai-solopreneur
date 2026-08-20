@@ -1,0 +1,56 @@
+{
+  "id": "phase13GetSeoArticle",
+  "name": "58 - TOOL - get_seo_article",
+  "nodes": [
+    {
+      "parameters": { "content": "## get_seo_article\nConversation-bound read of a queued, failed, or saved review draft. Makes no paid or model call.", "height": 140, "width": 430 },
+      "type": "n8n-nodes-base.stickyNote", "typeVersion": 1, "position": [-760, -260], "id": "b5800000-0000-4000-8000-000000000001", "name": "Article status explanation"
+    },
+    {
+      "parameters": { "inputSource": "workflowInputs", "workflowInputs": { "values": [{ "name": "sessionId", "type": "string" }, { "name": "requestId", "type": "string" }, { "name": "jobId", "type": "string" }, { "name": "domain", "type": "string" }] } },
+      "type": "n8n-nodes-base.executeWorkflowTrigger", "typeVersion": 1.2, "position": [-720, 20], "id": "b5800000-0000-4000-8000-000000000002", "name": "Tool Input"
+    },
+    {
+      "parameters": { "mode": "runOnceForEachItem", "language": "javaScript", "jsCode": "const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,sessionId=String($json.sessionId??'').trim(),requestId=String($json.requestId??'').trim(),jobId=String($json.jobId??'').trim();let domain=String($json.domain??'').trim().toLowerCase().replace(/^https?:\\/\\//,'').split('/')[0].replace(/^www\\./,'').replace(/\\.$/,'');let error=null;if(!uuid.test(sessionId)||!uuid.test(requestId))error={code:'INVALID_REQUEST',message:'The article lookup needs a valid conversation.'};else if(jobId&&!/^article-[0-9a-f-]{36}$/i.test(jobId))error={code:'INVALID_JOB_ID',message:'Use the exact article job from this conversation.'};else if(!jobId&&!domain)error={code:'ARTICLE_ID_REQUIRED',message:'Tell me which business domain article to check.'};else if(domain&&(domain.includes('@')||domain.includes(':')||domain.split('.').length<2))error={code:'INVALID_DOMAIN',message:'Use a complete saved business domain.'};return{json:{valid:!error,sessionId,requestId,jobId,domain,...(error?{response:{ok:false,error}}:{})}};" },
+      "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [-480, 20], "id": "b5800000-0000-4000-8000-000000000003", "name": "Validate Article Lookup"
+    },
+    {
+      "parameters": { "conditions": { "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 }, "conditions": [{ "id": "b580-valid", "leftValue": "={{ $json.valid }}", "rightValue": true, "operator": { "type": "boolean", "operation": "true", "singleValue": true } }], "combinator": "and" }, "options": {} },
+      "type": "n8n-nodes-base.if", "typeVersion": 2.2, "position": [-240, 20], "id": "b5800000-0000-4000-8000-000000000004", "name": "Input Is Valid?"
+    },
+    {
+      "parameters": { "url": "=http://127.0.0.1:3000/api/seo-article/jobs?sessionId={{ encodeURIComponent($json.sessionId) }}{{ $json.jobId ? '&jobId=' + encodeURIComponent($json.jobId) : '&domain=' + encodeURIComponent($json.domain) }}", "options": { "timeout": 10000, "response": { "response": { "fullResponse": true, "neverError": true } } } },
+      "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.4, "position": [0, -80], "id": "b5800000-0000-4000-8000-000000000005", "name": "Read Article Job", "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": { "mode": "runOnceForEachItem", "language": "javaScript", "jsCode": "const input=$('Validate Article Lookup').first().json,statusCode=Number($json.statusCode??0),body=$json.body??$json.data??{},job=body.job,article=body.article,previous=body.previousArticle;if(statusCode<200||statusCode>=300||!job)return{json:{...input,response:{ok:false,error:{code:'ARTICLE_NOT_FOUND',message:'I could not find that article in this conversation.'}}}};if(['queued','running'].includes(job.status))return{json:{...input,response:{ok:true,ready:false,status:job.status,stage:job.stage,domain:job.domain,primaryKeyword:job.primaryKeyword,message:job.status==='queued'?'The article is queued. Ask me to check it again shortly.':'The article is still being prepared. Ask me to check it again shortly.'}}};if(job.status==='failed'||job.status==='interrupted')return{json:{...input,response:{ok:false,ready:false,status:job.status,previousDraftAvailable:!!previous?.downloadUrl,previousDownloadUrl:previous?.downloadUrl??'',error:{code:job.errorCode??'ARTICLE_FAILED',message:(job.errorMessage??'The article did not finish, and no new draft was saved.')+(previous?.downloadUrl?' The earlier successful draft is still available.':'')}}}};if(!article?.downloadUrl)return{json:{...input,response:{ok:false,error:{code:'ARTICLE_NOT_SAVED',message:'The job finished without a readable saved draft.'}}}};const meta=article.metadata??{};return{json:{...input,response:{ok:true,ready:true,status:job.status,domain:job.domain,primaryKeyword:job.primaryKeyword,title:meta.seoTitle??'',summary:meta.metaDescription??'',reviewStatus:article.reviewStatus,warnings:Array.isArray(article.warnings)?article.warnings.slice(0,8):[],qualityScore:article.qualityReport?.score,downloadUrl:article.downloadUrl,message:'The review draft is ready. Download the Markdown file to read or edit it.'}}};" },
+      "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [240, -80], "id": "b5800000-0000-4000-8000-000000000006", "name": "Shape Article Status"
+    },
+    {
+      "parameters": { "mode": "runOnceForEachItem", "language": "javaScript", "jsCode": "const i=$('Validate Article Lookup').first().json,r=$json.response??{ok:false,error:{code:'ARTICLE_NOT_FOUND',message:'The article is unavailable.'}};return{json:{occurredAt:new Date().toISOString(),sessionId:i.sessionId,requestId:i.requestId,toolName:'get_seo_article',proposedInput:JSON.stringify({jobId:i.jobId,domain:i.domain}),result:JSON.stringify(r),error:r.ok===false?String(r.error?.message??'Tool failed'):'',response:r}};" },
+      "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [480, 20], "id": "b5800000-0000-4000-8000-000000000007", "name": "Prepare Audit"
+    },
+    {
+      "parameters": { "resource": "row", "operation": "insert", "dataTableId": { "__rl": true, "value": "tool_audit", "mode": "name" }, "columns": { "mappingMode": "defineBelow", "value": { "occurredAt": "={{ $json.occurredAt }}", "sessionId": "={{ $json.sessionId }}", "requestId": "={{ $json.requestId }}", "toolName": "={{ $json.toolName }}", "proposedInput": "={{ $json.proposedInput }}", "result": "={{ $json.result }}", "error": "={{ $json.error }}" }, "matchingColumns": [], "schema": [], "attemptToConvertTypes": false, "convertFieldsToString": false }, "options": {} },
+      "type": "n8n-nodes-base.dataTable", "typeVersion": 1.1, "position": [720, 20], "id": "b5800000-0000-4000-8000-000000000008", "name": "Write Tool Audit", "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": { "mode": "runOnceForEachItem", "language": "javaScript", "jsCode": "const p=$('Prepare Audit').item.json,r={...p.response};if(!Number.isInteger($json.id))r.auditWarning='The lookup could not be written to the local audit table.';return{json:r};" },
+      "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [960, 20], "id": "b5800000-0000-4000-8000-000000000009", "name": "Return Tool Result"
+    }
+  ],
+  "connections": {
+    "Tool Input": { "main": [[{ "node": "Validate Article Lookup", "type": "main", "index": 0 }]] },
+    "Validate Article Lookup": { "main": [[{ "node": "Input Is Valid?", "type": "main", "index": 0 }]] },
+    "Input Is Valid?": { "main": [[{ "node": "Read Article Job", "type": "main", "index": 0 }], [{ "node": "Prepare Audit", "type": "main", "index": 0 }]] },
+    "Read Article Job": { "main": [[{ "node": "Shape Article Status", "type": "main", "index": 0 }]] },
+    "Shape Article Status": { "main": [[{ "node": "Prepare Audit", "type": "main", "index": 0 }]] },
+    "Prepare Audit": { "main": [[{ "node": "Write Tool Audit", "type": "main", "index": 0 }]] },
+    "Write Tool Audit": { "main": [[{ "node": "Return Tool Result", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1", "executionTimeout": 30, "saveDataErrorExecution": "all", "saveDataSuccessExecution": "all", "saveExecutionProgress": true, "saveManualExecutions": true },
+  "active": false,
+  "versionId": "b5800000-0000-4000-8000-000000000099",
+  "meta": { "templateCredsSetupCompleted": true, "testedWithN8n": "2.30.5", "toolRisk": "read", "paidCalls": "none" },
+  "tags": []
+}

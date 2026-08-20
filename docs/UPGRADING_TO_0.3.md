@@ -19,14 +19,21 @@ It reports source changes, installed skills, workflow schema readiness, sync sta
 1. Download or clone the v0.3.0 base.
 2. Run `setup.command` on macOS or `setup-windows.cmd` on Windows.
 3. Start the agent with the matching start helper.
-4. Add only the optional skills you want. Use `npm run add-skill -- <skill-id>` or give Claude Code the skill's GitHub folder URL.
+4. Add only the skill packages you want. Use
+   `npm run add-skill -- <package-id>` or give Claude Code the package's
+   `skill-packs/<package-id>` GitHub folder URL. Direct optional-module IDs and
+   URLs remain supported for older instructions.
 5. Run `npm run import-workflows`.
 6. Run each installed skill's numbered setup workflow when its README names one.
 7. Run `npm run sync-skills` and restart.
 8. Run `npm run verify` and `npm run diagnose`.
 9. Open a new conversation and smoke-test only the agents whose skills you installed.
 
-The base intentionally contains the four Project Manager skills only. Sales, Marketing, Investment, and Bookkeeping can answer safely without a skill, but must say when a requested capability is not installed.
+The base intentionally contains the four Project Manager modules, presented as
+one Meeting to Actions package. Its card still lists two Sales packages, two
+Marketing packages, and one Investment package as not installed, so learners
+can see what is available without loading those instructions. Bookkeeping has
+no package and must say when accounting capability is unavailable.
 
 ## Existing v0.2 learner
 
@@ -80,7 +87,9 @@ Do these in order. The order protects your chats, profile data, credentials, and
     - Project Manager: analyse a short meeting note; action items should use plain `-` lines.
     - Marketing: ask for a domain research scan, then an article; no paid research should start unless explicitly requested.
     - Investment: read the existing Funding Radar report, then start one only if you intend to spend its documented cost.
-    - Sales: with no LinkedIn skill installed, it must say lookup is unavailable. With it installed, each Crustdata search needs explicit cost approval.
+    - Sales: named-person lookup and group prospect search are separate
+      packages. With neither installed, it must say live LinkedIn capability is
+      unavailable. Each installed Crustdata call needs fresh cost approval.
     - Bookkeeping: it must say no accounting tool is installed; v0.3 contains no Xero connector.
 
 ## What is preserved
@@ -95,4 +104,8 @@ Do not run `npm run reset` during an upgrade. Reset deletes local runtime state 
 
 ## If you want only one capability
 
-Give Claude Code [FEATURE_SLICES.md](FEATURE_SLICES.md) and say which slice you want. It should apply the prerequisites, preserve your changes, use the slice's exact verification command, and stop on a real conflict rather than replacing a shared file wholesale.
+For a skill, prefer its `skill-packs/<id>` folder and package installer. For a
+runtime/UI change, give Claude Code [FEATURE_SLICES.md](FEATURE_SLICES.md) and
+say which slice you want. It should apply the prerequisites, preserve your
+changes, use the slice's exact verification command, and stop on a real
+conflict rather than replacing a shared file wholesale.

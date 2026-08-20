@@ -33,6 +33,26 @@ export interface InstalledSkillSummary {
   description: string;
 }
 
+export interface SkillPackageModuleSummary {
+  id: string;
+  name: string;
+  role: "core" | "extension";
+  installed: boolean;
+}
+
+export interface PublicSkillPackageSummary {
+  id: string;
+  agent: string;
+  name: string;
+  description: string;
+  icon: string;
+  installable: boolean;
+  installed: boolean;
+  partiallyInstalled: boolean;
+  needsSync: boolean;
+  modules: SkillPackageModuleSummary[];
+}
+
 type ValidMetadata = Record<string, string> & {
   id: string;
   agent: string;
@@ -42,8 +62,23 @@ type ValidMetadata = Record<string, string> & {
 };
 
 export interface AgentCardDefinition extends PublicAgentDefinition {
-  skills: InstalledSkillSummary[];
+  skills: PublicSkillPackageSummary[];
   syncRequired: boolean;
+}
+
+interface SkillPackageDefinition {
+  id: string;
+  agent: string;
+  name: string;
+  description: string;
+  icon: string;
+  installable: boolean;
+  modules: Array<{
+    id: string;
+    name: string;
+    role: "core" | "extension";
+    source: "base" | "optional";
+  }>;
 }
 
 function parseMetadata(source: string): Record<string, string> {
@@ -197,21 +232,73 @@ async function syncedSourceHash(profileDirectory: string): Promise<string | null
   }
 }
 
+async function readSkillPackages(
+  skillPacksDirectory: string | undefined,
+  logWarning: (message: string) => void,
+): Promise<SkillPackageDefinition[]> {
+  try {
+    const loaderPath = resolve(
+      dirname(fileURLToPath(import.meta.url)),
+      "../../../scripts/skill-packages.mjs",
+    );
+    const loader = (await import(pathToFileURL(loaderPath).href)) as {
+      defaultSkillPacksDirectory: string;
+      loadSkillPacks: (directory?: string) => Promise<SkillPackageDefinition[]>;
+    };
+    return await loader.loadSkillPacks(
+      skillPacksDirectory ?? loader.defaultSkillPacksDirectory,
+    );
+  } catch {
+    logWarning("Skipped malformed or missing public skill-package metadata.");
+    return [];
+  }
+}
+
 export async function buildAgentCardDefinitions(
   agents: readonly AgentDefinition[],
   skillsDirectory: string,
   profileDirectory: string,
   logWarning: (message: string) => void = () => undefined,
+  skillPacksDirectory?: string,
 ): Promise<AgentCardDefinition[]> {
-  const [skills, currentHash, syncedHash] = await Promise.all([
+  const [installedSkills, packages, currentHash, syncedHash] = await Promise.all([
     readInstalledSkills(skillsDirectory, logWarning),
+    readSkillPackages(skillPacksDirectory, logWarning),
     currentSourceHash(skillsDirectory, profileDirectory),
     syncedSourceHash(profileDirectory),
   ]);
   const syncRequired = currentHash === null || currentHash !== syncedHash;
+  const installedById = new Map(
+    installedSkills.map((skill) => [skill.id, skill]),
+  );
   return publicAgentDefinitions(agents).map((agent) => ({
     ...agent,
-    skills: skills.filter((skill) => skill.agent === agent.id),
+    skills: packages
+      .filter((pack) => pack.agent === agent.id)
+      .map((pack) => {
+        const modules = pack.modules.map((module) => ({
+          id: module.id,
+          name: module.name,
+          role: module.role,
+          installed: installedById.has(module.id),
+        }));
+        const coreModules = modules.filter((module) => module.role === "core");
+        const installedCount = modules.filter((module) => module.installed).length;
+        return {
+          id: pack.id,
+          agent: pack.agent,
+          name: pack.name,
+          description: pack.description,
+          icon: pack.icon,
+          installable: pack.installable,
+          installed: coreModules.every((module) => module.installed),
+          partiallyInstalled:
+            installedCount > 0 &&
+            !coreModules.every((module) => module.installed),
+          needsSync: installedCount > 0 && syncRequired,
+          modules,
+        };
+      }),
     syncRequired,
   }));
 }

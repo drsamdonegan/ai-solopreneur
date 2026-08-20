@@ -153,6 +153,7 @@ export interface ChatGatewayOptions {
   profileStore?: ProfileStore;
   agentSettingsStore?: AgentSettingsStore;
   skillsDirectory?: string;
+  skillPacksDirectory?: string;
   profileDirectory?: string;
   /**
    * Guards every route except /health. Omitted on a learner's own computer,
@@ -1350,6 +1351,7 @@ export function createChatHandler(options: ChatGatewayOptions): RequestListener 
                 options.skillsDirectory,
                 options.profileDirectory,
                 (message) => options.logError?.(message),
+                options.skillPacksDirectory,
               )
             : publicAgentDefinitions(agents).map((agent) => ({
                 ...agent,

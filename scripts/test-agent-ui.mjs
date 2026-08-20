@@ -21,6 +21,7 @@ assert.match(html, /<div class="agent-list" id="agent-list"><\/div>/);
 assert.doesNotMatch(html, /id="agent-list"[^>]+role=/);
 assert.match(html, /id="my-business-button"/);
 assert.match(html, /id="agent-dialog"/);
+assert.match(html, /<h3 id="agent-dialog-skills-title">Skill packages<\/h3>/);
 assert.match(html, /What do you want to call this workspace\?/);
 assert.match(html, /placeholder="What should your agent do\?"/);
 assert.doesNotMatch(html, /\sstyle=/);
@@ -37,6 +38,13 @@ assert.match(source, /card\.setAttribute\(\s*"aria-current"/);
 assert.match(source, /function workspaceName\(\)/);
 assert.match(source, /return activeAgent\(\)\?\.name \?\? config\.name/);
 assert.match(source, /elements\.agentInitials\.style\.backgroundImage/);
+assert.match(source, /function skillPackageState\(skill\)/);
+assert.match(source, /chip\.dataset\.installed = String\(skill\.installed === true\)/);
+assert.match(source, /chip\.dataset\.partial = String\(skill\.partiallyInstalled === true\)/);
+assert.match(source, /Optional additions not installed/);
+assert.match(source, /Run npm run sync-skills before relying on it in chat/);
+assert.match(source, /No packaged skills are available for this agent yet/);
+assert.match(source, /Includes:/);
 assert.doesNotMatch(
   source,
   /elements\.mobileAgentInitials\.style\.backgroundImage/,
@@ -65,7 +73,24 @@ for (const agent of registry.agents) {
   }
 }
 
+for (const packageId of [
+  "meeting-to-actions",
+  "linkedin-profile-lookup",
+  "linkedin-prospect-search",
+  "domain-research",
+  "seo-aeo-article-writer",
+  "funding-and-investor-updates",
+]) {
+  assert(
+    source.includes(`"${packageId}":`),
+    `skill-package icon map missing ${packageId}`,
+  );
+}
+
 assert.match(styles, /\.agent-card__skill::after/);
+assert.match(styles, /\.agent-card__skill\[data-installed="false"\]\[data-partial="false"\]/);
+assert.match(styles, /border-style: dashed/);
+assert.match(styles, /\.agent-card__skill\[data-partial="true"\]/);
 assert.match(styles, /@media \(hover: none\), \(pointer: coarse\)/);
 assert.match(styles, /@media \(prefers-reduced-motion: reduce\)/);
 assert.match(styles, /\.paste-dialog\.agent-dialog textarea/);

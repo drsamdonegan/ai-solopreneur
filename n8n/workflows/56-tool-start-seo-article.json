@@ -1,0 +1,84 @@
+{
+  "id": "phase13StartSeoArticle",
+  "name": "56 - TOOL - start_seo_article",
+  "nodes": [
+    {
+      "parameters": { "content": "## start_seo_article\nUses one saved article plan to choose a topic, collect only essential details, and queue a grounded review draft. No publishing.", "height": 140, "width": 420 },
+      "type": "n8n-nodes-base.stickyNote", "typeVersion": 1, "position": [-900, -260], "id": "b5600000-0000-4000-8000-000000000001", "name": "Article tool explanation"
+    },
+    {
+      "parameters": { "inputSource": "workflowInputs", "workflowInputs": { "values": [
+        { "name": "sessionId", "type": "string" }, { "name": "requestId", "type": "string" },
+        { "name": "domain", "type": "string" }, { "name": "primaryKeyword", "type": "string" },
+        { "name": "selectionNumber", "type": "number" }, { "name": "chooseStrongestKeyword", "type": "boolean" },
+        { "name": "supportingKeywords", "type": "string" }, { "name": "targetAudience", "type": "string" },
+        { "name": "offer", "type": "string" }, { "name": "price", "type": "string" },
+        { "name": "boundaries", "type": "string" }, { "name": "voice", "type": "string" }, { "name": "goal", "type": "string" },
+        { "name": "sourceUrls", "type": "string" }
+      ] } },
+      "type": "n8n-nodes-base.executeWorkflowTrigger", "typeVersion": 1.2, "position": [-860, 20], "id": "b5600000-0000-4000-8000-000000000002", "name": "Tool Input"
+    },
+    {
+      "parameters": { "mode": "runOnceForEachItem", "language": "javaScript", "jsCode": "const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;const sessionId=String($json.sessionId??'').trim(),requestId=String($json.requestId??'').trim();let domain=String($json.domain??'').trim().toLowerCase().replace(/^https?:\\/\\//,'').split('/')[0].replace(/^www\\./,'').replace(/\\.$/,'');const labels=domain.split('.');const primaryKeyword=String($json.primaryKeyword??'').trim().slice(0,200),chooseStrongestKeyword=$json.chooseStrongestKeyword===true;const selectionNumber=Number($json.selectionNumber||0);const supportingKeywords=String($json.supportingKeywords??'').split(/[,\\n]/).map(v=>v.trim()).filter(Boolean).slice(0,20);const sourceUrls=String($json.sourceUrls??'').split(/[\\s,]+/).map(v=>v.trim()).filter(Boolean).slice(0,12);let error=null;if(!uuid.test(sessionId)||!uuid.test(requestId))error={code:'INVALID_REQUEST',message:'The article needs a valid conversation.'};else if(!domain||domain.includes('@')||domain.includes(':')||labels.length<2||labels.some(l=>!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(l)))error={code:'INVALID_DOMAIN',message:'Use a complete public business domain such as example.com.'};else if(selectionNumber&&(!Number.isInteger(selectionNumber)||selectionNumber<1||selectionNumber>3))error={code:'INVALID_SELECTION',message:'Choose article 1, 2 or 3.'};else if(sourceUrls.some(v=>!/^https:\\/\\/[a-z0-9.-]+(?:\\/[^\\s]*)?$/i.test(v)||v.includes('@')||/:\\d+(?:\\/|$)/.test(v)))error={code:'INVALID_SOURCE',message:'Article sources must be complete public HTTPS links.'};const clean=(value,limit=1000)=>String(value??'').trim().slice(0,limit);return{json:{valid:!error,sessionId,requestId,domain,primaryKeyword,selectionNumber,chooseStrongestKeyword,supportingKeywords,targetAudience:clean($json.targetAudience),offer:clean($json.offer),price:clean($json.price),boundaries:clean($json.boundaries),voice:clean($json.voice),goal:clean($json.goal),sourceUrls,...(error?{response:{ok:false,error}}:{})}};" },
+      "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [-620, 20], "id": "b5600000-0000-4000-8000-000000000003", "name": "Validate Article Brief"
+    },
+    {
+      "parameters": { "conditions": { "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 }, "conditions": [{ "id": "b560-valid", "leftValue": "={{ $json.valid }}", "rightValue": true, "operator": { "type": "boolean", "operation": "true", "singleValue": true } }], "combinator": "and" }, "options": {} },
+      "type": "n8n-nodes-base.if", "typeVersion": 2.2, "position": [-380, 20], "id": "b5600000-0000-4000-8000-000000000004", "name": "Input Is Valid?"
+    },
+    {
+      "parameters": { "method": "POST", "url": "http://127.0.0.1:3000/api/seo-article/jobs", "sendBody": true, "contentType": "json", "specifyBody": "json", "jsonBody": "={{ JSON.stringify({sessionId:$json.sessionId,requestId:$json.requestId,domain:$json.domain,primaryKeyword:$json.primaryKeyword,selectionNumber:$json.selectionNumber,chooseStrongestKeyword:$json.chooseStrongestKeyword,supportingKeywords:$json.supportingKeywords,targetAudience:$json.targetAudience,offer:$json.offer,price:$json.price,boundaries:$json.boundaries,voice:$json.voice,goal:$json.goal,sourceUrls:$json.sourceUrls}) }}", "options": { "timeout": 10000, "response": { "response": { "fullResponse": true, "neverError": true } } } },
+      "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.4, "position": [820, -180], "id": "b5600000-0000-4000-8000-000000000009", "name": "Register Article Job", "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": { "mode": "runOnceForEachItem", "language": "javaScript", "jsCode": "const input=$('Validate Article Brief').first().json,body=$json.body??$json.data??{},status=Number($json.statusCode??0),job=body.job;if(status>=200&&status<300&&['needs_selection','needs_details'].includes(body.status))return{json:{...input,registered:false,response:{ok:true,status:body.status,message:body.message,missingFields:body.missingFields??[],articleBrief:body.brief}}};if(status<200||status>=300||!job?.jobId){const message=String(body?.error?.message??'I could not prepare the article safely. Nothing was written.');return{json:{...input,registered:false,response:{ok:false,error:{code:'ARTICLE_QUEUE_FAILED',message}}}};}return{json:{...input,registered:true,created:body.created===true,jobId:job.jobId,job,articleBrief:body.brief,primaryKeyword:job.primaryKeyword,supportingKeywords:job.supportingKeywords}};" },
+      "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [1060, -180], "id": "b5600000-0000-4000-8000-000000000010", "name": "Check Job Registration"
+    },
+    {
+      "parameters": { "conditions": { "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 }, "conditions": [{ "id": "b560-registered", "leftValue": "={{ $json.registered }}", "rightValue": true, "operator": { "type": "boolean", "operation": "true", "singleValue": true } }], "combinator": "and" }, "options": {} },
+      "type": "n8n-nodes-base.if", "typeVersion": 2.2, "position": [1300, -180], "id": "b5600000-0000-4000-8000-000000000011", "name": "Job Is Registered?"
+    },
+    {
+      "parameters": { "conditions": { "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 }, "conditions": [{ "id": "b560-new", "leftValue": "={{ $json.created }}", "rightValue": true, "operator": { "type": "boolean", "operation": "true", "singleValue": true } }], "combinator": "and" }, "options": {} },
+      "type": "n8n-nodes-base.if", "typeVersion": 2.2, "position": [1500, -180], "id": "b5600000-0000-4000-8000-000000000017", "name": "Queue New Job?"
+    },
+    {
+      "parameters": { "source": "database", "workflowId": { "__rl": true, "value": "phase13WriteSeoArticle", "mode": "list", "cachedResultName": "57 - INTERNAL - write_seo_article" }, "workflowInputs": { "mappingMode": "defineBelow", "value": { "sessionId": "={{ $json.sessionId }}", "jobId": "={{ $json.jobId }}" }, "matchingColumns": [], "schema": [{ "id": "sessionId", "displayName": "sessionId", "type": "string", "display": true, "canBeUsedToMatch": true }, { "id": "jobId", "displayName": "jobId", "type": "string", "display": true, "canBeUsedToMatch": true }], "attemptToConvertTypes": true, "convertFieldsToString": false }, "mode": "once", "options": { "waitForSubWorkflow": false } },
+      "type": "n8n-nodes-base.executeWorkflow", "typeVersion": 1.3, "position": [1540, -280], "id": "b5600000-0000-4000-8000-000000000012", "name": "Queue Background Writer", "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": { "mode": "runOnceForEachItem", "language": "javaScript", "jsCode": "const i=$('Check Job Registration').first().json,status=i.created?'queued':i.job.status;const messages={queued:'I’m writing and checking the article now. Its progress will appear in the chat.',running:'That article is already being written. Its progress will appear in the chat.',completed:'That article is ready to download.',partial:'That article is ready with a short warning.',failed:'That earlier article attempt needs attention.',interrupted:'That earlier article attempt stopped before it finished.'};return{json:{...i,response:{ok:true,status,jobId:i.jobId,domain:i.domain,primaryKeyword:i.primaryKeyword,articleBrief:i.articleBrief,message:messages[status]??messages.queued}}};" },
+      "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [1780, -280], "id": "b5600000-0000-4000-8000-000000000013", "name": "Shape Start Result"
+    },
+    {
+      "parameters": { "mode": "runOnceForEachItem", "language": "javaScript", "jsCode": "const base=$('Validate Article Brief').first().json,r=$json.response??{ok:false,error:{code:'ARTICLE_QUEUE_FAILED',message:'The article could not be queued.'}};return{json:{occurredAt:new Date().toISOString(),sessionId:base.sessionId,requestId:base.requestId,toolName:'start_seo_article',proposedInput:JSON.stringify({domain:base.domain,primaryKeyword:base.primaryKeyword,selectionNumber:base.selectionNumber,chooseStrongestKeyword:base.chooseStrongestKeyword}),result:JSON.stringify(r),error:r.ok===false?String(r.error?.message??'Tool failed'):'',response:r}};" },
+      "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [2020, 20], "id": "b5600000-0000-4000-8000-000000000014", "name": "Prepare Audit"
+    },
+    {
+      "parameters": { "resource": "row", "operation": "insert", "dataTableId": { "__rl": true, "value": "tool_audit", "mode": "name" }, "columns": { "mappingMode": "defineBelow", "value": { "occurredAt": "={{ $json.occurredAt }}", "sessionId": "={{ $json.sessionId }}", "requestId": "={{ $json.requestId }}", "toolName": "={{ $json.toolName }}", "proposedInput": "={{ $json.proposedInput }}", "result": "={{ $json.result }}", "error": "={{ $json.error }}" }, "matchingColumns": [], "schema": [], "attemptToConvertTypes": false, "convertFieldsToString": false }, "options": {} },
+      "type": "n8n-nodes-base.dataTable", "typeVersion": 1.1, "position": [2260, 20], "id": "b5600000-0000-4000-8000-000000000015", "name": "Write Tool Audit", "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": { "mode": "runOnceForEachItem", "language": "javaScript", "jsCode": "const p=$('Prepare Audit').item.json,r={...p.response};if(!Number.isInteger($json.id))r.auditWarning='The start could not be written to the local audit table.';return{json:r};" },
+      "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [2500, 20], "id": "b5600000-0000-4000-8000-000000000016", "name": "Return Tool Result"
+    }
+  ],
+  "connections": {
+    "Tool Input": { "main": [[{ "node": "Validate Article Brief", "type": "main", "index": 0 }]] },
+    "Validate Article Brief": { "main": [[{ "node": "Input Is Valid?", "type": "main", "index": 0 }]] },
+    "Input Is Valid?": { "main": [[{ "node": "Register Article Job", "type": "main", "index": 0 }], [{ "node": "Prepare Audit", "type": "main", "index": 0 }]] },
+    "Register Article Job": { "main": [[{ "node": "Check Job Registration", "type": "main", "index": 0 }]] },
+    "Check Job Registration": { "main": [[{ "node": "Job Is Registered?", "type": "main", "index": 0 }]] },
+    "Job Is Registered?": { "main": [[{ "node": "Queue New Job?", "type": "main", "index": 0 }], [{ "node": "Prepare Audit", "type": "main", "index": 0 }]] },
+    "Queue New Job?": { "main": [[{ "node": "Queue Background Writer", "type": "main", "index": 0 }], [{ "node": "Shape Start Result", "type": "main", "index": 0 }]] },
+    "Queue Background Writer": { "main": [[{ "node": "Shape Start Result", "type": "main", "index": 0 }]] },
+    "Shape Start Result": { "main": [[{ "node": "Prepare Audit", "type": "main", "index": 0 }]] },
+    "Prepare Audit": { "main": [[{ "node": "Write Tool Audit", "type": "main", "index": 0 }]] },
+    "Write Tool Audit": { "main": [[{ "node": "Return Tool Result", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1", "executionTimeout": 30, "saveDataErrorExecution": "all", "saveDataSuccessExecution": "all", "saveExecutionProgress": true, "saveManualExecutions": true },
+  "active": false,
+  "versionId": "b5600000-0000-4000-8000-000000000099",
+  "meta": { "templateCredsSetupCompleted": true, "testedWithN8n": "2.30.5", "toolRisk": "bounded_local_write", "paidCalls": "none" },
+  "tags": []
+}

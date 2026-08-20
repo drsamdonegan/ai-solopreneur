@@ -118,6 +118,43 @@ The commit IDs below are immutable slice boundaries on the v0.3 release line. `0
 - Verify: `node scripts/test-optional-installer.mjs && node scripts/validate-workflows.mjs`; the installed and catalogue `SKILL.md` files must be byte-identical and under 7,200 characters.
 - Rollback: `git revert d6d5c81`; doing so restores a fallback the n8n agent cannot run.
 
+## Post-v0.3 package slices
+
+These slices are also self-contained, but their immutable merge commit IDs are
+assigned with the next release rather than the v0.3 line above.
+
+### S11 · Public skill-package contract and agent cards
+
+- Purpose: show one Project Manager package, two Sales packages, two Marketing
+  packages, one Investment package, and zero Bookkeeping packages without
+  deleting internal modules.
+- Prerequisites: S03–S06.
+- Owns: `skill-packs/`, `scripts/skill-packages.mjs`, package API/UI rendering,
+  the package-aware installer, and their contract/API/frontend tests.
+- Re-import: none for the UI alone. Installing a package applies its declared
+  workflow changes normally.
+- Skill sync: only after installing or changing an underlying module.
+- External setup: none for package presentation.
+- Verify: `node scripts/test-skill-packages.mjs && node scripts/test-optional-installer.mjs && node scripts/test-agent-card-api.mjs && node scripts/test-agent-ui.mjs` after building the chat.
+- Rollback: restore the old raw-skill API/UI together; do not remove underlying
+  modules merely because the grouping is removed.
+
+### S12 · Provider-backed LinkedIn prospect search
+
+- Purpose: replace the deleted Python/public-search fiction with one reviewed
+  Crustdata Person Search call for role, sector, location, and company size.
+- Prerequisites: S04 and S11.
+- Owns: `optional-skills/linkedin-prospect-search/`, installed workflow 59 and
+  skill copy, its Sales tool/policy wiring in `00`, and its package manifest.
+- Re-import: workflow 59 and `00` yes for an existing maintainer install; a
+  learner should use `npm run add-skill -- linkedin-prospect-search` instead.
+- Skill sync: yes.
+- External setup: `CRUSTDATA_API_KEY` Bearer Auth credential; each call needs
+  fresh approval and is capped at ten results/0.30 credits.
+- Verify: `node optional-skills/linkedin-prospect-search/tests/prospect-search.test.mjs && node scripts/test-optional-installer.mjs && node scripts/validate-workflows.mjs`.
+- Rollback: remove only the package/module wiring and workflow 59. Keep named
+  LinkedIn Profile Lookup if the learner uses that separate Sales package.
+
 ## Deliberately absent from v0.3
 
 Xero Coding Review is deferred. The Bookkeeping agent remains safely routable but has no role-specific accounting tool. Do not copy the Phase 8 design from `REBUILD_IMPLEMENTATION_PLAN.md` into a learner project unless it is implemented and tested as a separate later slice.
