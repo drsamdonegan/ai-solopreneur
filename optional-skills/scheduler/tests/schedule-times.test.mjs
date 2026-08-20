@@ -345,7 +345,7 @@ check(
 const existing = {
   scheduleId: "sch-abc12345",
   name: "Funding check",
-  createdAt: "2026-01-01T00:00:00.000Z",
+  savedAt: "2026-01-01T00:00:00.000Z",
   enabled: "yes",
   runCount: 4,
 };
@@ -363,7 +363,7 @@ check(again.scheduleId === "sch-abc12345", "the same name should land on the sam
 check(again.replaced === true, "replacing an existing schedule has to be reported");
 check(again.runCount === 4, "replacing a schedule must not lose how often it has run");
 check(
-  again.createdAt === "2026-01-01T00:00:00.000Z",
+  again.savedAt === "2026-01-01T00:00:00.000Z",
   "replacing a schedule must not rewrite when it was created",
 );
 

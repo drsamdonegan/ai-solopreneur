@@ -71,7 +71,7 @@ const savedSchedule = (over = {}) => ({
   onDate: "",
   timezone: MELBOURNE,
   enabled: "yes",
-  createdAt: "2026-08-01T00:00:00.000Z",
+  savedAt: "2026-08-01T00:00:00.000Z",
   nextRunAt: minutesAway(60),
   lastRunAt: "",
   lastStatus: "",
