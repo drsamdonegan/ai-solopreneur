@@ -20,9 +20,12 @@ Treat a plain request such as “find this person's LinkedIn” as a request to 
 A first and last name are required. Ask for missing details in one short, friendly message, all at once:
 
 - first and last name;
+- **where they work**, optional but the single most useful thing after the name;
 - work email, optional but useful for employer evidence;
 - city, state or province, and country, all optional;
-- industry or current employer, optional.
+- industry, optional.
+
+Whenever the user names an employer, pass it as `company_name` — "who works at Stone & Chalk" is a company_name, not context to be dropped. Half the profiles a search returns carry no location at all, and for those the employer is the only thing separating the right person from everyone who shares their name.
 
 Always ask for at least one supporting detail beyond the name. A name alone cannot produce a confident result. If the user still wants a name-only search after that warning, it may run, but describe the likely ambiguity honestly.
 
