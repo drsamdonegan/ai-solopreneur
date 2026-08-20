@@ -64,6 +64,13 @@ async function snapshot(root) {
 
 try {
   const freeFirstRoot = await makeScratch("free-first-seo");
+  // This release checkout may have the paid upgrade installed for integration
+  // testing. Remove only its installed skill copy so this fixture still proves
+  // that adding the free researcher and writer does not pull it in.
+  await rm(join(freeFirstRoot, "skills", "paid-domain-research"), {
+    recursive: true,
+    force: true,
+  });
   install(freeFirstRoot, "domain-research");
   install(freeFirstRoot, "seo-article-writer");
   await assert.rejects(
@@ -91,6 +98,7 @@ try {
     "seo-article-writer",
     "funding-radar",
     "monthly-update",
+    "scheduler",
   ];
   for (const skillId of installed) {
     install(root, skillId);
@@ -184,6 +192,13 @@ try {
   const invalidManifest = JSON.parse(await readFile(manifestPath, "utf8"));
   invalidManifest.agent = "bookkeeping";
   await writeFile(manifestPath, `${JSON.stringify(invalidManifest, null, 2)}\n`);
+  // The evidence below is that the copy never happened, so the destination has
+  // to be absent first. This skill ships installed now, and without clearing it
+  // the check passes on a file that was already there.
+  await rm(join(invalidRoot, "skills", "linkedin-profile-lookup"), {
+    recursive: true,
+    force: true,
+  });
   install(invalidRoot, "linkedin-profile-lookup", false);
   await assert.rejects(
     readFile(

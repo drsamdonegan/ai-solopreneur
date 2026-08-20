@@ -55,7 +55,7 @@ At least one skill must remain enabled.
 
 ## Optional extra skills
 
-Seven further skills are available in the catalogue. A full repository checkout
+Eight further skills are available in the catalogue. A full repository checkout
 keeps them in [`optional-skills/`](../optional-skills/); a generated learner base
 omits that catalogue and installs the same skill from its GitHub folder URL.
 None is part of the four-skill base until you add it.

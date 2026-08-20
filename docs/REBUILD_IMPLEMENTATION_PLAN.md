@@ -238,7 +238,8 @@ rg -n \
 ```
 
 Expected: the catalogue lists the six retained audited skills, plus the later
-cloud-only Telegram trigger when that concurrent main-line work is present.
+cloud-only Telegram trigger and global Scheduler when that concurrent main-line
+work is present.
 The final search has no live references to removed skills other than an
 intentional changelog/archive note.
 

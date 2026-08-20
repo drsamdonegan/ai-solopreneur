@@ -1,6 +1,6 @@
 # Upgrade to v0.3
 
-v0.3 makes agent selection real: each of the five agents receives only its own instructions, saved context, and connected tools. It also adds the accessible agent-card interface, restores daily Funding Radar scheduling, makes SEO writing free-first, removes the LinkedIn fallback the n8n agent could not run, and catalogues a cloud-only Telegram trigger.
+v0.3 makes agent selection real: each of the five agents receives only its own instructions, saved context, and connected tools. It also adds the accessible agent-card interface, restores daily Funding Radar scheduling, makes SEO writing free-first, removes the LinkedIn fallback the n8n agent could not run, and catalogues cloud-only Telegram and global Scheduler add-ons.
 
 Xero is not included in this release. Bookkeeping is a safe routable role with no accounting connector.
 

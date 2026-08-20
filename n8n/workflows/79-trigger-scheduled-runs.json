@@ -1,0 +1,718 @@
+{
+  "name": "79 - TRIGGER - Scheduled work",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Switch this on, or nothing is ever scheduled\n\nThis is the part that watches the clock. Your agent can save a schedule\nwithout it, and nothing will ever fire.\n\n1. Set the toggle at the top right to **Published**.\n2. Run **16 - SETUP - Scheduled Work Data** once first, if you have not.\n\nIt wakes every five minutes, takes the one job that is most overdue, and\nsends it to the agent that owns it as though you had typed it in the chat.\nOne job per wake-up, so two things set for the same minute run five minutes\napart instead of both at once.\n\nAnything more than six hours late is skipped and rolled on to its next\ntime. A laptop opened at dinner time should not set off the morning's work.\n\nEvery run costs the same as asking your agent yourself. Nothing here is\nfree just because you are asleep.",
+        "height": 520,
+        "width": 520,
+        "color": 3
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -700,
+        -420
+      ],
+      "id": "95840000-0000-4000-8000-000000000001",
+      "name": "Read this first"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -700,
+        180
+      ],
+      "id": "95840000-0000-4000-8000-000000000010",
+      "name": "Every Five Minutes"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "scheduled_runs",
+          "mode": "name"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": []
+        },
+        "returnAll": false,
+        "limit": 100,
+        "orderBy": true,
+        "orderByColumn": "nextRunAt",
+        "orderByDirection": "ASC"
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -460,
+        180
+      ],
+      "id": "95840000-0000-4000-8000-000000000011",
+      "name": "Read Schedules",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// A schedule that came round while nothing was running is not run late. Six\n// hours after the fact, an 8am research job landing at 2pm is a surprise, not\n// a service, so it is rolled forward to tomorrow and recorded as missed.\nconst GRACE_MINUTES = 360;\n\nconst rows = $input.all()\n  .map((item) => item.json)\n  .filter((row) => row && typeof row.scheduleId === 'string' && row.scheduleId !== '');\n\nconst now = Date.now();\nconst due = rows\n  .filter((row) => String(row.enabled ?? '') === 'yes')\n  .map((row) => ({ row, at: Date.parse(String(row.nextRunAt ?? '')) }))\n  .filter((entry) => Number.isFinite(entry.at) && entry.at <= now)\n  .sort((left, right) => left.at - right.at);\n\nif (due.length === 0) {\n  return [];\n}\n\n// One job per beat, oldest first. Two schedules set for the same minute run\n// five minutes apart rather than both spending money at once \u2014 and every node\n// downstream reads one row instead of guessing which of several it is on.\nconst chosen = due[0];\nconst row = chosen.row;\nconst lateMinutes = Math.round((now - chosen.at) / 60000);\n\n// The agent will only accept real UUIDs, and it uses the session ID to tell one\n// conversation from another. Node's crypto is not available inside this\n// sandbox, so this is a plain FNV-1a hash spread over the four rounds a UUID\n// needs. One stable session per schedule, and a request ID tied to the run that\n// was due, so a repeated beat cannot earn a second answer.\nconst uuidFrom = (seed) => {\n  let hex = '';\n  for (let round = 0; round < 4; round += 1) {\n    let hash = 0x811c9dc5;\n    const salted = round + ':' + seed;\n    for (let index = 0; index < salted.length; index += 1) {\n      hash ^= salted.charCodeAt(index);\n      hash = Math.imul(hash, 0x01000193) >>> 0;\n    }\n    hex += hash.toString(16).padStart(8, '0');\n  }\n  return [\n    hex.slice(0, 8),\n    hex.slice(8, 12),\n    '4' + hex.slice(13, 16),\n    '8' + hex.slice(17, 20),\n    hex.slice(20, 32),\n  ].join('-');\n};\n\nreturn [{ json: {\n  run: lateMinutes <= GRACE_MINUTES,\n  lateMinutes,\n  waiting: due.length - 1,\n  scheduleId: row.scheduleId,\n  name: String(row.name ?? ''),\n  agentId: String(row.agentId ?? 'project-manager'),\n  instruction: String(row.instruction ?? ''),\n  frequency: String(row.frequency ?? 'daily'),\n  timeOfDay: String(row.timeOfDay ?? ''),\n  dayOfWeek: String(row.dayOfWeek ?? ''),\n  dayOfMonth: Number(row.dayOfMonth ?? 0) || 0,\n  onDate: String(row.onDate ?? ''),\n  timezone: String(row.timezone ?? 'UTC'),\n  runCount: Number(row.runCount ?? 0) || 0,\n  dueAt: new Date(chosen.at).toISOString(),\n  sessionId: uuidFrom('schedule-session:' + row.scheduleId),\n  requestId: uuidFrom('schedule-request:' + row.scheduleId + ':' + chosen.at),\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -220,
+        180
+      ],
+      "id": "95840000-0000-4000-8000-000000000012",
+      "name": "Pick What Is Due"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "95840000-0000-4000-8000-000000000013-c1",
+              "leftValue": "={{ $json.run }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        20,
+        180
+      ],
+      "id": "95840000-0000-4000-8000-000000000013",
+      "name": "Run It Now?"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:5678/webhook/chat",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ schemaVersion: 3, requestId: $json.requestId, sessionId: $json.sessionId, agentId: $json.agentId, message: $json.instruction, history: [], documents: [] }) }}",
+        "options": {
+          "timeout": 180000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        260,
+        60
+      ],
+      "id": "95840000-0000-4000-8000-000000000014",
+      "name": "Ask The Agent"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// --- working out when a schedule next comes round --------------------------\n// The clock inside this agent is UTC unless somebody set GENERIC_TIMEZONE, and\n// in the cloud it usually is. So \"8am\" has to be pinned to a named zone or a\n// Melbourne morning fires at six in the evening. Every schedule carries its own\n// timezone, and everything below converts between that zone's wall clock and a\n// real instant.\nconst DAY_NAMES = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];\n\nconst zoneIsReal = (zone) => {\n  try {\n    new Intl.DateTimeFormat('en-US', { timeZone: zone });\n    return true;\n  } catch {\n    return false;\n  }\n};\n\nconst zoneParts = (instant, zone) => {\n  const read = {};\n  for (const part of new Intl.DateTimeFormat('en-US', {\n    timeZone: zone, hour12: false,\n    year: 'numeric', month: '2-digit', day: '2-digit',\n    hour: '2-digit', minute: '2-digit', second: '2-digit',\n  }).formatToParts(instant)) {\n    read[part.type] = part.value;\n  }\n  return {\n    year: Number(read.year), month: Number(read.month), day: Number(read.day),\n    // Some environments render midnight as hour 24 rather than 0.\n    hour: Number(read.hour) % 24, minute: Number(read.minute), second: Number(read.second),\n  };\n};\n\n// How far that zone sits from UTC at that moment, daylight saving included.\nconst zoneOffsetMinutes = (instant, zone) => {\n  const at = zoneParts(instant, zone);\n  return (Date.UTC(at.year, at.month - 1, at.day, at.hour, at.minute, at.second) - instant.getTime()) / 60000;\n};\n\n// A wall-clock time in that zone, back to a real instant. The offset depends on\n// the answer, so it is applied twice: once against a guess, then again against\n// the offset that guess actually landed in. That second pass is what keeps the\n// hour right on the two days a year the clocks move.\nconst instantAt = (year, month, day, hour, minute, zone) => {\n  const wall = Date.UTC(year, month - 1, day, hour, minute, 0);\n  const guess = new Date(wall - zoneOffsetMinutes(new Date(wall), zone) * 60000);\n  return new Date(wall - zoneOffsetMinutes(guess, zone) * 60000);\n};\n\n// The first moment strictly after `after` that matches the rule, or null.\nconst nextRunAfter = (rule, after) => {\n  const zone = rule.timezone;\n  if (!zoneIsReal(zone)) return null;\n  const clock = String(rule.timeOfDay ?? '').split(':').map(Number);\n  const hour = clock[0];\n  const minute = clock[1];\n  if (!Number.isInteger(hour) || !Number.isInteger(minute)) return null;\n\n  if (rule.frequency === 'once') {\n    if (rule.onDate) {\n      const parts = String(rule.onDate).split('-').map(Number);\n      const once = instantAt(parts[0], parts[1], parts[2], hour, minute, zone);\n      return once.getTime() > after.getTime() ? once : null;\n    }\n  }\n\n  const from = zoneParts(after, zone);\n  for (let step = 0; step <= 400; step += 1) {\n    // Adding to the day number rolls months and years over on its own.\n    const day = new Date(Date.UTC(from.year, from.month - 1, from.day + step));\n    const year = day.getUTCFullYear();\n    const month = day.getUTCMonth() + 1;\n    const date = day.getUTCDate();\n    const weekday = DAY_NAMES[day.getUTCDay()];\n    if (rule.frequency === 'weekdays' && (weekday === 'saturday' || weekday === 'sunday')) continue;\n    if (rule.frequency === 'weekly' && weekday !== rule.dayOfWeek) continue;\n    if (rule.frequency === 'monthly' && date !== Number(rule.dayOfMonth)) continue;\n    const candidate = instantAt(year, month, date, hour, minute, zone);\n    if (candidate.getTime() > after.getTime()) return candidate;\n  }\n  return null;\n};\n\n// What the agent reads back to the owner, in their own timezone.\nconst inWords = (instant, zone) => {\n  if (!instant || !zoneIsReal(zone)) return '';\n  return new Intl.DateTimeFormat('en-GB', {\n    timeZone: zone, weekday: 'short', day: 'numeric', month: 'short',\n    year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true,\n  }).format(instant) + ' (' + zone + ')';\n};\n\nconst clockInWords = (timeOfDay) => {\n  const clock = String(timeOfDay ?? '').split(':').map(Number);\n  const hour = clock[0];\n  const minute = clock[1];\n  if (!Number.isInteger(hour) || !Number.isInteger(minute)) return String(timeOfDay ?? '');\n  const suffix = hour < 12 ? 'am' : 'pm';\n  const shown = hour % 12 === 0 ? 12 : hour % 12;\n  return shown + ':' + String(minute).padStart(2, '0') + ' ' + suffix;\n};\n\nconst patternInWords = (rule) => {\n  const at = 'at ' + clockInWords(rule.timeOfDay);\n  if (rule.frequency === 'daily') return 'every day ' + at;\n  if (rule.frequency === 'weekdays') return 'every weekday ' + at;\n  if (rule.frequency === 'weekly') {\n    const day = String(rule.dayOfWeek ?? '');\n    return 'every ' + day.charAt(0).toUpperCase() + day.slice(1) + ' ' + at;\n  }\n  if (rule.frequency === 'monthly') return 'on day ' + rule.dayOfMonth + ' of each month ' + at;\n  return 'once, ' + at;\n};\n\n\nconst job = $('Pick What Is Due').first().json;\nconst ranAt = new Date();\n\n// The agent answers 200 with an empty body when a reply dies on the way out, so\n// an empty answer is a failure here, not a run with nothing to say.\nconst reply = String($json.reply ?? '').trim();\nconst problem = String($json.errorMessage ?? '').trim();\nconst ok = reply.length > 0;\nconst errorSummary = ok\n  ? ''\n  : (problem || 'The agent returned an empty answer. Its own execution record will say why.');\n\nconst rule = {\n  frequency: job.frequency, timeOfDay: job.timeOfDay, dayOfWeek: job.dayOfWeek,\n  dayOfMonth: job.dayOfMonth, onDate: job.onDate, timezone: job.timezone,\n};\n\n// Worked out from now rather than from the time it was due, so a slow run\n// cannot stack a second one up behind it.\nlet nextRunAt = '';\nlet enabled = 'yes';\nif (job.frequency === 'once') {\n  enabled = 'no';\n} else {\n  const next = nextRunAfter(rule, ranAt);\n  if (next === null) {\n    enabled = 'no';\n  } else {\n    nextRunAt = next.toISOString();\n  }\n}\n\nreturn [{ json: {\n  scheduleId: job.scheduleId,\n  name: job.name,\n  ranAt: ranAt.toISOString(),\n  status: ok ? 'ok' : 'failed',\n  agentId: job.agentId,\n  instruction: job.instruction,\n  reply: reply.slice(0, 12000),\n  errorSummary,\n  lastRunAt: ranAt.toISOString(),\n  lastStatus: ok ? 'ok' : 'failed',\n  lastSummary: (ok ? reply : errorSummary).replace(/\\s+/g, ' ').slice(0, 300),\n  runCount: job.runCount + 1,\n  nextRunAt,\n  enabled,\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        500,
+        60
+      ],
+      "id": "95840000-0000-4000-8000-000000000015",
+      "name": "Shape Run Result"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "value": "schedule_results",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "scheduleId": "={{ $json.scheduleId }}",
+            "name": "={{ $json.name }}",
+            "ranAt": "={{ $json.ranAt }}",
+            "status": "={{ $json.status }}",
+            "agentId": "={{ $json.agentId }}",
+            "instruction": "={{ $json.instruction }}",
+            "reply": "={{ $json.reply }}",
+            "errorSummary": "={{ $json.errorSummary }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "scheduleId",
+              "displayName": "scheduleId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "name",
+              "displayName": "name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "ranAt",
+              "displayName": "ranAt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "agentId",
+              "displayName": "agentId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "instruction",
+              "displayName": "instruction",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "reply",
+              "displayName": "reply",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "errorSummary",
+              "displayName": "errorSummary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        740,
+        60
+      ],
+      "id": "95840000-0000-4000-8000-000000000016",
+      "name": "Save Run Result",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "value": "scheduled_runs",
+          "mode": "name"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "scheduleId",
+              "condition": "eq",
+              "keyValue": "={{ $('Shape Run Result').first().json.scheduleId }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "nextRunAt": "={{ $('Shape Run Result').first().json.nextRunAt }}",
+            "enabled": "={{ $('Shape Run Result').first().json.enabled }}",
+            "lastRunAt": "={{ $('Shape Run Result').first().json.lastRunAt }}",
+            "lastStatus": "={{ $('Shape Run Result').first().json.lastStatus }}",
+            "lastSummary": "={{ $('Shape Run Result').first().json.lastSummary }}",
+            "runCount": "={{ $('Shape Run Result').first().json.runCount }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "nextRunAt",
+              "displayName": "nextRunAt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "enabled",
+              "displayName": "enabled",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "lastRunAt",
+              "displayName": "lastRunAt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "lastStatus",
+              "displayName": "lastStatus",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "lastSummary",
+              "displayName": "lastSummary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "runCount",
+              "displayName": "runCount",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "dryRun": false
+        }
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        980,
+        60
+      ],
+      "id": "95840000-0000-4000-8000-000000000017",
+      "name": "Update After Run",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// --- working out when a schedule next comes round --------------------------\n// The clock inside this agent is UTC unless somebody set GENERIC_TIMEZONE, and\n// in the cloud it usually is. So \"8am\" has to be pinned to a named zone or a\n// Melbourne morning fires at six in the evening. Every schedule carries its own\n// timezone, and everything below converts between that zone's wall clock and a\n// real instant.\nconst DAY_NAMES = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];\n\nconst zoneIsReal = (zone) => {\n  try {\n    new Intl.DateTimeFormat('en-US', { timeZone: zone });\n    return true;\n  } catch {\n    return false;\n  }\n};\n\nconst zoneParts = (instant, zone) => {\n  const read = {};\n  for (const part of new Intl.DateTimeFormat('en-US', {\n    timeZone: zone, hour12: false,\n    year: 'numeric', month: '2-digit', day: '2-digit',\n    hour: '2-digit', minute: '2-digit', second: '2-digit',\n  }).formatToParts(instant)) {\n    read[part.type] = part.value;\n  }\n  return {\n    year: Number(read.year), month: Number(read.month), day: Number(read.day),\n    // Some environments render midnight as hour 24 rather than 0.\n    hour: Number(read.hour) % 24, minute: Number(read.minute), second: Number(read.second),\n  };\n};\n\n// How far that zone sits from UTC at that moment, daylight saving included.\nconst zoneOffsetMinutes = (instant, zone) => {\n  const at = zoneParts(instant, zone);\n  return (Date.UTC(at.year, at.month - 1, at.day, at.hour, at.minute, at.second) - instant.getTime()) / 60000;\n};\n\n// A wall-clock time in that zone, back to a real instant. The offset depends on\n// the answer, so it is applied twice: once against a guess, then again against\n// the offset that guess actually landed in. That second pass is what keeps the\n// hour right on the two days a year the clocks move.\nconst instantAt = (year, month, day, hour, minute, zone) => {\n  const wall = Date.UTC(year, month - 1, day, hour, minute, 0);\n  const guess = new Date(wall - zoneOffsetMinutes(new Date(wall), zone) * 60000);\n  return new Date(wall - zoneOffsetMinutes(guess, zone) * 60000);\n};\n\n// The first moment strictly after `after` that matches the rule, or null.\nconst nextRunAfter = (rule, after) => {\n  const zone = rule.timezone;\n  if (!zoneIsReal(zone)) return null;\n  const clock = String(rule.timeOfDay ?? '').split(':').map(Number);\n  const hour = clock[0];\n  const minute = clock[1];\n  if (!Number.isInteger(hour) || !Number.isInteger(minute)) return null;\n\n  if (rule.frequency === 'once') {\n    if (rule.onDate) {\n      const parts = String(rule.onDate).split('-').map(Number);\n      const once = instantAt(parts[0], parts[1], parts[2], hour, minute, zone);\n      return once.getTime() > after.getTime() ? once : null;\n    }\n  }\n\n  const from = zoneParts(after, zone);\n  for (let step = 0; step <= 400; step += 1) {\n    // Adding to the day number rolls months and years over on its own.\n    const day = new Date(Date.UTC(from.year, from.month - 1, from.day + step));\n    const year = day.getUTCFullYear();\n    const month = day.getUTCMonth() + 1;\n    const date = day.getUTCDate();\n    const weekday = DAY_NAMES[day.getUTCDay()];\n    if (rule.frequency === 'weekdays' && (weekday === 'saturday' || weekday === 'sunday')) continue;\n    if (rule.frequency === 'weekly' && weekday !== rule.dayOfWeek) continue;\n    if (rule.frequency === 'monthly' && date !== Number(rule.dayOfMonth)) continue;\n    const candidate = instantAt(year, month, date, hour, minute, zone);\n    if (candidate.getTime() > after.getTime()) return candidate;\n  }\n  return null;\n};\n\n// What the agent reads back to the owner, in their own timezone.\nconst inWords = (instant, zone) => {\n  if (!instant || !zoneIsReal(zone)) return '';\n  return new Intl.DateTimeFormat('en-GB', {\n    timeZone: zone, weekday: 'short', day: 'numeric', month: 'short',\n    year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true,\n  }).format(instant) + ' (' + zone + ')';\n};\n\nconst clockInWords = (timeOfDay) => {\n  const clock = String(timeOfDay ?? '').split(':').map(Number);\n  const hour = clock[0];\n  const minute = clock[1];\n  if (!Number.isInteger(hour) || !Number.isInteger(minute)) return String(timeOfDay ?? '');\n  const suffix = hour < 12 ? 'am' : 'pm';\n  const shown = hour % 12 === 0 ? 12 : hour % 12;\n  return shown + ':' + String(minute).padStart(2, '0') + ' ' + suffix;\n};\n\nconst patternInWords = (rule) => {\n  const at = 'at ' + clockInWords(rule.timeOfDay);\n  if (rule.frequency === 'daily') return 'every day ' + at;\n  if (rule.frequency === 'weekdays') return 'every weekday ' + at;\n  if (rule.frequency === 'weekly') {\n    const day = String(rule.dayOfWeek ?? '');\n    return 'every ' + day.charAt(0).toUpperCase() + day.slice(1) + ' ' + at;\n  }\n  if (rule.frequency === 'monthly') return 'on day ' + rule.dayOfMonth + ' of each month ' + at;\n  return 'once, ' + at;\n};\n\n\n// This one came round while the agent was not running. It is rolled on to its\n// next time and recorded, rather than run hours late as though nothing had\n// happened.\nconst job = $('Pick What Is Due').first().json;\nconst at = new Date();\nconst rule = {\n  frequency: job.frequency, timeOfDay: job.timeOfDay, dayOfWeek: job.dayOfWeek,\n  dayOfMonth: job.dayOfMonth, onDate: job.onDate, timezone: job.timezone,\n};\n\nlet nextRunAt = '';\nlet enabled = 'yes';\nif (job.frequency === 'once') {\n  enabled = 'no';\n} else {\n  const next = nextRunAfter(rule, at);\n  if (next === null) {\n    enabled = 'no';\n  } else {\n    nextRunAt = next.toISOString();\n  }\n}\n\nconst hours = Math.round(job.lateMinutes / 60);\nreturn [{ json: {\n  scheduleId: job.scheduleId,\n  name: job.name,\n  ranAt: at.toISOString(),\n  status: 'missed',\n  agentId: job.agentId,\n  instruction: job.instruction,\n  reply: '',\n  errorSummary: 'Skipped. It was due ' + hours + ' hours ago, which means this agent was not running at the time.',\n  lastStatus: 'missed',\n  lastSummary: 'Missed: the agent was not running when this was due, so it was rolled on rather than run ' + hours + ' hours late.',\n  nextRunAt,\n  enabled,\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        260,
+        340
+      ],
+      "id": "95840000-0000-4000-8000-000000000018",
+      "name": "Shape Missed Run"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "value": "schedule_results",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "scheduleId": "={{ $json.scheduleId }}",
+            "name": "={{ $json.name }}",
+            "ranAt": "={{ $json.ranAt }}",
+            "status": "={{ $json.status }}",
+            "agentId": "={{ $json.agentId }}",
+            "instruction": "={{ $json.instruction }}",
+            "reply": "={{ $json.reply }}",
+            "errorSummary": "={{ $json.errorSummary }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "scheduleId",
+              "displayName": "scheduleId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "name",
+              "displayName": "name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "ranAt",
+              "displayName": "ranAt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "agentId",
+              "displayName": "agentId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "instruction",
+              "displayName": "instruction",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "reply",
+              "displayName": "reply",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "errorSummary",
+              "displayName": "errorSummary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        500,
+        340
+      ],
+      "id": "95840000-0000-4000-8000-000000000019",
+      "name": "Save Missed Run",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "value": "scheduled_runs",
+          "mode": "name"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "scheduleId",
+              "condition": "eq",
+              "keyValue": "={{ $('Shape Missed Run').first().json.scheduleId }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "nextRunAt": "={{ $('Shape Missed Run').first().json.nextRunAt }}",
+            "enabled": "={{ $('Shape Missed Run').first().json.enabled }}",
+            "lastStatus": "={{ $('Shape Missed Run').first().json.lastStatus }}",
+            "lastSummary": "={{ $('Shape Missed Run').first().json.lastSummary }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "nextRunAt",
+              "displayName": "nextRunAt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "enabled",
+              "displayName": "enabled",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "lastStatus",
+              "displayName": "lastStatus",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "lastSummary",
+              "displayName": "lastSummary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "dryRun": false
+        }
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        740,
+        340
+      ],
+      "id": "95840000-0000-4000-8000-000000000020",
+      "name": "Update After Miss",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Every Five Minutes": {
+      "main": [
+        [
+          {
+            "node": "Read Schedules",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Schedules": {
+      "main": [
+        [
+          {
+            "node": "Pick What Is Due",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick What Is Due": {
+      "main": [
+        [
+          {
+            "node": "Run It Now?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run It Now?": {
+      "main": [
+        [
+          {
+            "node": "Ask The Agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Shape Missed Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ask The Agent": {
+      "main": [
+        [
+          {
+            "node": "Shape Run Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shape Run Result": {
+      "main": [
+        [
+          {
+            "node": "Save Run Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Run Result": {
+      "main": [
+        [
+          {
+            "node": "Update After Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shape Missed Run": {
+      "main": [
+        [
+          {
+            "node": "Save Missed Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Missed Run": {
+      "main": [
+        [
+          {
+            "node": "Update After Miss",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "executionTimeout": 300
+  },
+  "versionId": "95840000-0000-4000-8000-0000000000100",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "phase": 18,
+    "testedWithN8n": "2.30.5",
+    "toolRisk": "bounded_local_write",
+    "authorization": "scheduled-run-only",
+    "externalWrite": "none",
+    "externalRead": "none",
+    "localWrite": "one-schedule-result-row-and-its-schedule"
+  },
+  "id": "phase18ScheduleTrigger",
+  "tags": []
+}

@@ -76,6 +76,62 @@
       "workflowId": "phase9GetBusinessMemory"
     },
     {
+      "id": "start_paid_domain_research",
+      "risk": "paid_external_read",
+      "available": true,
+      "modelCallable": true,
+      "mode": "explicit_paid_request_defaults_to_standard_with_free_fallback",
+      "workflowId": "phase11StartPaidDomainResearch"
+    },
+    {
+      "id": "complete_paid_domain_research",
+      "risk": "read",
+      "available": true,
+      "modelCallable": true,
+      "mode": "explicit_request_required",
+      "workflowId": "phase11CompletePaidDomainResearch"
+    },
+    {
+      "id": "get_paid_domain_research",
+      "risk": "read",
+      "available": true,
+      "modelCallable": true,
+      "mode": "automatic",
+      "workflowId": "phase11GetPaidDomainResearch"
+    },
+    {
+      "id": "create_schedule",
+      "risk": "bounded_local_write",
+      "available": true,
+      "modelCallable": true,
+      "mode": "explicit_request_required",
+      "workflowId": "phase18CreateSchedule"
+    },
+    {
+      "id": "list_schedules",
+      "risk": "read",
+      "available": true,
+      "modelCallable": true,
+      "mode": "automatic",
+      "workflowId": "phase18ListSchedules"
+    },
+    {
+      "id": "update_schedule",
+      "risk": "bounded_local_write",
+      "available": true,
+      "modelCallable": true,
+      "mode": "explicit_request_required",
+      "workflowId": "phase18UpdateSchedule"
+    },
+    {
+      "id": "lookup_linkedin_profile",
+      "risk": "paid_external_read",
+      "available": true,
+      "modelCallable": true,
+      "mode": "explicit_per_search_credit_approval",
+      "workflowId": "phase12LookupLinkedInProfile"
+    },
+    {
       "id": "delete_task",
       "risk": "destructive",
       "available": false,

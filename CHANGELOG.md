@@ -26,6 +26,22 @@ versioning for local workshop releases.
   protection.
 - Chat database diagnostics, redacted inspection, backup, restore, and reset
   support on macOS and Windows.
+- Scheduler optional skill: a saved instruction and a time, carried out by
+  whichever agent owns the skill being asked for. Daily, weekdays, weekly,
+  monthly, or once; times default to Australia/Melbourne and are correct across
+  daylight saving; results saved and read back on request. Its trigger ships unpublished, and a run more than six
+  hours late is rolled on rather than run. All five agents hold its tools, and
+  a schedule saved without a named agent runs as the agent that saved it.
+- The agent's instructions now carry the current date and time, so "tomorrow",
+  "next Monday", and "in three weeks" no longer send it back to the user asking
+  what day it is.
+- Schedules can be set relative to now: create_schedule takes a number of
+  minutes and reads its own clock, because the model has none.
+- Optional skills may declare `agent: global`, which wires their tools to all
+  five agents and writes their tool rules into all five role policies.
+  Re-running the installer now repairs a partial wiring rather than reporting
+  the tool as already installed, which is the upgrade path for anyone who added
+  the scheduler while it was project-manager only.
 
 ### Changed
 

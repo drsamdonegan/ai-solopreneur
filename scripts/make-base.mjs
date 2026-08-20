@@ -38,6 +38,13 @@ const BASE_WORKFLOWS = [
   "40-confirm-task-write.json",
   "90-debug-agent-health.json",
 ];
+const AGENT_IDS = [
+  "project-manager",
+  "sales",
+  "marketing",
+  "investment",
+  "bookkeeping",
+];
 
 function git(args) {
   const result = spawnSync("git", args, {
@@ -180,8 +187,59 @@ if (!contextNode) {
   throw new Error('The committed agent has no "Build Agent Context" node.');
 }
 let contextCode = contextNode.parameters.jsCode;
+function removeRuleFromAgent(code, agentId, rule) {
+  const anchor = `/* INSTALL ${agentId} TOOL RULES */`;
+  const end = code.indexOf(anchor);
+  if (end === -1) {
+    return code;
+  }
+
+  let start = 0;
+  for (const otherAgentId of AGENT_IDS) {
+    if (otherAgentId === agentId) {
+      continue;
+    }
+    const otherAnchor = `/* INSTALL ${otherAgentId} TOOL RULES */`;
+    const at = code.indexOf(otherAnchor);
+    if (at !== -1 && at < end) {
+      start = Math.max(start, at + otherAnchor.length);
+    }
+  }
+
+  const before = code.slice(0, start);
+  let scopedRules = code.slice(start, end);
+  const encodedRule = `${JSON.stringify(rule)},\n      `;
+  while (scopedRules.includes(encodedRule)) {
+    scopedRules = scopedRules.replace(encodedRule, "");
+  }
+  return `${before}${scopedRules}${code.slice(end)}`;
+}
+
+// Undo the catalogue in reverse order. Some later skills deliberately broaden
+// text introduced by an earlier skill (Telegram extends Domain Research's
+// safety line), so reversing in catalogue order can strand the later text.
+for (const manifest of [...optionalManifests].reverse()) {
+  const rules = [
+    ...(manifest.policyRules ?? []),
+    ...(manifest.unavailableCapabilities ?? []).map(
+      (capability) => `- ${capability} is unavailable for this role.`,
+    ),
+  ];
+  const targetAgents =
+    manifest.agent === "global" ? AGENT_IDS : [manifest.agent];
+  for (const targetAgent of targetAgents) {
+    for (const rule of rules) {
+      contextCode = removeRuleFromAgent(contextCode, targetAgent, rule);
+    }
+  }
+  for (const replacement of manifest.policyReplacements ?? []) {
+    if (contextCode.includes(replacement.replace)) {
+      contextCode = contextCode.replace(replacement.replace, replacement.find);
+    }
+  }
+}
+
 for (const manifest of optionalManifests) {
-  const anchor = `/* INSTALL ${manifest.agent} TOOL RULES */`;
   const rules = [
     ...(manifest.policyRules ?? []),
     ...(manifest.unavailableCapabilities ?? []).map(
@@ -189,14 +247,17 @@ for (const manifest of optionalManifests) {
     ),
   ];
   for (const rule of rules) {
-    const addition = `${JSON.stringify(rule)},\n      ${anchor}`;
-    while (contextCode.includes(addition)) {
-      contextCode = contextCode.replace(addition, anchor);
+    if (contextCode.includes(JSON.stringify(rule))) {
+      throw new Error(
+        `Optional prompt rule from "${manifest.id}" remained in the learner base.`,
+      );
     }
   }
   for (const replacement of manifest.policyReplacements ?? []) {
     if (contextCode.includes(replacement.replace)) {
-      contextCode = contextCode.replace(replacement.replace, replacement.find);
+      throw new Error(
+        `Optional prompt replacement from "${manifest.id}" remained in the learner base.`,
+      );
     }
   }
 }

@@ -205,6 +205,48 @@ for (const file of filedWorkflows.keys()) {
   );
 }
 
+// n8n reserves a few column names on its own tables, and a dataTable create
+// that asks for one fails outright — which takes the whole skill with it: the
+// tables never appear, every tool built on them errors, and the only clue is a
+// line in the n8n log. The scheduler shipped with createdAt and monthly-update
+// with updatedAt, and both were dead on arrival for exactly this reason. It is
+// a one-word mistake that costs an afternoon to find, so it is checked here,
+// across every skill, installed or not.
+const RESERVED_COLUMN_NAMES = new Set(["id", "createdAt", "updatedAt"]);
+
+async function checkReservedColumns(label, path) {
+  let workflow;
+  try {
+    workflow = JSON.parse(await readFile(path, "utf8"));
+  } catch {
+    return;
+  }
+  for (const node of workflow.nodes ?? []) {
+    const columns = node.parameters?.columns?.column;
+    if (node.parameters?.operation !== "create" || !Array.isArray(columns)) {
+      continue;
+    }
+    for (const column of columns) {
+      check(
+        !RESERVED_COLUMN_NAMES.has(column.name),
+        `${label}: table "${node.parameters.tableName}" declares "${column.name}", which n8n reserves — the table is never created and the skill cannot work`,
+      );
+    }
+  }
+}
+
+for (const file of actualFiles) {
+  await checkReservedColumns(file, join(workflowDirectory, file));
+}
+for (const skill of optionalSkills) {
+  for (const file of skill.workflowFiles) {
+    await checkReservedColumns(
+      `optional-skills/${skill.id}/workflows/${file}`,
+      join(projectRoot, "optional-skills", skill.id, "workflows", file),
+    );
+  }
+}
+
 const workflows = new Map();
 for (const file of expectedFiles) {
   const raw = await readFile(join(workflowDirectory, file), "utf8");
@@ -698,6 +740,13 @@ if (agentWorkflow) {
   // a single-quoted description closes the string early and the tool node dies
   // with "Unbalanced parentheses" the first time the model reaches for it. A
   // description carrying an apostrophe has to be written in backticks.
+  //
+  // Which makes a backtick inside a backtick exactly as fatal, and far more
+  // tempting: backticks are how anyone writes an example value, and the
+  // description they are writing is already backtick-quoted because it
+  // contains an apostrophe. This check read only the single-quoted ones and
+  // waved five broken descriptions through. It now reads whichever quote the
+  // description actually opened with.
   const brokenFromAi = [
     ...new Set(
       agentWorkflow.nodes.flatMap((node) =>
@@ -707,9 +756,10 @@ if (agentWorkflow) {
           .map((tail) => tail.slice(0, tail.indexOf(") }}") + 1))
           .filter((call) => {
             const description = call.slice(call.indexOf(",") + 1).trim();
-            if (!description.startsWith("'")) return false;
+            const quote = description.charAt(0);
+            if (quote !== "'" && quote !== "`") return false;
             const body = description.slice(1);
-            return !body.slice(body.indexOf("'") + 1).trim().startsWith(",");
+            return !body.slice(body.indexOf(quote) + 1).trim().startsWith(",");
           })
           .map(() => node.name),
       ),
@@ -717,7 +767,8 @@ if (agentWorkflow) {
   ];
   check(
     brokenFromAi.length === 0,
-    "Tool descriptions must not close their own quote; write them in backticks when they contain an apostrophe" +
+    "Tool descriptions must not close their own quote: write one containing an " +
+      "apostrophe in backticks, and never put a backtick inside it" +
       (brokenFromAi.length > 0 ? ` (${brokenFromAi.join(", ")})` : ""),
   );
 
@@ -1410,13 +1461,25 @@ if (startPaidResearchWorkflow) {
     "https://api.dataforseo.com/v3/dataforseo_labs/google/related_keywords/live",
     "https://api.dataforseo.com/v3/serp/google/organic/live/regular",
   ];
-  const paidHttpNodes = startPaidResearchWorkflow.nodes.filter(
-    (node) => dataForSeoUrls.includes(String(node.parameters?.url ?? "")),
+  // Each seed gets its own call, because a live endpoint rejects every task after
+  // the first, so a reviewed endpoint may now appear several times. What must not
+  // change is the set: every DataForSEO URL in here is one of the six, and all six
+  // are still present.
+  const paidHttpNodes = startPaidResearchWorkflow.nodes.filter((node) =>
+    String(node.parameters?.url ?? "").includes("api.dataforseo.com"),
   );
+  const paidCalledUrls = startPaidResearchWorkflow.nodes
+    .map((node) => String(node.parameters?.url ?? ""))
+    .filter((url) => url.includes("api.dataforseo.com"));
+  const unreviewed = [...new Set(paidCalledUrls)].filter(
+    (url) => !dataForSeoUrls.includes(url),
+  );
+  const missing = dataForSeoUrls.filter((url) => !paidCalledUrls.includes(url));
   check(
-    JSON.stringify(paidHttpNodes.map((node) => node.parameters.url)) ===
-      JSON.stringify(dataForSeoUrls),
-    "start_paid_domain_research may use only the six reviewed DataForSEO endpoints",
+    unreviewed.length === 0 && missing.length === 0,
+    "start_paid_domain_research may use only the six reviewed DataForSEO endpoints" +
+      (unreviewed.length > 0 ? ` (unreviewed: ${unreviewed.join(", ")})` : "") +
+      (missing.length > 0 ? ` (missing: ${missing.join(", ")})` : ""),
   );
   check(
     paidHttpNodes.every(
@@ -1836,7 +1899,7 @@ for (const installed of installedSkills) {
     (skill) => skill.id === installed.id,
   );
   check(
-    AGENT_IDS.includes(installed.agent) &&
+    (AGENT_IDS.includes(installed.agent) || installed.agent === "global") &&
       compiled?.agent === installed.agent,
     `Installed skill ${installed.id} must declare the same reviewed agent in manifest.json and skill.yaml`,
   );

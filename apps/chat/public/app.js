@@ -412,6 +412,9 @@
       (profile?.agentName ?? "").length > 0 ? getInitials(workspace) : "AI";
     elements.mobileAgentInitials.textContent = getInitials(name);
     applySavedAvatar();
+    // Every path that changes the active agent comes through here, so this is
+    // the one place the funding progress poll starts and stops.
+    syncScanProgress();
   }
 
   function applySavedAvatar() {
@@ -1884,8 +1887,219 @@
     } finally {
       setBusy(false);
       elements.input.focus();
+      // "Go and search" starts a scan mid-conversation; check straight away
+      // rather than making the new bar wait for the next scheduled poll.
+      if (activeAgentId === FUNDING_AGENT_ID) {
+        void refreshScanProgress();
+      }
     }
   }
+
+  // ---- Funding search progress ------------------------------------------
+  // A funding search runs server-side for the best part of an hour, and a
+  // chat transcript cannot show that anything is happening. While the
+  // Investment agent is open, the page polls a small endpoint that reads the
+  // search's own progress notes, and draws them as a card at the foot of the
+  // conversation — in the transcript, under the agent's reply, where the
+  // person is already looking.
+  const FUNDING_AGENT_ID = "investment";
+  const SCAN_POLL_MS = 12_000;
+  // What the page asks the agent once a search lands. It goes through the
+  // agent rather than being rendered here, because the whole point is results
+  // in its own words rather than a wall of stored report text.
+  //
+  // Kept to something a person would plausibly type: the turn is stored like
+  // any other and comes back on every reload, so a long machine-worded
+  // instruction would sit in the transcript for ever looking like the owner
+  // wrote it. How to say it belongs in the skill, not in a string here.
+  const SCAN_RESULT_PROMPT = "What did the funding search find?";
+  let scanPollTimer = null;
+  let scanWasRunning = false;
+  let scanDoneUntil = 0;
+  // Only ever deliver a given search once, and only one that this page
+  // actually watched running — opening the page long after a search finished
+  // should not fire an unprompted message.
+  let deliveredFinishedAt = null;
+  let scanCard = null;
+
+  function scanProgressCard() {
+    if (scanCard) {
+      return scanCard;
+    }
+    const card = document.createElement("div");
+    card.className = "scan-progress";
+    card.id = "scan-progress";
+    card.setAttribute("role", "status");
+    card.setAttribute("aria-live", "polite");
+    card.hidden = true;
+
+    const spinner = document.createElement("div");
+    spinner.className = "scan-progress__spinner";
+    spinner.setAttribute("aria-hidden", "true");
+
+    const body = document.createElement("div");
+    body.className = "scan-progress__body";
+    const note = document.createElement("p");
+    note.className = "scan-progress__note";
+    const track = document.createElement("div");
+    track.className = "scan-progress__track";
+    track.setAttribute("aria-hidden", "true");
+    const fill = document.createElement("div");
+    fill.className = "scan-progress__fill";
+    track.append(fill);
+    body.append(note, track);
+
+    const meta = document.createElement("p");
+    meta.className = "scan-progress__meta";
+
+    card.append(spinner, body, meta);
+    scanCard = { card, note, fill, meta };
+    return scanCard;
+  }
+
+  // Every path that draws the transcript replaces its children, so the card
+  // re-attaches itself rather than assuming it survived.
+  function attachScanCard(card) {
+    if (card.parentElement !== elements.conversation) {
+      elements.conversation.append(card);
+      return;
+    }
+    if (elements.conversation.lastElementChild !== card) {
+      elements.conversation.append(card);
+    }
+  }
+
+  function hideScanCard() {
+    if (scanCard) {
+      scanCard.card.hidden = true;
+      scanCard.card.remove();
+    }
+  }
+
+  function renderScanProgress(scan) {
+    if (!scan || scan.available === false) {
+      hideScanCard();
+      return;
+    }
+    const { card, note, fill, meta } = scanProgressCard();
+
+    if (scan.running === true) {
+      const wasHidden = card.hidden;
+      scanWasRunning = true;
+      card.classList.remove("scan-progress--done");
+      const total = Number(scan.of) || 0;
+      const step = Number(scan.step) || 0;
+      // Step 0 is "reading the profile", so the bar shows a sliver rather
+      // than nothing: a search that just started should look started.
+      const percent =
+        total > 0
+          ? Math.max(4, Math.min(100, Math.round((step / total) * 100)))
+          : 4;
+      fill.style.width = `${percent}%`;
+      note.textContent = String(scan.note ?? "Searching…");
+      const started = Number(scan.startedMinutesAgo);
+      const quiet = Number(scan.updatedMinutesAgo);
+      let text = Number.isFinite(started) ? `Started ${started} min ago` : "";
+      // A beat can hold one long API call, so a few quiet minutes are
+      // normal; past that the card says when it last heard anything, so a
+      // stall is visible instead of the bar just sitting still.
+      if (Number.isFinite(quiet) && quiet >= 3) {
+        text += ` · last update ${quiet} min ago`;
+      }
+      meta.textContent = text;
+      card.hidden = false;
+      attachScanCard(card);
+      if (wasHidden) {
+        scrollConversation();
+      }
+      return;
+    }
+
+    // Not running. A search this page watched finish gets read out by the
+    // agent, and the card stands down to a one-line note underneath it.
+    if (scanWasRunning) {
+      scanWasRunning = false;
+      scanDoneUntil = Date.now() + 90_000;
+      const finishedAt = String(scan.finishedAt ?? "");
+      if (scan.interrupted !== true && finishedAt !== deliveredFinishedAt) {
+        deliveredFinishedAt = finishedAt;
+        void deliverScanResults();
+      }
+    }
+    if (Date.now() >= scanDoneUntil) {
+      hideScanCard();
+      return;
+    }
+    card.classList.add("scan-progress--done");
+    const found = Number(scan.newCount) || 0;
+    note.textContent =
+      scan.interrupted === true
+        ? "The search stopped without finishing. Ask me to search again."
+        : found > 0
+          ? `Search finished — ${found} new ${found === 1 ? "program" : "programs"} found.`
+          : "Search finished.";
+    meta.textContent = "";
+    card.hidden = false;
+    attachScanCard(card);
+  }
+
+  async function deliverScanResults() {
+    // sendMessage refuses while another request is in flight, so a person
+    // mid-sentence is never interrupted; the next poll tries again.
+    if (requestInProgress || documentRequestInProgress) {
+      deliveredFinishedAt = null;
+      return;
+    }
+    // Shown, not hidden: the server stores it either way, so hiding it now
+    // only means it appears out of nowhere on the next reload.
+    await sendMessage(SCAN_RESULT_PROMPT, true);
+  }
+
+  async function refreshScanProgress() {
+    // No visibility guard: the browser already throttles background-tab
+    // timers, the poll is a couple of hundred bytes, and a guard here is one
+    // more way for the bar to sit stale when the user comes back.
+    if (activeAgentId !== FUNDING_AGENT_ID) {
+      return;
+    }
+    try {
+      const response = await fetch("/api/funding-progress", {
+        headers: { Accept: "application/json" },
+      });
+      if (!response.ok) {
+        hideScanCard();
+        return;
+      }
+      renderScanProgress(await response.json());
+    } catch {
+      hideScanCard();
+    }
+  }
+
+  function syncScanProgress() {
+    if (activeAgentId === FUNDING_AGENT_ID) {
+      if (scanPollTimer === null) {
+        scanPollTimer = window.setInterval(() => {
+          void refreshScanProgress();
+        }, SCAN_POLL_MS);
+      }
+      void refreshScanProgress();
+      return;
+    }
+    if (scanPollTimer !== null) {
+      window.clearInterval(scanPollTimer);
+      scanPollTimer = null;
+    }
+    scanWasRunning = false;
+    scanDoneUntil = 0;
+    hideScanCard();
+  }
+
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) {
+      void refreshScanProgress();
+    }
+  });
 
   function updateCharacterCount() {
     const length = elements.input.value.length;

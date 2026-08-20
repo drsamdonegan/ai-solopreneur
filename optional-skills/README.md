@@ -18,6 +18,7 @@ Each skill is self-contained. Adding one **never** changes the chat app, never t
 | [`linkedin-profile-lookup`](linkedin-profile-lookup/) | Looks up a named person's public professional details | A paid people-search account |
 | [`monthly-update`](monthly-update/) | Reads a month of your email and writes your company's monthly update | A read-only Gmail connection |
 | [`telegram-trigger`](telegram-trigger/) | Lets a cloud-hosted agent answer plain-text Telegram messages | A Telegram bot token and cloud deployment |
+| [`scheduler`](scheduler/) | Runs any of your agent's other skills at a time you choose, and saves what they found. Every agent can use it | — |
 
 Open any skill's folder and read its `skill/README.md` before you install it. Each one tells you what it costs, what it can't do, and how to prove it loaded.
 

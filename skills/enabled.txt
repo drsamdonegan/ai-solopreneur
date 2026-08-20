@@ -6,3 +6,6 @@ weekly-status
 funding-radar
 telegram-trigger
 domain-research
+paid-domain-research
+scheduler
+linkedin-profile-lookup
