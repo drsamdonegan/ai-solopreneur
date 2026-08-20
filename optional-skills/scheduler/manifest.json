@@ -25,7 +25,7 @@
             "sessionId": "={{ $('Validate and Normalise').first().json.sessionId }}",
             "requestId": "={{ $('Validate and Normalise').first().json.requestId }}",
             "callerAgent": "={{ $('Validate and Normalise').first().json.agentId }}",
-            "inMinutes": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('inMinutes', `For anything relative \u2014 in two minutes, in an hour, in three days \u2014 the whole number of minutes from now, and nothing else: the tool reads its own clock and works the time out. An hour is 60. Leave empty when the user named an actual time of day.`, 'string') }}",
+            "inMinutes": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('inMinutes', `For anything relative — in two minutes, in an hour, in three days — the whole number of minutes from now, and nothing else: the tool reads its own clock and works the time out. An hour is 60. Leave empty when the user named an actual time of day.`, 'string') }}",
             "name": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('name', `A short name for the schedule, in the user's own words, for example \"Morning domain research\". Leave empty and one is made from the instruction.`, 'string') }}",
             "instruction": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('instruction', `What the agent should do when it fires, written exactly as the user would type it into the chat. It is read on its own with no conversation behind it, so name the website, the person, or the report in full rather than saying \"the same as before\".`, 'string') }}",
             "agent": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('agent', `Which agent should run it: project-manager, sales, marketing, investment, or bookkeeping. Leave empty to schedule it as yourself, which is right whenever the work is your own. Name a different one when the work belongs to another specialist, such as website research on marketing or grants on investment.`, 'string') }}",
@@ -363,7 +363,8 @@
         "76-tool-create-schedule.json",
         "77-tool-list-schedules.json",
         "78-tool-update-schedule.json",
-        "79-trigger-scheduled-runs.json"
+        "79-trigger-scheduled-runs.json",
+        "80-internal-schedule-results.json"
       ]
     },
     {

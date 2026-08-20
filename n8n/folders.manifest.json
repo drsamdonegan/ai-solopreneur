@@ -98,7 +98,8 @@
         "76-tool-create-schedule.json",
         "77-tool-list-schedules.json",
         "78-tool-update-schedule.json",
-        "79-trigger-scheduled-runs.json"
+        "79-trigger-scheduled-runs.json",
+        "80-internal-schedule-results.json"
       ]
     }
   ]
