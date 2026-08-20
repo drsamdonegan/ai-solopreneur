@@ -1799,19 +1799,22 @@
     }
   }
 
+  // Returns whether the turn landed. Callers that a person drives ignore it;
+  // the automatic funding read-out uses it to tell a delivered result from a
+  // send that never arrived.
   async function sendMessage(
     rawMessage,
     showUserMessage,
     retryDocuments,
   ) {
     if (requestInProgress || documentRequestInProgress) {
-      return;
+      return false;
     }
 
     const message = rawMessage.trim();
     if (!message) {
       elements.input.focus();
-      return;
+      return false;
     }
 
     const requestDocuments = Array.isArray(retryDocuments)
@@ -1833,6 +1836,7 @@
     resizeInput();
     setBusy(true);
     loadingMessage = addLoadingMessage();
+    let delivered = false;
     const requestId = createSessionId();
 
     try {
@@ -1867,6 +1871,11 @@
       loadingMessage.remove();
       loadingMessage = null;
       addMessage("agent", responseBody.reply.trim());
+      // The reply is on screen and stored: the turn has landed. Everything
+      // below is a cosmetic refresh of the history panel, and letting its
+      // failure count as a failed send made the funding read-out arrive
+      // twice — once for real, once because the first was scored a miss.
+      delivered = true;
       await loadConversationList();
       await loadConversation(sessionId, undefined, true);
     } catch (error) {
@@ -1893,6 +1902,7 @@
         void refreshScanProgress();
       }
     }
+    return delivered;
   }
 
   // ---- Funding search progress ------------------------------------------
@@ -1913,14 +1923,53 @@
   // instruction would sit in the transcript for ever looking like the owner
   // wrote it. How to say it belongs in the skill, not in a string here.
   const SCAN_RESULT_PROMPT = "What did the funding search find?";
+  // A scheduled search runs at 11am with nobody watching, so waiting for a tab
+  // that saw it running meant the owner still had to ask. Delivery is now
+  // decided by what this browser has already read out, kept where it survives
+  // a reload, rather than by what one page happened to witness.
+  const DELIVERED_KEY = "funding-scan-delivered";
+  // Old enough and it is not news any more: the owner has moved on, and an
+  // unprompted read-out of yesterday's search is noise. They can still ask.
+  const DELIVER_WITHIN_MS = 12 * 60 * 60 * 1000;
   let scanPollTimer = null;
   let scanWasRunning = false;
   let scanDoneUntil = 0;
-  // Only ever deliver a given search once, and only one that this page
-  // actually watched running — opening the page long after a search finished
-  // should not fire an unprompted message.
-  let deliveredFinishedAt = null;
+  let deliveringScan = false;
+  // A floor under the whole mechanism. Marking the search as read handles the
+  // ordinary case, but it only works while finishedAt holds still; anything
+  // that made it move would turn every poll into a fresh search and the
+  // conversation into fifty read-outs. One a minute, whatever else is wrong.
+  let lastDeliveredAt = 0;
   let scanCard = null;
+
+  function alreadyDelivered(finishedAt) {
+    try {
+      return window.localStorage.getItem(DELIVERED_KEY) === finishedAt;
+    } catch {
+      return false;
+    }
+  }
+
+  function markDelivered(finishedAt) {
+    try {
+      window.localStorage.setItem(DELIVERED_KEY, finishedAt);
+    } catch {
+      // A browser refusing storage gets one read-out per page load rather
+      // than none, which is the better way round to fail.
+    }
+  }
+
+  function worthDelivering(scan) {
+    const finishedAt = String(scan.finishedAt ?? "");
+    if (scan.interrupted === true || finishedAt === "") {
+      return false;
+    }
+    const finished = Date.parse(finishedAt);
+    if (Number.isNaN(finished) || Date.now() - finished > DELIVER_WITHIN_MS) {
+      return false;
+    }
+    return !alreadyDelivered(finishedAt);
+  }
 
   function scanProgressCard() {
     if (scanCard) {
@@ -2015,16 +2064,16 @@
       return;
     }
 
-    // Not running. A search this page watched finish gets read out by the
-    // agent, and the card stands down to a one-line note underneath it.
+    // Not running. Any finished search this browser has not read out yet gets
+    // read out now — whether this page watched it run, or it was started by a
+    // schedule hours ago and the owner has only just opened the chat.
     if (scanWasRunning) {
       scanWasRunning = false;
       scanDoneUntil = Date.now() + 90_000;
-      const finishedAt = String(scan.finishedAt ?? "");
-      if (scan.interrupted !== true && finishedAt !== deliveredFinishedAt) {
-        deliveredFinishedAt = finishedAt;
-        void deliverScanResults();
-      }
+    }
+    if (worthDelivering(scan)) {
+      scanDoneUntil = Date.now() + 90_000;
+      void deliverScanResults(String(scan.finishedAt));
     }
     if (Date.now() >= scanDoneUntil) {
       hideScanCard();
@@ -2043,16 +2092,38 @@
     attachScanCard(card);
   }
 
-  async function deliverScanResults() {
-    // sendMessage refuses while another request is in flight, so a person
-    // mid-sentence is never interrupted; the next poll tries again.
-    if (requestInProgress || documentRequestInProgress) {
-      deliveredFinishedAt = null;
+  // Sending re-polls when it finishes, and an unmarked search would deliver
+  // again on that poll, and again on the poll after that one — fifty read-outs
+  // in four seconds, each one triggering the next. So the search is marked
+  // before anything is sent, never unmarked, and only one send is ever in the
+  // air at a time.
+  async function deliverScanResults(finishedAt) {
+    if (deliveringScan || requestInProgress || documentRequestInProgress) {
+      // Left unmarked on purpose: a person mid-sentence is not interrupted,
+      // and the next poll picks it up twelve seconds later.
       return;
     }
-    // Shown, not hidden: the server stores it either way, so hiding it now
-    // only means it appears out of nowhere on the next reload.
-    await sendMessage(SCAN_RESULT_PROMPT, true);
+    if (Date.now() - lastDeliveredAt < 60_000) {
+      return;
+    }
+    deliveringScan = true;
+    lastDeliveredAt = Date.now();
+    try {
+      // Marked before sending, because sending re-polls and an unmarked
+      // search would deliver again on that poll and every one after it.
+      markDelivered(finishedAt);
+      // Shown, not hidden: the server stores it either way, so hiding it now
+      // only means it appears out of nowhere on the next reload.
+      const sent = await sendMessage(SCAN_RESULT_PROMPT, true);
+      if (!sent) {
+        // A send that never arrived would otherwise lose the results in
+        // silence. Unmark it and let the next poll try; the minute floor
+        // above is what keeps that from becoming a storm.
+        markDelivered("");
+      }
+    } finally {
+      deliveringScan = false;
+    }
   }
 
   async function refreshScanProgress() {
