@@ -21,7 +21,7 @@ A first and last name are required. Ask for missing details in one short, friend
 
 - first and last name;
 - **where they work**, optional but the single most useful thing after the name;
-- work email, optional but useful for employer evidence;
+- work email, optional; the domain is read as an employer, so an address at the company is as good as being told where they work;
 - city, state or province, and country, all optional;
 - industry, optional.
 
