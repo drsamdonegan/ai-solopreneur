@@ -933,6 +933,7 @@ if (linkedInLookupWorkflow) {
         "request_id",
         "email_address",
         "full_name",
+        "company_name",
         "country_region",
         "state_province",
         "city_location",
@@ -975,7 +976,7 @@ if (linkedInLookupWorkflow) {
       ?.jsCode ?? "";
   check(
     /profile_enriched: false/.test(rankingCode) &&
-      /slice\(0, 3\)/.test(rankingCode) &&
+      /slice\(0, 10\)/.test(rankingCode) &&
       /linkedinSlug/.test(rankingCode) &&
       /structuredLocation/.test(rankingCode) &&
       /professionalText/.test(rankingCode) &&

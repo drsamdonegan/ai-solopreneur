@@ -2662,6 +2662,59 @@ export function createChatHandler(options: ChatGatewayOptions): RequestListener 
         return;
       }
 
+      if (url.pathname === "/api/schedule-results") {
+        if (request.method !== "GET") {
+          sendJson(
+            response,
+            405,
+            {
+              error: {
+                code: "INVALID_REQUEST",
+                message: "Read schedule results with GET.",
+              },
+            },
+            { Allow: "GET" },
+          );
+          return;
+        }
+        // The page polls this so a task that ran on a schedule can have its
+        // answer read back into the conversation without the owner asking.
+        // n8n answers from the saved run rows — no agent, no model call — and
+        // deliberately without the answers themselves: this reports which task
+        // finished and when, and the agent reads out what it said. As with
+        // funding progress, every failure is a quiet "not available", because
+        // a chat page has to keep working while n8n restarts.
+        try {
+          const resultsUrl = new URL(
+            "/webhook/schedule-results",
+            options.upstreamUrl,
+          );
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 5_000);
+          let upstream: Response;
+          try {
+            upstream = await fetchImplementation(resultsUrl, {
+              signal: controller.signal,
+            });
+          } finally {
+            clearTimeout(timer);
+          }
+          if (!upstream.ok) {
+            sendJson(response, 200, { schemaVersion: 1, available: false });
+            return;
+          }
+          const body = (await upstream.json()) as Record<string, unknown>;
+          sendJson(response, 200, {
+            ...body,
+            schemaVersion: 1,
+            available: true,
+          });
+        } catch {
+          sendJson(response, 200, { schemaVersion: 1, available: false });
+        }
+        return;
+      }
+
       if (url.pathname === "/api/funding-progress") {
         if (request.method !== "GET") {
           sendJson(
