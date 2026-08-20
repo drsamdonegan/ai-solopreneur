@@ -11,7 +11,12 @@
     "Folder IDs are fixed so re-running setup updates the same folders instead",
     "of creating duplicates. Order controls both the number in the name and the",
     "timestamps, so the list reads top to bottom under either n8n sort option.",
-    "Names are what a learner reads. Say the skill out loud; no node names, no IDs."
+    "Names are what a learner reads. Say the skill out loud; no node names, no IDs.",
+    "Workflow numbering: the 50-69 tool band and 70-79 trigger band are full, and",
+    "the scheduler skill has spilled into 76-80. From 100 upward the convention is",
+    "one contiguous ten-number block per skill, so a skill's files read together in",
+    "a directory listing. 100-109 is the Xero coding review; 90 stays the debug",
+    "workflow; the skill after that takes 110-119."
   ],
   "folders": [
     {
