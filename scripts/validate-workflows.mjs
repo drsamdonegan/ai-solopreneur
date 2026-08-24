@@ -43,7 +43,7 @@ const basePolicyTuples = [
   ["update_task_status", "write", "confirmation_required"],
 ];
 // Non-sticky nodes in the base agent workflow. Each installed tool adds one.
-const baseAgentNodeCount = 21;
+const baseAgentNodeCount = 25;
 
 async function readOptionalSkills() {
   const optionalRoot = join(projectRoot, "optional-skills");
@@ -658,6 +658,31 @@ if (agentWorkflow) {
       /never publishes/i.test(startSeoArticleTool?.parameters?.description ?? ""),
     "Agent: start_seo_article must start exact custom topics, bound research, hide internals, and never publish",
   );
+  const directArticleDetector = nodeByName(agentWorkflow, "Detect Direct Article Request");
+  const directArticleStart = nodeByName(agentWorkflow, "Start Direct SEO Article");
+  const directArticleReply = nodeByName(agentWorkflow, "Shape Direct Article Reply");
+  const directValues = directArticleStart?.parameters?.workflowInputs?.value ?? {};
+  check(
+    /agentId==='marketing'/.test(directArticleDetector?.parameters?.jsCode ?? "") &&
+      /directArticleTopic/.test(directArticleDetector?.parameters?.jsCode ?? "") &&
+      /documents/.test(directArticleDetector?.parameters?.jsCode ?? "") &&
+      directArticleStart?.parameters?.workflowId?.value === "phase13StartSeoArticle" &&
+      directArticleStart?.parameters?.options?.waitForSubWorkflow === true &&
+      directValues.currentInstruction ===
+        "={{ $('Validate and Normalise').first().json.message }}" &&
+      directValues.requestedTopic === "={{ $json.directArticleTopic }}" &&
+      directValues.selectionNumber === 0 &&
+      directValues.chooseStrongestKeyword === false &&
+      /progress card will update automatically/i.test(
+        directArticleReply?.parameters?.jsCode ?? "",
+      ) &&
+      !/jobId/.test(directArticleReply?.parameters?.jsCode ?? "") &&
+      agentWorkflow.connections["Direct Article Request?"]?.main?.[0]?.[0]?.node ===
+        "Start Direct SEO Article" &&
+      agentWorkflow.connections["Direct Article Request?"]?.main?.[1]?.[0]?.node ===
+        "Load Enabled Skills",
+    "Agent: explicit simple Marketing article requests must bypass model discretion and start deterministically",
+  );
   const getSeoArticleTool = nodeByName(agentWorkflow, "get_seo_article");
   check(
     getSeoArticleTool?.parameters?.workflowId?.value === "phase13GetSeoArticle" &&
@@ -679,9 +704,12 @@ if (agentWorkflow) {
       "Confirm Stored Action",
     ) &&
       connectionTargets(agentWorkflow, "Exact Confirmation?", "main", 1).includes(
+        "Detect Direct Article Request",
+      ) &&
+      connectionTargets(agentWorkflow, "Direct Article Request?", "main", 1).includes(
         "Load Enabled Skills",
       ),
-    "Agent: exact confirmations must bypass Claude and ordinary messages must load skills",
+    "Agent: exact confirmations must bypass Claude and ordinary messages must pass the direct-route guard before loading skills",
   );
   const confirmAction = nodeByName(agentWorkflow, "Confirm Stored Action");
   check(
