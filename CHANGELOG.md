@@ -31,6 +31,10 @@ versioning for local workshop releases.
   strings rather than JSON-escaped text. Formatting-only differences no longer
   produce false unsupported-claim failures; URLs and source wording still have
   to match the verified evidence.
+- Repaired drafts now discard obsolete claim-ledger rows only when their sentence
+  no longer exists in the article. Remaining claims still require verified IDs
+  and excerpts, and terminal failures now distinguish incomplete model output,
+  source mismatches, and genuinely unsupported content.
 - Agent cards now show stable packages and installation/sync state instead of
   exposing every internal Markdown skill as a separate product feature.
 - Existing capabilities are retained as package modules or add-ons: paid

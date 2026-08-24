@@ -67,7 +67,18 @@ const groundedDraft = {
       support: "entailed",
       repairAction: "",
     },
+    {
+      sentence: "This unsupported sentence was removed during repair.",
+      sourceIds: [],
+      excerpts: [],
+      support: "unsupported",
+      repairAction: "Remove it.",
+    },
   ],
+};
+const sanitizedGroundedDraft = {
+  ...groundedDraft,
+  claims: [groundedDraft.claims[0]],
 };
 const groundedResponse = {
   statusCode: 200,
@@ -96,14 +107,30 @@ assert.deepEqual(
   {
     pages: groundingPages,
     valid: true,
-    draft: groundedDraft,
+    draft: sanitizedGroundedDraft,
     needsRepair: false,
   },
 );
-assert.equal(
-  new Function("$json", "$", inspectRepairedDraftCode)(groundedResponse, workflowLookup).json
-    .valid,
-  true,
+assert.deepEqual(
+  new Function("$json", "$", inspectRepairedDraftCode)(groundedResponse, workflowLookup).json,
+  {
+    pages: groundingPages,
+    valid: true,
+    draft: sanitizedGroundedDraft,
+    needsRepair: false,
+  },
+);
+const incompleteRepair = new Function("$json", "$", inspectRepairedDraftCode)(
+  {
+    ...groundedResponse,
+    body: { ...groundedResponse.body, stop_reason: "max_tokens" },
+  },
+  workflowLookup,
+).json;
+assert.equal(incompleteRepair.valid, false);
+assert.match(
+  incompleteRepair.failure.message,
+  /incomplete repair/i,
 );
 
 const temporary = await mkdtemp(join(tmpdir(), "seo-article-test-"));
