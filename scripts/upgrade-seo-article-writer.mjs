@@ -28,6 +28,7 @@ const files = [
     previous: [
       "eebaa166f46e4c8c4aa9ee8d843aec5373e255224a69a1ebb54297c113cf49c8",
       "ac548c064c38a1bce0a84c74a058c02906e917ab232324d5e8aa5f9d50d3dbf8",
+      "67a198ce85e78ed069a03d0876c8c5efd98aec13762c746192f0efa7ab02bac3",
     ],
   },
   {
@@ -47,7 +48,10 @@ const files = [
   {
     source: "workflows/57-internal-write-seo-article.json",
     target: "n8n/workflows/57-internal-write-seo-article.json",
-    previous: "ccec1cd6cfb688847c23b202fd246180c3a6cd9b96bc43725d2a8d69776ef317",
+    previous: [
+      "ccec1cd6cfb688847c23b202fd246180c3a6cd9b96bc43725d2a8d69776ef317",
+      "ef86c1f86c5089c549053545a1a2ff8847aae2ac060869fa1304dc13a5613986",
+    ],
     json: true,
   },
   {

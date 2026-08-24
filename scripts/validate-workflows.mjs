@@ -1796,9 +1796,15 @@ if (writeSeoArticleWorkflow) {
       /UNTRUSTED DATA/.test(
         nodeByName(writeSeoArticleWorkflow, "Prepare Grounded Draft")?.parameters?.jsCode ?? "",
       ) &&
-      /unsupported/.test(
-        nodeByName(writeSeoArticleWorkflow, "Inspect Repaired Draft")?.parameters?.jsCode ?? "",
-      ),
+      ["Inspect Draft", "Inspect Repaired Draft"].every((name) => {
+        const code = nodeByName(writeSeoArticleWorkflow, name)?.parameters?.jsCode ?? "";
+        return (
+          /unsupported/.test(code) &&
+          /normalize\('NFKC'\)/.test(code) &&
+          /contains\(p\.text,s\.excerpt\)/.test(code) &&
+          /contains\(assembled,c\.sentence\)/.test(code)
+        );
+      }),
     "write_seo_article must require four sources, resist prompt injection, and allow one repair only",
   );
 }
