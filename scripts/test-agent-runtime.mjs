@@ -148,6 +148,39 @@ assert.equal(
   false,
 );
 
+const directArticleReplyCode = workflow.nodes.find(
+  (node) => node.name === "Shape Direct Article Reply",
+).parameters.jsCode;
+const directArticleLookup = () => ({
+  first: () => ({ json: directArticle }),
+});
+const runDirectArticleReply = new Function("$json", "$", directArticleReplyCode);
+assert.match(
+  runDirectArticleReply(
+    {
+      ok: true,
+      status: "queued",
+      requestedTopic: directArticle.directArticleTopic,
+    },
+    directArticleLookup,
+  ).json.output,
+  /Keyword research and writing have started.*progress card will update automatically/i,
+);
+assert.match(
+  runDirectArticleReply(
+    {
+      response: {
+        ok: true,
+        status: "needs_details",
+        requestedTopic: directArticle.directArticleTopic,
+        missingFields: ["who", "offer"],
+      },
+    },
+    directArticleLookup,
+  ).json.output,
+  /who the article is for.*what the business offers/i,
+);
+
 const fixtureWorkflow = structuredClone(workflow);
 
 /**

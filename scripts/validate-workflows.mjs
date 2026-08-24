@@ -676,6 +676,9 @@ if (agentWorkflow) {
       /progress card will update automatically/i.test(
         directArticleReply?.parameters?.jsCode ?? "",
       ) &&
+      /\$json\.response\?\?\$json/.test(
+        directArticleReply?.parameters?.jsCode ?? "",
+      ) &&
       !/jobId/.test(directArticleReply?.parameters?.jsCode ?? "") &&
       agentWorkflow.connections["Direct Article Request?"]?.main?.[0]?.[0]?.node ===
         "Start Direct SEO Article" &&
