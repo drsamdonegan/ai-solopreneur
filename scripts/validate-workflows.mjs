@@ -1764,16 +1764,18 @@ if (writeSeoArticleWorkflow) {
       workflowNode.name,
     ),
   );
-  // n8n's v1 execution stack runs the last sibling connection first. Keep the
-  // progress write last in JSON so it completes before the long work branch.
+  // A progress write is deliberately inline. A sibling branch can be deferred
+  // until the long branch finishes, and its HTTP response would replace the
+  // article payload if it fed the worker directly, so each write is followed
+  // by a tiny node that restores the pre-write payload.
   const progressBeforeWork = [
-    ["Prepare Topic Research", 0, "Saved Topic Evidence?", "Mark Researching Keywords"],
-    ["Choose Public Sources", 0, "Context Is Ready?", "Mark Finding Sources"],
-    ["Enough Sources?", 0, "Draft With Claude", "Mark Drafting"],
-    ["Draft With Claude", 0, "Inspect Draft", "Mark Checking Claims"],
-    ["Prepare One Repair", 0, "Repair With Claude", "Mark Repairing"],
-    ["Draft Needs Repair?", 1, "Save Article Version", "Mark Saving"],
-    ["Repair Is Valid?", 0, "Save Article Version", "Mark Saving"],
+    ["Prepare Topic Research", 0, "Mark Researching Keywords", "Restore Topic Research", "Saved Topic Evidence?"],
+    ["Choose Public Sources", 0, "Mark Finding Sources", "Restore Public Sources", "Context Is Ready?"],
+    ["Enough Sources?", 0, "Mark Drafting", "Restore Grounded Draft", "Draft With Claude"],
+    ["Draft With Claude", 0, "Mark Checking Claims", "Restore Draft Response", "Inspect Draft"],
+    ["Prepare One Repair", 0, "Mark Repairing", "Restore Repair Request", "Repair With Claude"],
+    ["Draft Needs Repair?", 1, "Mark Saving", "Restore Save Payload", "Save Article Version"],
+    ["Repair Is Valid?", 0, "Mark Saving", "Restore Save Payload", "Save Article Version"],
   ];
   check(
     expectedStages.every((stage) => workflowText.includes(stage)) &&
@@ -1782,12 +1784,19 @@ if (writeSeoArticleWorkflow) {
       progressNodes.every(
         (progressNode) =>
           progressNode.onError === "continueRegularOutput" &&
-          writeSeoArticleWorkflow.connections[progressNode.name] === undefined,
+          writeSeoArticleWorkflow.connections[progressNode.name] !== undefined,
       ) &&
       progressBeforeWork.every(
-        ([from, output, workNode, stageNode]) => {
-          const targets = connectionTargets(writeSeoArticleWorkflow, from, "main", output);
-          return targets[0] === workNode && targets.at(-1) === stageNode;
+        ([from, output, stageNode, restoreNode, workNode]) => {
+          const sourceTargets = connectionTargets(writeSeoArticleWorkflow, from, "main", output);
+          const progressTargets = connectionTargets(writeSeoArticleWorkflow, stageNode, "main", 0);
+          const restoreTargets = connectionTargets(writeSeoArticleWorkflow, restoreNode, "main", 0);
+          return sourceTargets.length === 1 &&
+            sourceTargets[0] === stageNode &&
+            progressTargets.length === 1 &&
+            progressTargets[0] === restoreNode &&
+            restoreTargets.length === 1 &&
+            restoreTargets[0] === workNode;
         },
       ),
     "write_seo_article must persist every monotonic stage without feeding progress responses into the draft chain",

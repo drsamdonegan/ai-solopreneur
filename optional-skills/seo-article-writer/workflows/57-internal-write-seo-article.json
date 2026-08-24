@@ -1024,6 +1024,96 @@
       "id": "b5700000-0000-4000-8000-000000000045",
       "name": "Mark Saving",
       "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "return { json: $('Prepare Topic Research').item.json };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1380,
+        260
+      ],
+      "id": "b5700000-0000-4000-8000-000000000046",
+      "name": "Restore Topic Research"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "return { json: $('Choose Public Sources').item.json };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3540,
+        180
+      ],
+      "id": "b5700000-0000-4000-8000-000000000047",
+      "name": "Restore Public Sources"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "return { json: $('Prepare Grounded Draft').item.json };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4260,
+        180
+      ],
+      "id": "b5700000-0000-4000-8000-000000000048",
+      "name": "Restore Grounded Draft"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "return { json: $('Draft With Claude').item.json };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4740,
+        180
+      ],
+      "id": "b5700000-0000-4000-8000-000000000049",
+      "name": "Restore Draft Response"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "return { json: $('Prepare One Repair').item.json };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5460,
+        180
+      ],
+      "id": "b5700000-0000-4000-8000-000000000050",
+      "name": "Restore Repair Request"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "let payload; try { payload = $('Inspect Repaired Draft').item.json; } catch { payload = $('Inspect Draft').item.json; } return { json: payload };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6180,
+        180
+      ],
+      "id": "b5700000-0000-4000-8000-000000000051",
+      "name": "Restore Save Payload"
     }
   ],
   "connections": {
@@ -1063,13 +1153,8 @@
     "Choose Public Sources": {
       "main": [
         [
-        {
-          "node": "Context Is Ready?",
-          "type": "main",
-          "index": 0
-        },
-        {
-          "node": "Mark Finding Sources",
+          {
+            "node": "Mark Finding Sources",
             "type": "main",
             "index": 0
           }
@@ -1119,13 +1204,8 @@
     "Enough Sources?": {
       "main": [
         [
-        {
-          "node": "Draft With Claude",
-            "type": "main",
-            "index": 0
-          },
           {
-          "node": "Mark Drafting",
+            "node": "Mark Drafting",
             "type": "main",
             "index": 0
           }
@@ -1142,13 +1222,8 @@
     "Draft With Claude": {
       "main": [
         [
-        {
-          "node": "Inspect Draft",
-            "type": "main",
-            "index": 0
-          },
           {
-          "node": "Mark Checking Claims",
+            "node": "Mark Checking Claims",
             "type": "main",
             "index": 0
           }
@@ -1194,13 +1269,8 @@
           }
         ],
         [
-        {
-          "node": "Save Article Version",
-            "type": "main",
-            "index": 0
-          },
           {
-          "node": "Mark Saving",
+            "node": "Mark Saving",
             "type": "main",
             "index": 0
           }
@@ -1210,13 +1280,8 @@
     "Prepare One Repair": {
       "main": [
         [
-        {
-          "node": "Repair With Claude",
-            "type": "main",
-            "index": 0
-          },
           {
-          "node": "Mark Repairing",
+            "node": "Mark Repairing",
             "type": "main",
             "index": 0
           }
@@ -1248,13 +1313,8 @@
     "Repair Is Valid?": {
       "main": [
         [
-        {
-          "node": "Save Article Version",
-            "type": "main",
-            "index": 0
-          },
           {
-          "node": "Mark Saving",
+            "node": "Mark Saving",
             "type": "main",
             "index": 0
           }
@@ -1322,13 +1382,8 @@
     "Prepare Topic Research": {
       "main": [
         [
-        {
-          "node": "Saved Topic Evidence?",
-            "type": "main",
-            "index": 0
-          },
           {
-          "node": "Mark Researching Keywords",
+            "node": "Mark Researching Keywords",
             "type": "main",
             "index": 0
           }
@@ -1435,6 +1490,138 @@
         [
           {
             "node": "Choose Public Sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Researching Keywords": {
+      "main": [
+        [
+          {
+            "node": "Restore Topic Research",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Restore Topic Research": {
+      "main": [
+        [
+          {
+            "node": "Saved Topic Evidence?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Finding Sources": {
+      "main": [
+        [
+          {
+            "node": "Restore Public Sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Restore Public Sources": {
+      "main": [
+        [
+          {
+            "node": "Context Is Ready?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Drafting": {
+      "main": [
+        [
+          {
+            "node": "Restore Grounded Draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Restore Grounded Draft": {
+      "main": [
+        [
+          {
+            "node": "Draft With Claude",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Checking Claims": {
+      "main": [
+        [
+          {
+            "node": "Restore Draft Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Restore Draft Response": {
+      "main": [
+        [
+          {
+            "node": "Inspect Draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Repairing": {
+      "main": [
+        [
+          {
+            "node": "Restore Repair Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Restore Repair Request": {
+      "main": [
+        [
+          {
+            "node": "Repair With Claude",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Saving": {
+      "main": [
+        [
+          {
+            "node": "Restore Save Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Restore Save Payload": {
+      "main": [
+        [
+          {
+            "node": "Save Article Version",
             "type": "main",
             "index": 0
           }
