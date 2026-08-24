@@ -141,7 +141,7 @@
     },
     {
       "id": "start_seo_article",
-      "risk": "bounded_local_write",
+      "risk": "bounded_external_read_and_local_write",
       "available": true,
       "modelCallable": true,
       "mode": "explicit_request_required",

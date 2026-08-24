@@ -88,6 +88,9 @@ run("skill compilation", process.execPath, ["scripts/compile-skills.mjs"]);
 run("read-only upgrade preflight", process.execPath, [
   "scripts/test-upgrade-check.mjs",
 ]);
+run("SEO article installed-skill upgrade", process.execPath, [
+  "scripts/test-seo-article-upgrade.mjs",
+]);
 
 for (const test of await declaredOptionalTests()) {
   run(test.label, process.execPath, [test.path]);
@@ -102,6 +105,7 @@ run("agent card and settings API", process.execPath, [
   "scripts/test-agent-card-api.mjs",
 ]);
 run("agent card frontend", process.execPath, ["scripts/test-agent-ui.mjs"]);
+run("article progress frontend", process.execPath, ["scripts/test-article-ui.mjs"]);
 run("agent-scoped skill bundle", process.execPath, [
   "scripts/test-agent-scoped-skills.mjs",
 ]);

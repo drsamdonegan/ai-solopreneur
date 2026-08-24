@@ -4,13 +4,13 @@ Ask your agent to write a full article that is actually grounded in research, ra
 
 Best for: the moment you have the research and cannot face the blank page.
 
-The difference is where the facts come from. This skill reads what Domain Research already found and writes against that evidence instead of inventing it. If you have explicitly run the optional paid research upgrade, it can reuse that richer evidence too.
+The difference is where the facts come from. This skill reads what Domain Research already found, researches the exact requested topic within one reviewed US$0.15 ceiling when fresh evidence is insufficient, and writes against verified pages instead of inventing facts or optimizing for volume alone.
 
 ## Before you start
 
 You need **[Domain Research](../../domain-research/skill/README.md)** installed. The installer checks this dependency. You can run the free research first, or ask directly for an article and let the agent run the free scan before preparing the draft.
 
-**[Paid Domain Research](../../paid-domain-research/skill/README.md)** is optional. Install and request it only if you want DataForSEO evidence; the article writer never buys paid data itself.
+**[Paid Domain Research](../../paid-domain-research/skill/README.md)** is optional. The article writer has its own narrower topic-keyword pass: it uses only fixed reviewed endpoints, never retries, records actual provider cost, and falls back when the provider is unavailable.
 
 ## Turn it on
 
@@ -27,15 +27,25 @@ Then sync and restart:
 
 Open the chat and select **New conversation**.
 
-## Try it
+If this skill was already installed before the autonomous-topic release, upgrade it with:
 
-Research a domain first, then ask:
-
-```text
-Write an article for example.com about the keyword you think is the best opportunity.
+```bash
+npm run upgrade-seo-article
+npm run sync-skills
+npm run import-workflows
 ```
 
-Writing takes a minute or two, because it goes away and drafts the whole thing rather than streaming a paragraph at a time. Look for the words **CHECK BEFORE PUBLISHING** in the reply — that phrase only appears when this skill is really loaded.
+The upgrade preflights every installed article file and stops before writing anything if it finds local customisations.
+
+## Try it
+
+Research a domain first, then ask for any topic directly:
+
+```text
+Write an article for example.com about “what is artificial intelligence in simple terms?”
+```
+
+Writing takes a minute or two. A transcript-local progress bar moves through real keyword research, sourcing, drafting, checking, repair, and saving stages; it becomes the download card when the review draft is ready.
 
 Ask for the draft again later and it reads back the saved copy rather than writing a new one.
 

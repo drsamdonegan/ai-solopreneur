@@ -9,6 +9,10 @@ import { createChatServer } from "../apps/chat/dist/app.js";
 import { ChatStore } from "../apps/chat/dist/chat-store.js";
 import { ProfileStore } from "../apps/chat/dist/profile.js";
 import { evaluateArticleQuality } from "../apps/chat/dist/article-quality.js";
+import {
+  articleStrategyPreservesTopic,
+  buildArticleTopicStrategy,
+} from "../apps/chat/dist/article-strategy.js";
 import { fetchPublicWebPage } from "../apps/chat/dist/public-web.js";
 
 const projectRoot = fileURLToPath(new URL("..", import.meta.url));
@@ -52,7 +56,7 @@ const legacyDatabase = new DatabaseSync(migrationPath);
 legacyDatabase.exec("DROP TABLE seo_article_versions; DROP TABLE seo_article_jobs; DROP TABLE seo_article_briefs; PRAGMA user_version = 3;");
 legacyDatabase.close();
 const afterMigration = new ChatStore(migrationPath);
-assert.equal(afterMigration.health().schemaVersion, 5);
+assert.equal(afterMigration.health().schemaVersion, 6);
 assert.equal(afterMigration.getConversation(sessionId)?.title, "Preserve this conversation");
 afterMigration.close();
 const articleWords = Array.from(
@@ -97,6 +101,60 @@ const quality = evaluateArticleQuality({
   faqJsonLdCount: 0,
 });
 assert.equal(quality.passed, true, quality.errors.join(" "));
+
+const topicStrategy = buildArticleTopicStrategy({
+  requestedTopic: "what is artificial intelligence in simple terms?",
+  evidenceSource: "topic_specific_paid_research",
+  market: "Australia",
+  language: "en",
+  actualCostUsd: 0.02,
+  capturedAt: "2026-08-24T00:00:00.000Z",
+  candidates: [
+    {
+      keyword: "artificial intelligence",
+      intent: "informational",
+      searchVolume: 27_100,
+      difficulty: 55,
+      relevance: 0.9,
+      source: "live_keyword_data",
+      language: "en",
+      market: "Australia",
+    },
+    {
+      keyword: "what is artificial intelligence in simple terms",
+      intent: "informational",
+      searchVolume: 320,
+      difficulty: 24,
+      relevance: 1,
+      source: "live_keyword_data",
+      language: "en",
+      market: "Australia",
+      serpFormatMatch: 1,
+    },
+    {
+      keyword: "artificial intelligence near me",
+      intent: "local",
+      searchVolume: 1_300,
+      difficulty: 12,
+      relevance: 0.7,
+      source: "live_keyword_data",
+      language: "en",
+      market: "Australia",
+    },
+  ],
+});
+assert.equal(topicStrategy.requestedTopic, "what is artificial intelligence in simple terms?");
+assert.equal(topicStrategy.primaryKeyword, "what is artificial intelligence in simple terms");
+assert.equal(topicStrategy.supportingKeywords.some(({ keyword }) => keyword.includes("near me")), false);
+assert.equal(articleStrategyPreservesTopic(topicStrategy), true);
+
+const fallbackStrategy = buildArticleTopicStrategy({
+  requestedTopic: "how does a cash flow forecast work?",
+  evidenceSource: "saved_or_free_fallback",
+  candidates: [],
+});
+assert.equal(fallbackStrategy.primaryKeyword, "how does a cash flow forecast work?");
+assert.equal(fallbackStrategy.actualCostUsd, 0);
 
 await assert.rejects(fetchPublicWebPage("https://127.0.0.1/"), /public HTTPS/i);
 
@@ -164,6 +222,124 @@ try {
     researchSummary: "Grounded fixture research.",
     evidenceQuality: { confidence: "high" },
   });
+
+  // A topic supplied in the current request is not article option 1. The
+  // saved brief may contain a broader, higher-volume option, but it must never
+  // replace what the user actually asked the article to explain.
+  const customTopic = "what is bookkeeping in simple terms?";
+  const customTopicRequest = await jsonRequest("/api/seo-article/jobs", {
+    method: "POST",
+    body: JSON.stringify({
+      sessionId,
+      requestId: "77777777-7777-4777-8777-777777777777",
+      domain: "example.com",
+      requestedTopic: customTopic,
+    }),
+  });
+  assert.equal(customTopicRequest.response.status, 201);
+  assert.equal(customTopicRequest.body.status, "queued");
+  assert.equal(customTopicRequest.body.job.requestedTopic, customTopic);
+  assert.equal(customTopicRequest.body.job.topicSource, "custom");
+  assert.equal(customTopicRequest.body.job.primaryKeyword, customTopic);
+  assert.equal(customTopicRequest.body.brief.selection.number, 0);
+  assert.equal(customTopicRequest.body.brief.selection.primaryKeyword, customTopic);
+
+  const storedCustomTopic = store.getSeoArticleJob(
+    sessionId,
+    customTopicRequest.body.job.jobId,
+  );
+  assert.equal(storedCustomTopic?.requestedTopic, customTopic);
+  assert.equal(storedCustomTopic?.topicSource, "custom");
+
+  const conflictingMode = await jsonRequest("/api/seo-article/jobs", {
+    method: "POST",
+    body: JSON.stringify({
+      sessionId,
+      requestId: "88888888-8888-4888-8888-888888888888",
+      domain: "example.com",
+      requestedTopic: customTopic,
+      selectionNumber: 1,
+    }),
+  });
+  assert.equal(conflictingMode.response.status, 400);
+
+  for (const stage of ["loading_context", "researching_keywords"]) {
+    const progress = await jsonRequest("/api/seo-article/jobs", {
+      method: "PATCH",
+      body: JSON.stringify({
+        sessionId,
+        jobId: customTopicRequest.body.job.jobId,
+        status: "running",
+        stage,
+      }),
+    });
+    assert.equal(progress.response.status, 200);
+    assert.equal(progress.body.job.stage, stage);
+  }
+  const savedStrategy = await jsonRequest("/api/seo-article/strategy", {
+    method: "PUT",
+    body: JSON.stringify({
+      sessionId,
+      jobId: customTopicRequest.body.job.jobId,
+      evidenceSource: "topic_specific_paid_research",
+      market: "Australia",
+      language: "en",
+      actualCostUsd: 0.01,
+      candidates: [
+        {
+          keyword: "bookkeeping",
+          intent: "informational",
+          searchVolume: 20_000,
+          difficulty: 50,
+          relevance: 0.9,
+          source: "live_keyword_data",
+          language: "en",
+          market: "Australia",
+        },
+        {
+          keyword: "what is bookkeeping",
+          intent: "informational",
+          searchVolume: 500,
+          difficulty: 20,
+          relevance: 1,
+          source: "live_keyword_data",
+          language: "en",
+          market: "Australia",
+          serpFormatMatch: 1,
+        },
+      ],
+    }),
+  });
+  assert.equal(savedStrategy.response.status, 200);
+  assert.equal(savedStrategy.body.strategy.requestedTopic, customTopic);
+  assert.equal(savedStrategy.body.strategy.primaryKeyword, "what is bookkeeping");
+  assert.equal(savedStrategy.body.job.stage, "choosing_strategy");
+  assert.equal(savedStrategy.body.job.requestedTopic, customTopic);
+
+  const backwardsProgress = await jsonRequest("/api/seo-article/jobs", {
+    method: "PATCH",
+    body: JSON.stringify({
+      sessionId,
+      jobId: customTopicRequest.body.job.jobId,
+      status: "running",
+      stage: "loading_context",
+    }),
+  });
+  assert.equal(backwardsProgress.response.status, 409);
+
+  const overBudgetStrategy = await jsonRequest("/api/seo-article/strategy", {
+    method: "PUT",
+    body: JSON.stringify({
+      sessionId,
+      jobId: customTopicRequest.body.job.jobId,
+      evidenceSource: "topic_specific_paid_research",
+      market: "Australia",
+      language: "en",
+      actualCostUsd: 0.151,
+      candidates: [],
+    }),
+  });
+  assert.equal(overBudgetStrategy.response.status, 400);
 
   const pricingNeedsDetail = await jsonRequest("/api/seo-article/jobs", {
     method: "POST",
@@ -239,6 +415,31 @@ try {
   assert.equal(first.body.job.primaryKeyword, "bookkeeping for freelancers");
   assert.match(first.body.job.briefId, /^brief-/);
   const jobId = first.body.job.jobId;
+  const firstRequestedTopic = first.body.job.requestedTopic;
+
+  const firstStrategy = await jsonRequest("/api/seo-article/strategy", {
+    method: "PUT",
+    body: JSON.stringify({
+      sessionId,
+      jobId,
+      evidenceSource: "fresh_saved_snapshot",
+      market: "Australia",
+      language: "en",
+      actualCostUsd: 0,
+      candidates: [{
+        keyword: "bookkeeping for freelancers",
+        intent: "informational",
+        searchVolume: 320,
+        difficulty: 28,
+        relevance: 1,
+        source: "fresh_saved_snapshot",
+        language: "en",
+        market: "Australia",
+        serpFormatMatch: 1,
+      }],
+    }),
+  });
+  assert.equal(firstStrategy.response.status, 200);
 
   const briefDuringWrite = await jsonRequest(
     `/api/seo-article/briefs?sessionId=${sessionId}&domain=example.com`,
@@ -310,7 +511,15 @@ try {
   const download = await fetch(`${base}${saved.body.article.downloadUrl}`);
   assert.equal(download.status, 200);
   assert.match(download.headers.get("content-disposition") ?? "", /\.md"$/);
-  assert.equal(await download.text(), markdown);
+  const downloadedMarkdown = await download.text();
+  assert(downloadedMarkdown.startsWith(markdown));
+  assert.match(downloadedMarkdown, /<!-- SEO REVIEW METADATA/);
+  assert(downloadedMarkdown.includes(`Requested topic: ${firstRequestedTopic}`));
+  assert.match(downloadedMarkdown, /Primary keyword: bookkeeping for freelancers/);
+  const storedVersion = store.getSeoArticleVersionForJob(sessionId, jobId);
+  assert.equal(storedVersion?.context.requestedTopic, firstRequestedTopic);
+  assert.equal(storedVersion?.plan.requestedTopic, firstRequestedTopic);
+  assert.equal(storedVersion?.context.articleStrategy.primaryKeyword, "bookkeeping for freelancers");
 
   const secondRequest = "44444444-4444-4444-8444-444444444444";
   const second = await jsonRequest("/api/seo-article/jobs", {
@@ -342,6 +551,8 @@ try {
     requestId: interruptedRequest,
     domain: "example.com",
     briefId: first.body.job.briefId,
+    requestedTopic: "record keeping",
+    topicSource: "custom",
     primaryKeyword: "record keeping",
     supportingKeywords: [],
     input: {},

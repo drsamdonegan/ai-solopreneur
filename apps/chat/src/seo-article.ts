@@ -114,6 +114,7 @@ function validateClaims(value: unknown): ArticleClaim[] {
 export function validateSeoArticleResult(
   value: unknown,
   primaryKeyword: string,
+  requestedTopic: string = primaryKeyword,
 ): ValidatedSeoArticleResult {
   const candidate = object(value, "article result");
   if (candidate.status !== "completed" && candidate.status !== "partial") {
@@ -165,6 +166,7 @@ export function validateSeoArticleResult(
   const qualityReport = evaluateArticleQuality({
     markdown: result.markdown,
     primaryKeyword,
+    requestedTopic,
     seoTitle: result.seoTitle,
     metaDescription: result.metaDescription,
     slug: result.slug,

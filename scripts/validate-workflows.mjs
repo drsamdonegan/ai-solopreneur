@@ -642,10 +642,19 @@ if (agentWorkflow) {
   check(
     startSeoArticleTool?.parameters?.workflowId?.value === "phase13StartSeoArticle" &&
       /background/i.test(startSeoArticleTool?.parameters?.description ?? "") &&
-      /no new DataForSEO purchase/i.test(startSeoArticleTool?.parameters?.description ?? "") &&
-      /free start_domain_research tool first/i.test(startSeoArticleTool?.parameters?.description ?? "") &&
+      /custom topic wins/i.test(startSeoArticleTool?.parameters?.description ?? "") &&
+      /never invent or restate numbered choices/i.test(
+        startSeoArticleTool?.parameters?.description ?? "",
+      ) &&
+      /US\$0\.15 application ceiling/i.test(
+        startSeoArticleTool?.parameters?.description ?? "",
+      ) &&
+      /job IDs out of normal replies/i.test(
+        startSeoArticleTool?.parameters?.description ?? "",
+      ) &&
+      startSeoArticleTool?.parameters?.workflowInputs?.value?.requestedTopic &&
       /never publishes/i.test(startSeoArticleTool?.parameters?.description ?? ""),
-    "Agent: start_seo_article must use free research first and queue the reviewed no-publish workflow",
+    "Agent: start_seo_article must start exact custom topics, bound research, hide internals, and never publish",
   );
   const getSeoArticleTool = nodeByName(agentWorkflow, "get_seo_article");
   check(
@@ -1628,8 +1637,13 @@ if (startSeoArticleWorkflow) {
     nodeByName(startSeoArticleWorkflow, "Register Article Job")?.parameters?.jsonBody ?? "";
   const registrationCheck =
     nodeByName(startSeoArticleWorkflow, "Check Job Registration")?.parameters?.jsCode ?? "";
+  const startValidation =
+    nodeByName(startSeoArticleWorkflow, "Validate Article Brief")?.parameters?.jsCode ?? "";
+  const startResult =
+    nodeByName(startSeoArticleWorkflow, "Shape Start Result")?.parameters?.jsCode ?? "";
   check(
-    /selectionNumber/.test(registrationBody) &&
+    /requestedTopic/.test(registrationBody) &&
+      /selectionNumber/.test(registrationBody) &&
       /chooseStrongestKeyword/.test(registrationBody) &&
       /targetAudience/.test(registrationBody) &&
       /offer/.test(registrationBody) &&
@@ -1637,8 +1651,12 @@ if (startSeoArticleWorkflow) {
       /boundaries/.test(registrationBody) &&
       /voice/.test(registrationBody) &&
       /needs_selection/.test(registrationCheck) &&
-      /needs_details/.test(registrationCheck),
-    "start_seo_article must use the saved brief and ask only for missing essentials",
+      /needs_details/.test(registrationCheck) &&
+      /CONFLICTING_MODE/.test(startValidation) &&
+      /requestedTopic/.test(startResult) &&
+      /progress/.test(startResult) &&
+      !/response:\{[^}]*jobId/.test(startResult),
+    "start_seo_article must preserve custom topics, reject conflicting modes, hide job IDs, and ask only for missing essentials",
   );
 }
 
@@ -1648,17 +1666,86 @@ if (writeSeoArticleWorkflow) {
     (node) => node.type === "n8n-nodes-base.httpRequest",
   );
   const destinations = requests.map((node) => String(node.parameters?.url ?? ""));
+  const articleProviderUrls = [
+    "https://api.dataforseo.com/v3/dataforseo_labs/google/keyword_ideas/live",
+    "https://api.dataforseo.com/v3/dataforseo_labs/google/keyword_suggestions/live",
+    "https://api.dataforseo.com/v3/dataforseo_labs/google/related_keywords/live",
+    "https://api.dataforseo.com/v3/serp/google/organic/live/regular",
+  ];
+  const providerRequests = requests.filter((node) =>
+    articleProviderUrls.includes(String(node.parameters?.url ?? "")),
+  );
   check(
     writeSeoArticleWorkflow.id === "phase13WriteSeoArticle" &&
       writeSeoArticleWorkflow.meta?.modelCallable === false &&
-      writeSeoArticleWorkflow.meta?.paidCalls === "none" &&
+      writeSeoArticleWorkflow.meta?.paidCalls === "bounded_topic_research_with_free_fallback" &&
       writeSeoArticleWorkflow.settings?.executionTimeout === 1800 &&
       destinations.every(
         (url) =>
           /^=?http:\/\/127\.0\.0\.1:3000\//.test(url) ||
-          url === "https://api.anthropic.com/v1/messages",
+          url === "https://api.anthropic.com/v1/messages" ||
+          articleProviderUrls.includes(url),
       ),
     "write_seo_article must remain an internal bounded compiler with reviewed destinations",
+  );
+  check(
+    providerRequests.length === articleProviderUrls.length &&
+      new Set(providerRequests.map((node) => String(node.parameters?.url ?? ""))).size ===
+        articleProviderUrls.length &&
+      providerRequests.every(
+        (node) =>
+          node.credentials?.httpBasicAuth?.name === "DataForSEO API" &&
+          node.onError === "continueRegularOutput",
+      ) &&
+      /useSaved/.test(
+        nodeByName(writeSeoArticleWorkflow, "Prepare Topic Research")?.parameters?.jsCode ?? "",
+      ) &&
+      /saved_or_free_fallback/.test(
+        nodeByName(writeSeoArticleWorkflow, "Build Topic Strategy Request")?.parameters?.jsCode ?? "",
+      ) &&
+      /api\/seo-article\/strategy/.test(
+        nodeByName(writeSeoArticleWorkflow, "Persist Topic Strategy")?.parameters?.url ?? "",
+      ),
+    "write_seo_article must reuse sufficient evidence or make one fixed topic-research pass with a free fallback",
+  );
+  const expectedStages = [
+    "loading_context",
+    "researching_keywords",
+    "finding_sources",
+    "drafting",
+    "checking_claims",
+    "repairing",
+    "saving",
+  ];
+  const workflowText = JSON.stringify(writeSeoArticleWorkflow);
+  const progressNodes = writeSeoArticleWorkflow.nodes.filter((workflowNode) =>
+    /^Mark (?:Researching Keywords|Finding Sources|Drafting|Checking Claims|Repairing|Saving)$/.test(
+      workflowNode.name,
+    ),
+  );
+  const progressBeforeWork = [
+    ["Prepare Topic Research", 0, "Mark Researching Keywords"],
+    ["Choose Public Sources", 0, "Mark Finding Sources"],
+    ["Enough Sources?", 0, "Mark Drafting"],
+    ["Draft With Claude", 0, "Mark Checking Claims"],
+    ["Prepare One Repair", 0, "Mark Repairing"],
+    ["Draft Needs Repair?", 1, "Mark Saving"],
+    ["Repair Is Valid?", 0, "Mark Saving"],
+  ];
+  check(
+    expectedStages.every((stage) => workflowText.includes(stage)) &&
+      /api\/seo-article\/strategy/.test(workflowText) &&
+      progressNodes.length === 6 &&
+      progressNodes.every(
+        (progressNode) =>
+          progressNode.onError === "continueRegularOutput" &&
+          writeSeoArticleWorkflow.connections[progressNode.name] === undefined,
+      ) &&
+      progressBeforeWork.every(
+        ([from, output, stageNode]) =>
+          connectionTargets(writeSeoArticleWorkflow, from, "main", output)[0] === stageNode,
+      ),
+    "write_seo_article must persist every monotonic stage without feeding progress responses into the draft chain",
   );
   check(
     destinations.filter((url) => url === "https://api.anthropic.com/v1/messages").length === 2 &&

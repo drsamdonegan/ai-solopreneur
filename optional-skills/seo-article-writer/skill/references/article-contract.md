@@ -2,6 +2,8 @@
 
 The stored result is one immutable version with `ready_for_review` status. It contains:
 
+- the immutable requested topic and a separately resolved, same-intent primary keyword;
+- strategy provenance, market, evidence date, actual provider cost, rationale, and warnings;
 - Markdown with one H1 and a useful H2/H3 structure;
 - SEO title, meta description, slug, and optional canonical suggestion;
 - primary and supporting keyword map;
@@ -20,4 +22,4 @@ Every checkable claim records its exact sentence, source IDs, short supporting e
 
 ## Quality gates
 
-Reject or repair drafts with missing metadata or heading structure, unsupported facts, fake statistics or quotes, keyword stuffing, repeated openings, excessive bullets, formulaic filler, mismatched FAQ structured data, or links that were not verified. A quality failure must not replace the latest successful draft.
+Reject or repair drafts with topic drift, an H1 or opening that does not answer the requested topic, irrelevant local modifiers, unsupported traffic/ranking promises, missing metadata or heading structure, unsupported facts, fake statistics or quotes, keyword stuffing, repeated openings, excessive bullets, formulaic filler, mismatched FAQ structured data, or links that were not verified. A quality failure must not replace the latest successful draft.

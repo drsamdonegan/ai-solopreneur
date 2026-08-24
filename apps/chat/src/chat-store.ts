@@ -9,8 +9,15 @@ import type {
   ArticleBusinessContext,
   ArticleOpportunity,
 } from "./article-brief.js";
+import {
+  SEO_ARTICLE_STAGE_ORDER,
+  articleStrategyPreservesTopic,
+  type ArticleTopicSource,
+  type ArticleTopicStrategy,
+  type SeoArticleStage,
+} from "./article-strategy.js";
 
-const SCHEMA_VERSION = 5;
+const SCHEMA_VERSION = 6;
 const DEFAULT_TITLE = "New conversation";
 const MAX_TITLE_LENGTH = 80;
 const MAX_SEARCH_LENGTH = 200;
@@ -189,6 +196,8 @@ export interface SeoArticleJobInput {
   requestId: string;
   domain: string;
   briefId: string;
+  requestedTopic: string;
+  topicSource: ArticleTopicSource;
   primaryKeyword: string;
   supportingKeywords: string[];
   input: Record<string, unknown>;
@@ -197,7 +206,8 @@ export interface SeoArticleJobInput {
 export interface SeoArticleJobRecord extends SeoArticleJobInput {
   jobId: string;
   status: SeoArticleJobStatus;
-  stage: string;
+  stage: SeoArticleStage;
+  strategy?: ArticleTopicStrategy;
   errorCode?: string;
   errorMessage?: string;
   latestVersionId?: string;
@@ -364,11 +374,14 @@ interface SeoArticleJobRow {
   request_id: string;
   domain: string;
   brief_id: string | null;
+  requested_topic: string;
+  topic_source: ArticleTopicSource;
+  strategy_json: string;
   primary_keyword: string;
   supporting_keywords_json: string;
   input_json: string;
   status: SeoArticleJobStatus;
-  stage: string;
+  stage: SeoArticleStage;
   error_code: string | null;
   error_message: string | null;
   latest_version_id: string | null;
@@ -503,17 +516,21 @@ function seoSnapshotFromRow(row: SeoSnapshotRow): SeoSnapshotRecord {
 }
 
 function seoArticleJobFromRow(row: SeoArticleJobRow): SeoArticleJobRecord {
+  const strategy = JSON.parse(row.strategy_json) as Record<string, unknown>;
   return {
     jobId: row.job_id,
     sessionId: row.session_id,
     requestId: row.request_id,
     domain: row.domain,
     briefId: row.brief_id ?? "",
+    requestedTopic: row.requested_topic,
+    topicSource: row.topic_source,
     primaryKeyword: row.primary_keyword,
     supportingKeywords: JSON.parse(row.supporting_keywords_json) as string[],
     input: JSON.parse(row.input_json) as Record<string, unknown>,
     status: row.status,
     stage: row.stage,
+    ...(strategy.schemaVersion === 1 ? { strategy: strategy as unknown as ArticleTopicStrategy } : {}),
     ...(row.error_code === null ? {} : { errorCode: row.error_code }),
     ...(row.error_message === null ? {} : { errorMessage: row.error_message }),
     ...(row.latest_version_id === null ? {} : { latestVersionId: row.latest_version_id }),
@@ -884,6 +901,21 @@ export class ChatStore {
           ON seo_article_jobs(brief_id, updated_at DESC);
 
           PRAGMA user_version = 5;
+        `);
+      });
+    }
+    if (version < 6) {
+      this.transaction(() => {
+        this.database.exec(`
+          ALTER TABLE seo_article_jobs ADD COLUMN requested_topic TEXT NOT NULL DEFAULT '';
+          ALTER TABLE seo_article_jobs ADD COLUMN topic_source TEXT NOT NULL DEFAULT 'custom';
+          ALTER TABLE seo_article_jobs ADD COLUMN strategy_json TEXT NOT NULL DEFAULT '{}';
+
+          UPDATE seo_article_jobs
+          SET requested_topic = primary_keyword
+          WHERE requested_topic = '';
+
+          PRAGMA user_version = 6;
         `);
       });
     }
@@ -1809,8 +1841,8 @@ export class ChatStore {
         if (
           existing.domain !== input.domain ||
           (existing.brief_id ?? "") !== input.briefId ||
-          existing.primary_keyword !== input.primaryKeyword ||
-          existing.supporting_keywords_json !== JSON.stringify(input.supportingKeywords)
+          existing.requested_topic !== input.requestedTopic ||
+          existing.topic_source !== input.topicSource
         ) {
           throw new Error("The article request ID is already used for different inputs");
         }
@@ -1847,10 +1879,11 @@ export class ChatStore {
       this.database
         .prepare(
           `INSERT INTO seo_article_jobs(
-             job_id, session_id, request_id, domain, brief_id, primary_keyword,
-             supporting_keywords_json, input_json, status, stage,
+             job_id, session_id, request_id, domain, brief_id, requested_topic,
+             topic_source, strategy_json, primary_keyword, supporting_keywords_json,
+             input_json, status, stage,
              created_at, updated_at
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'queued', 'queued', ?, ?)`,
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, '{}', ?, ?, ?, 'queued', 'queued', ?, ?)`,
         )
         .run(
           jobId,
@@ -1858,6 +1891,8 @@ export class ChatStore {
           input.requestId,
           input.domain,
           input.briefId || null,
+          input.requestedTopic,
+          input.topicSource,
           input.primaryKeyword,
           JSON.stringify(input.supportingKeywords),
           JSON.stringify(input.input),
@@ -1897,11 +1932,32 @@ export class ChatStore {
     jobId: string,
     update: {
       status: SeoArticleJobStatus;
-      stage: string;
+      stage: SeoArticleStage;
       errorCode?: string;
       errorMessage?: string;
     },
   ): SeoArticleJobRecord {
+    const current = this.getSeoArticleJob(sessionId, jobId);
+    if (current === undefined) throw new Error("Article job is not registered to this conversation");
+    if (["completed", "partial", "failed", "interrupted"].includes(current.status)) {
+      throw new Error("A finished article job cannot be updated");
+    }
+    if (update.stage === "ready_for_review") {
+      throw new Error("Only a saved article version can finish the job");
+    }
+    if (
+      (update.status === "failed") !== (update.stage === "failed") ||
+      (update.status === "interrupted") !== (update.stage === "interrupted")
+    ) {
+      throw new Error("Article status and stage do not match");
+    }
+    if (
+      update.stage !== "failed" &&
+      update.stage !== "interrupted" &&
+      SEO_ARTICLE_STAGE_ORDER[update.stage] < SEO_ARTICLE_STAGE_ORDER[current.stage]
+    ) {
+      throw new Error("Article progress cannot move backwards");
+    }
     const result = this.database
       .prepare(
         `UPDATE seo_article_jobs
@@ -1926,6 +1982,54 @@ export class ChatStore {
     ) {
       this.updateArticleBrief(sessionId, stored.briefId, { status: "failed" });
     }
+    return stored;
+  }
+
+  saveSeoArticleStrategy(
+    sessionId: string,
+    jobId: string,
+    strategy: ArticleTopicStrategy,
+  ): SeoArticleJobRecord {
+    const current = this.getSeoArticleJob(sessionId, jobId);
+    if (current === undefined) throw new Error("Article job is not registered to this conversation");
+    if (current.status !== "queued" && current.status !== "running") {
+      throw new Error("A finished article job cannot receive a strategy");
+    }
+    if (SEO_ARTICLE_STAGE_ORDER[current.stage] > SEO_ARTICLE_STAGE_ORDER.choosing_strategy) {
+      throw new Error("Article strategy cannot replace later progress");
+    }
+    const normalize = (value: string) => value.normalize("NFC").replace(/\s+/g, " ").trim();
+    if (normalize(strategy.requestedTopic) !== normalize(current.requestedTopic)) {
+      throw new Error("Article strategy does not match the requested topic");
+    }
+    if (!articleStrategyPreservesTopic(strategy)) {
+      throw new Error("Article strategy changes the requested topic or intent");
+    }
+    const supportingKeywords = strategy.supportingKeywords
+      .map((entry) => entry.keyword.trim())
+      .filter((keyword, index, values) =>
+        keyword &&
+        keyword.toLowerCase() !== strategy.primaryKeyword.toLowerCase() &&
+        values.findIndex((value) => value.toLowerCase() === keyword.toLowerCase()) === index,
+      )
+      .slice(0, 12);
+    this.database
+      .prepare(
+        `UPDATE seo_article_jobs
+         SET primary_keyword = ?, supporting_keywords_json = ?, strategy_json = ?,
+             stage = 'choosing_strategy', updated_at = ?
+         WHERE job_id = ? AND session_id = ?`,
+      )
+      .run(
+        strategy.primaryKeyword,
+        JSON.stringify(supportingKeywords),
+        JSON.stringify(strategy),
+        nowIso(),
+        jobId,
+        sessionId,
+      );
+    const stored = this.getSeoArticleJob(sessionId, jobId);
+    if (stored === undefined) throw new Error("Stored article strategy could not be read");
     return stored;
   }
 
