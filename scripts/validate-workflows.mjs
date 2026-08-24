@@ -1802,7 +1802,9 @@ if (writeSeoArticleWorkflow) {
           /unsupported/.test(code) &&
           /normalize\('NFKC'\)/.test(code) &&
           /contains\(p\.text,s\.excerpt\)/.test(code) &&
-          /contains\(assembled,c\.sentence\)/.test(code)
+          /contains\(assembled,c\.sentence\)/.test(code) &&
+          /presentClaims/.test(code) &&
+          /sanitizedDraft/.test(code)
         );
       }),
     "write_seo_article must require four sources, resist prompt injection, and allow one repair only",
