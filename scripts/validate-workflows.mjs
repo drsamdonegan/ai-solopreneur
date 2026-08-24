@@ -1764,14 +1764,16 @@ if (writeSeoArticleWorkflow) {
       workflowNode.name,
     ),
   );
+  // n8n's v1 execution stack runs the last sibling connection first. Keep the
+  // progress write last in JSON so it completes before the long work branch.
   const progressBeforeWork = [
-    ["Prepare Topic Research", 0, "Mark Researching Keywords"],
-    ["Choose Public Sources", 0, "Mark Finding Sources"],
-    ["Enough Sources?", 0, "Mark Drafting"],
-    ["Draft With Claude", 0, "Mark Checking Claims"],
-    ["Prepare One Repair", 0, "Mark Repairing"],
-    ["Draft Needs Repair?", 1, "Mark Saving"],
-    ["Repair Is Valid?", 0, "Mark Saving"],
+    ["Prepare Topic Research", 0, "Saved Topic Evidence?", "Mark Researching Keywords"],
+    ["Choose Public Sources", 0, "Context Is Ready?", "Mark Finding Sources"],
+    ["Enough Sources?", 0, "Draft With Claude", "Mark Drafting"],
+    ["Draft With Claude", 0, "Inspect Draft", "Mark Checking Claims"],
+    ["Prepare One Repair", 0, "Repair With Claude", "Mark Repairing"],
+    ["Draft Needs Repair?", 1, "Save Article Version", "Mark Saving"],
+    ["Repair Is Valid?", 0, "Save Article Version", "Mark Saving"],
   ];
   check(
     expectedStages.every((stage) => workflowText.includes(stage)) &&
@@ -1783,8 +1785,10 @@ if (writeSeoArticleWorkflow) {
           writeSeoArticleWorkflow.connections[progressNode.name] === undefined,
       ) &&
       progressBeforeWork.every(
-        ([from, output, stageNode]) =>
-          connectionTargets(writeSeoArticleWorkflow, from, "main", output)[0] === stageNode,
+        ([from, output, workNode, stageNode]) => {
+          const targets = connectionTargets(writeSeoArticleWorkflow, from, "main", output);
+          return targets[0] === workNode && targets.at(-1) === stageNode;
+        },
       ),
     "write_seo_article must persist every monotonic stage without feeding progress responses into the draft chain",
   );

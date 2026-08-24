@@ -38,6 +38,9 @@ versioning for local workshop releases.
 - Reference excerpts that the model paraphrases are now replaced with exact text
   from the same already-verified source page. The selected source ID and URL must
   still match, and claim-ledger excerpts keep their strict grounding checks.
+- Article progress branches now follow n8n's v1 sibling-stack order, so each
+  persisted stage is written before the corresponding source, model, repair, or
+  save operation starts instead of remaining stuck on the strategy stage.
 - Agent cards now show stable packages and installation/sync state instead of
   exposing every internal Markdown skill as a separate product feature.
 - Existing capabilities are retained as package modules or add-ons: paid
