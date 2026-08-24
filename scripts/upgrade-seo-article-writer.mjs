@@ -25,7 +25,10 @@ const files = [
   {
     source: "skill/skill.yaml",
     target: "skills/seo-article-writer/skill.yaml",
-    previous: "eebaa166f46e4c8c4aa9ee8d843aec5373e255224a69a1ebb54297c113cf49c8",
+    previous: [
+      "eebaa166f46e4c8c4aa9ee8d843aec5373e255224a69a1ebb54297c113cf49c8",
+      "ac548c064c38a1bce0a84c74a058c02906e917ab232324d5e8aa5f9d50d3dbf8",
+    ],
   },
   {
     source: "skill/references/article-contract.md",
@@ -35,7 +38,10 @@ const files = [
   {
     source: "workflows/56-tool-start-seo-article.json",
     target: "n8n/workflows/56-tool-start-seo-article.json",
-    previous: "4547b427b0ba860024235951c8ff7329234211a16481b5dbe367fdc5a58e99d3",
+    previous: [
+      "4547b427b0ba860024235951c8ff7329234211a16481b5dbe367fdc5a58e99d3",
+      "7e1a4ac42b983cffa282187181c86897a2e3996c5d9a07ad71b43aefaa3424fe",
+    ],
     json: true,
   },
   {
@@ -52,7 +58,10 @@ const files = [
   },
 ];
 
-const oldToolHash = "d4b9faecb77f410bd2ecdfffaaad49d13c59911435ef0e8ab40d9574ef3bc976";
+const oldToolHashes = [
+  "d4b9faecb77f410bd2ecdfffaaad49d13c59911435ef0e8ab40d9574ef3bc976",
+  "3088d5b4ef201430d7ffe6e18869b3e132f06e0b16a76b64d1fad35e18afa4e2",
+];
 const oldRules = [
   "- start_seo_article is risk=bounded_local_write. Use it only when the current user explicitly asks to draft an article. It starts a local writing job and saves the draft to this conversation; it never publishes anything anywhere.",
   "- get_seo_article is risk=read and is the source of truth for a draft started in this conversation. It reports a saved draft; it never writes one.",
@@ -79,7 +88,8 @@ for (const entry of files) {
   const [source, target] = await Promise.all([readFile(sourcePath), readFile(targetPath)]);
   const sourceHash = hash(entry.json ? JSON.stringify(JSON.parse(source)) : source);
   const targetHash = hash(entry.json ? JSON.stringify(JSON.parse(target)) : target);
-  if (targetHash !== sourceHash && targetHash !== entry.previous) {
+  const previousHashes = Array.isArray(entry.previous) ? entry.previous : [entry.previous];
+  if (targetHash !== sourceHash && !previousHashes.includes(targetHash)) {
     throw new Error(
       `${entry.target} has local changes. The upgrade stopped before writing anything. ` +
         "Back up or reconcile that file, then run this command again.",
@@ -92,7 +102,7 @@ const agentPath = join(projectRoot, "n8n", "workflows", "00-start-here-project-p
 const agent = JSON.parse(await readFile(agentPath, "utf8"));
 const installedTool = node(agent, "start_seo_article");
 const installedToolHash = hash(JSON.stringify(installedTool.parameters));
-if (![oldToolHash, sourceToolHash].includes(installedToolHash)) {
+if (![...oldToolHashes, sourceToolHash].includes(installedToolHash)) {
   throw new Error(
     "The installed start_seo_article tool has local changes. The upgrade stopped before writing anything.",
   );

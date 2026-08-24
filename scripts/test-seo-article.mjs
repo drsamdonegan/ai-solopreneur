@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -16,6 +16,29 @@ import {
 import { fetchPublicWebPage } from "../apps/chat/dist/public-web.js";
 
 const projectRoot = fileURLToPath(new URL("..", import.meta.url));
+const startWorkflow = JSON.parse(
+  await readFile(join(projectRoot, "n8n", "workflows", "56-tool-start-seo-article.json"), "utf8"),
+);
+const startValidationCode = startWorkflow.nodes.find(
+  (node) => node.name === "Validate Article Brief",
+).parameters.jsCode;
+const runStartValidation = new Function("$json", startValidationCode);
+const directTopic = "what is artificial intelligence in simple terms?";
+const directRequest = runStartValidation({
+  sessionId: "11111111-1111-4111-8111-111111111111",
+  requestId: "22222222-2222-4222-8222-222222222222",
+  currentInstruction: `write an article for mlai.au about '${directTopic}'`,
+  domain: "wrong.example",
+  requestedTopic: "",
+  selectionNumber: 1,
+  chooseStrongestKeyword: true,
+}).json;
+assert.equal(directRequest.valid, true);
+assert.equal(directRequest.domain, "mlai.au");
+assert.equal(directRequest.requestedTopic, directTopic);
+assert.equal(directRequest.selectionNumber, 0);
+assert.equal(directRequest.chooseStrongestKeyword, false);
+
 const temporary = await mkdtemp(join(tmpdir(), "seo-article-test-"));
 const store = new ChatStore(join(temporary, "chat.sqlite"));
 const sessionId = "11111111-1111-4111-8111-111111111111";

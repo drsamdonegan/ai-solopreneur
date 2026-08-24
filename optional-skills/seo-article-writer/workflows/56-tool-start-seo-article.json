@@ -26,13 +26,17 @@
               "name": "sessionId",
               "type": "string"
             },
-            {
-              "name": "requestId",
-              "type": "string"
-            },
-            {
-              "name": "domain",
-              "type": "string"
+          {
+            "name": "requestId",
+            "type": "string"
+          },
+          {
+            "name": "currentInstruction",
+            "type": "string"
+          },
+          {
+            "name": "domain",
+            "type": "string"
             },
             {
               "name": "requestedTopic",
@@ -98,7 +102,7 @@
       "parameters": {
         "mode": "runOnceForEachItem",
         "language": "javaScript",
-        "jsCode": "const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;const sessionId=String($json.sessionId??'').trim(),requestId=String($json.requestId??'').trim();let domain=String($json.domain??'').trim().toLowerCase().replace(/^https?:\\/\\//,'').split('/')[0].replace(/^www\\./,'').replace(/\\.$/,'');const labels=domain.split('.');const requestedTopic=String($json.requestedTopic??$json.primaryKeyword??'').trim().slice(0,240),legacyKeyword=String($json.primaryKeyword??'').trim().slice(0,240),chooseStrongestKeyword=$json.chooseStrongestKeyword===true;const selectionNumber=Number($json.selectionNumber||0);const supportingKeywords=String($json.supportingKeywords??'').split(/[,\\n]/).map(v=>v.trim()).filter(Boolean).slice(0,20);const sourceUrls=String($json.sourceUrls??'').split(/[\\s,]+/).map(v=>v.trim()).filter(Boolean).slice(0,12);let error=null;if(!uuid.test(sessionId)||!uuid.test(requestId))error={code:'INVALID_REQUEST',message:'The article needs a valid conversation.'};else if(!domain||domain.includes('@')||domain.includes(':')||labels.length<2||labels.some(l=>!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(l)))error={code:'INVALID_DOMAIN',message:'Use a complete public business domain such as example.com.'};else if(requestedTopic&&legacyKeyword&&requestedTopic!==legacyKeyword)error={code:'CONFLICTING_TOPIC',message:'Use one article topic.'};else if(Number(Boolean(requestedTopic))+Number(Boolean(selectionNumber))+Number(chooseStrongestKeyword)>1)error={code:'CONFLICTING_MODE',message:'Use one article topic, numbered idea, or choose-for-me instruction.'};else if(selectionNumber&&(!Number.isInteger(selectionNumber)||selectionNumber<1||selectionNumber>3))error={code:'INVALID_SELECTION',message:'Choose article 1, 2 or 3.'};else if(sourceUrls.some(v=>!/^https:\\/\\/[a-z0-9.-]+(?:\\/[^\\s]*)?$/i.test(v)||v.includes('@')||/:\\d+(?:\\/|$)/.test(v)))error={code:'INVALID_SOURCE',message:'Article sources must be complete public HTTPS links.'};const clean=(value,limit=1000)=>String(value??'').trim().slice(0,limit);return{json:{valid:!error,sessionId,requestId,domain,requestedTopic,selectionNumber,chooseStrongestKeyword,supportingKeywords,targetAudience:clean($json.targetAudience),offer:clean($json.offer),price:clean($json.price),boundaries:clean($json.boundaries),voice:clean($json.voice),goal:clean($json.goal),sourceUrls,...(error?{response:{ok:false,error}}:{})}};"
+        "jsCode": "const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;const sessionId=String($json.sessionId??'').trim(),requestId=String($json.requestId??'').trim(),instruction=String($json.currentInstruction??'').trim().slice(0,8000);const articleRequest=/\\b(?:write|draft|create|produce)\\b[\\s\\S]{0,100}\\b(?:article|blog(?:\\s+post)?|post)\\b/i.test(instruction);const quotedTopic=articleRequest?instruction.match(/\\b(?:about|on|topic(?:\\s+of)?)\\s*[:=-]?\\s*[\\\"'“‘]([^\\\"'”’\\n]{2,240})[\\\"'”’]/i):null;const unquotedTopic=articleRequest&&!quotedTopic?instruction.match(/\\b(?:about|on|topic(?:\\s+of)?)\\s*[:=-]?\\s*([^\\n]{2,240}?)(?=\\s+for\\s+(?:https?:\\/\\/)?(?:www\\.)?[a-z0-9.-]+\\.[a-z]{2,}(?:\\/|\\s|$)|[.!]?$)/i):null;const inferredTopic=String(quotedTopic?.[1]??unquotedTopic?.[1]??'').trim().replace(/[.!]+$/,'').slice(0,240);const inferredDomain=(instruction.match(/(?:^|\\s)(?:https?:\\/\\/)?(?:www\\.)?([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+)(?=\\/|[\\s,;:'\\\")!?]|$)/i)?.[1]??'').toLowerCase();let domain=String(inferredDomain||$json.domain||'').trim().toLowerCase().replace(/^https?:\\/\\//,'').split('/')[0].replace(/^www\\./,'').replace(/\\.$/,'');const labels=domain.split('.');const modelTopic=String($json.requestedTopic??$json.primaryKeyword??'').trim().slice(0,240),requestedTopic=inferredTopic||modelTopic,legacyKeyword=inferredTopic?'':String($json.primaryKeyword??'').trim().slice(0,240),chooseStrongestKeyword=inferredTopic?false:$json.chooseStrongestKeyword===true;const selectionNumber=inferredTopic?0:Number($json.selectionNumber||0);const supportingKeywords=String($json.supportingKeywords??'').split(/[,\\n]/).map(v=>v.trim()).filter(Boolean).slice(0,20);const sourceUrls=String($json.sourceUrls??'').split(/[\\s,]+/).map(v=>v.trim()).filter(Boolean).slice(0,12);let error=null;if(!uuid.test(sessionId)||!uuid.test(requestId))error={code:'INVALID_REQUEST',message:'The article needs a valid conversation.'};else if(!domain||domain.includes('@')||domain.includes(':')||labels.length<2||labels.some(l=>!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(l)))error={code:'INVALID_DOMAIN',message:'Use a complete public business domain such as example.com.'};else if(requestedTopic&&legacyKeyword&&requestedTopic!==legacyKeyword)error={code:'CONFLICTING_TOPIC',message:'Use one article topic.'};else if(Number(Boolean(requestedTopic))+Number(Boolean(selectionNumber))+Number(chooseStrongestKeyword)>1)error={code:'CONFLICTING_MODE',message:'Use one article topic, numbered idea, or choose-for-me instruction.'};else if(selectionNumber&&(!Number.isInteger(selectionNumber)||selectionNumber<1||selectionNumber>3))error={code:'INVALID_SELECTION',message:'Choose article 1, 2 or 3.'};else if(sourceUrls.some(v=>!/^https:\\/\\/[a-z0-9.-]+(?:\\/[^\\s]*)?$/i.test(v)||v.includes('@')||/:\\d+(?:\\/|$)/.test(v)))error={code:'INVALID_SOURCE',message:'Article sources must be complete public HTTPS links.'};const clean=(value,limit=1000)=>String(value??'').trim().slice(0,limit);return{json:{valid:!error,sessionId,requestId,domain,requestedTopic,selectionNumber,chooseStrongestKeyword,supportingKeywords,targetAudience:clean($json.targetAudience),offer:clean($json.offer),price:clean($json.price),boundaries:clean($json.boundaries),voice:clean($json.voice),goal:clean($json.goal),sourceUrls,...(error?{response:{ok:false,error}}:{})}};"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
