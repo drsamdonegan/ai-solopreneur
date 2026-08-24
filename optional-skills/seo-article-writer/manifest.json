@@ -9,7 +9,7 @@
   "agentTools": [
     {
       "parameters": {
-        "description": "Prepare or start one grounded SEO article in the background. Use when the current user chooses article 1, 2 or 3, asks you to choose the best saved idea, supplies another topic, or directly asks for a blog article. It uses the saved research plan, makes no new DataForSEO purchase, asks only for missing essentials, and never publishes. If research is missing, run the free start_domain_research tool first. Paid research is an optional installed upgrade and must never be assumed or started unless the current user explicitly asks for it. Never ask about ownership. Pass the selected number exactly; a topic supplied by the user wins. If the tool returns needs_details, ask for all listed details in one short, plain-language question. Never call it twice for one request.",
+        "description": "Start one grounded SEO article immediately when the current user supplies a custom topic, chooses a rendered saved idea, or asks you to choose. A custom topic wins and is never replaced by a broader saved keyword. Never invent or restate numbered choices in prose. The background writer first reuses sufficient fresh evidence, otherwise performs one reviewed bounded topic-keyword pass with a US$0.15 application ceiling and no retries, then falls back to saved/free evidence when necessary. It never publishes. If domain research is missing, run start_domain_research and continue with the original topic in the same turn. Keep internal job IDs out of normal replies and call this tool only once per request.",
         "source": "database",
         "workflowId": {
           "__rl": true,
@@ -23,7 +23,7 @@
             "sessionId": "={{ $('Validate and Normalise').first().json.sessionId }}",
             "requestId": "={{ $('Validate and Normalise').first().json.requestId }}",
             "domain": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('domain', 'Bare saved business domain for the requested article.', 'string') }}",
-            "primaryKeyword": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('primaryKeyword', 'Main topic stated by the user. Use an empty string when they chose a numbered idea or asked you to choose.', 'string') }}",
+            "primaryKeyword": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('primaryKeyword', 'Deprecated custom-topic alias. Leave empty when requestedTopic is supplied.', 'string') }}",
             "selectionNumber": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('selectionNumber', 'The exact article number 1, 2 or 3 chosen by the user. Use 0 when no numbered choice was made.', 'number') }}",
             "chooseStrongestKeyword": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('chooseStrongestKeyword', 'True only when the current user asks you to choose the strongest saved keyword opportunity.', 'boolean') }}",
             "supportingKeywords": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('supportingKeywords', 'Optional comma-separated supporting keywords from the user; otherwise an empty string.', 'string') }}",
@@ -33,7 +33,8 @@
             "boundaries": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('boundaries', 'What the article must not promise or recommend, including no special limits when the user says so; otherwise an empty string.', 'string') }}",
             "voice": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('voice', 'Writing style supplied or corrected now; otherwise an empty string.', 'string') }}",
             "goal": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('goal', 'Optional article goal supplied by the user; otherwise an empty string.', 'string') }}",
-            "sourceUrls": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('sourceUrls', 'Optional whitespace-separated public HTTPS source URLs supplied by the user; otherwise an empty string.', 'string') }}"
+            "sourceUrls": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('sourceUrls', 'Optional whitespace-separated public HTTPS source URLs supplied by the user; otherwise an empty string.', 'string') }}",
+            "requestedTopic": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('requestedTopic', 'Exact custom article topic supplied by the current user. Preserve their wording and use an empty string only for a rendered numbered choice or choose-for-me request.', 'string') }}"
           },
           "matchingColumns": [],
           "schema": [
@@ -58,6 +59,15 @@
             {
               "id": "domain",
               "displayName": "domain",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "requestedTopic",
+              "displayName": "requestedTopic",
               "required": false,
               "defaultMatch": false,
               "display": true,
@@ -243,7 +253,7 @@
   "policyEntries": [
     {
       "id": "start_seo_article",
-      "risk": "bounded_local_write",
+      "risk": "bounded_external_read_and_local_write",
       "available": true,
       "modelCallable": true,
       "mode": "explicit_request_required",
@@ -267,7 +277,8 @@
     }
   ],
   "policyRules": [
-    "- start_seo_article is risk=bounded_local_write. Use it only when the current user explicitly asks to draft an article. It starts a local writing job and saves the draft to this conversation; it never publishes anything anywhere.",
+    "- start_seo_article is risk=bounded_external_read_and_local_write. Use it once when the current user explicitly asks to draft an article. A custom topic starts immediately and wins over saved ideas; never invent a numbered article list in prose. Its background topic research may use only the reviewed DataForSEO endpoints within the US$0.15 application ceiling, never retries, falls back safely, stores actual provider cost, and never publishes.",
+    "- Keep article job IDs, provider task IDs, internal workflow names, market codes, and strategy scores out of normal replies. The transcript progress card is the source of truth while writing runs.",
     "- get_seo_article is risk=read and is the source of truth for a draft started in this conversation. It reports a saved draft; it never writes one."
   ],
   "unavailableCapabilities": [],

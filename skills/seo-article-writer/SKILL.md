@@ -13,9 +13,9 @@ The user never needs to understand skills, DataForSEO, keywords, snapshots, sour
 
 - Reuse saved research when available.
 - If research is missing, call the free `start_domain_research` tool once. Do not ask about ownership, payment, codes, or technical setup.
-- Reuse either free or paid saved research when it is already available. Paid research is an optional installed upgrade: never assume it exists or start it unless the current user explicitly asks for paid DataForSEO evidence.
-- If the user supplies a topic, use it and skip article selection.
-- Otherwise let research show up to three choices. Accept plain `1`, `2`, `3`, `choose for me`, or another topic.
+- Reuse fresh, topic-matched paid evidence when it is sufficient. Otherwise the background writer may make its one reviewed topic-keyword pass against the fixed DataForSEO endpoints, within the US$0.15 application ceiling, because a direct request to write an SEO article accepts that bounded pass. It never retries and falls back to saved/free evidence without inventing metrics.
+- If the user supplies a topic, preserve it exactly, start immediately, and skip article selection. Keyword research may select only a same-topic, same-intent SEO focus; it may never broaden or replace the requested topic.
+- Otherwise let the rendered saved-brief cards show up to three choices. Accept plain `1`, `2`, `3`, `choose for me`, or another topic. Never invent or restate a numbered article list in prose.
 - Carry over the immediately preceding domain when unambiguous. If several domains are possible, ask only which website.
 
 ## Require only what matters
@@ -46,9 +46,9 @@ Do not ask optional setup questions.
 
 ## Start the article
 
-1. Call `start_seo_article` once for the current request. Pass exactly one of the selected number, user topic, or `chooseStrongestKeyword: true`. Pass only business details supplied or corrected now; the saved brief resolves the rest.
+1. Call `start_seo_article` once for the current request. Put an exact custom topic in `requestedTopic`; otherwise pass exactly one selected number or `chooseStrongestKeyword: true`. Leave the deprecated `primaryKeyword` alias empty when `requestedTopic` is set. Pass only business details supplied or corrected now; the saved brief resolves the rest.
 2. If the tool asks for a selection or details, ask one concise question and stop. Do not claim writing started.
-3. If queued, say simply that writing has started and the progress card will update automatically. Keep the job ID internal.
+3. If queued, say simply that keyword research and writing have started and the progress card will update automatically. Keep job IDs, provider details, internal stage names, market codes, cost mechanics, and strategy scores internal.
 
 Fail honestly when saved research, a selected idea, required business details, or reliable sources are missing. Never substitute made-up research.
 

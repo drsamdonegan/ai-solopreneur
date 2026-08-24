@@ -10,6 +10,7 @@
   "scripts": {
     "verify": "node scripts/verify.mjs",
     "upgrade-check": "node scripts/upgrade-check.mjs",
+    "upgrade-seo-article": "node scripts/upgrade-seo-article-writer.mjs",
     "setup": "node scripts/local.mjs setup",
     "start": "node scripts/local.mjs start",
     "start:cloud": "node scripts/cloud.mjs",

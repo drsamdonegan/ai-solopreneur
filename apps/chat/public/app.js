@@ -679,15 +679,106 @@
       : `${cleaned.slice(0, maximum - 1).trimEnd()}…`;
   }
 
-  function articleStatusText(job) {
-    const stages = {
-      queued: "Your article is waiting to start.",
-      preparing_research: "Checking the research and reliable sources…",
-      drafting: "Writing and checking the draft…",
-      repairing: "Improving the evidence and wording…",
-      ready_for_review: "Your article is ready.",
+  const ARTICLE_STAGE_META = {
+    queued: { label: "Waiting to start…", percent: 4, step: 1 },
+    loading_context: {
+      label: "Loading the website and saved business research…",
+      percent: 10,
+      step: 2,
+    },
+    researching_keywords: {
+      label: "Researching search demand and related questions…",
+      percent: 22,
+      step: 3,
+    },
+    choosing_strategy: {
+      label: "Choosing a relevant, achievable search angle…",
+      percent: 36,
+      step: 4,
+    },
+    finding_sources: {
+      label: "Opening reliable sources for the article…",
+      percent: 50,
+      step: 5,
+    },
+    drafting: { label: "Writing the first draft…", percent: 68, step: 6 },
+    checking_claims: {
+      label: "Checking claims, citations, and SEO details…",
+      percent: 82,
+      step: 7,
+    },
+    repairing: {
+      label: "Fixing unsupported or unclear passages…",
+      percent: 91,
+      step: 8,
+    },
+    saving: {
+      label: "Running final checks and saving the review draft…",
+      percent: 97,
+      step: 9,
+    },
+    ready_for_review: { label: "Your article is ready.", percent: 100, step: 10 },
+  };
+
+  function articleStageMeta(job) {
+    return {
+      ...(ARTICLE_STAGE_META[job?.stage] ?? ARTICLE_STAGE_META.queued),
+      total: 10,
     };
-    return stages[job?.stage] ?? "Writing and checking your article…";
+  }
+
+  function articleMinutesAgo(value) {
+    const timestamp = Date.parse(value ?? "");
+    if (!Number.isFinite(timestamp)) return null;
+    return Math.max(0, Math.floor((Date.now() - timestamp) / 60_000));
+  }
+
+  function appendArticleProgress(panel, job, previousPercent = 0, complete = false) {
+    const meta = complete
+      ? { ...ARTICLE_STAGE_META.ready_for_review, total: 10 }
+      : articleStageMeta(job);
+    const progress = document.createElement("div");
+    progress.className = `article-progress${complete ? " article-progress--done" : ""}`;
+
+    const spinner = document.createElement("span");
+    spinner.className = "article-progress__spinner";
+    spinner.setAttribute("aria-hidden", "true");
+
+    const body = document.createElement("div");
+    body.className = "article-progress__body";
+    const label = document.createElement("p");
+    label.className = "article-progress__label";
+    label.textContent = meta.label;
+    const track = document.createElement("div");
+    track.className = "article-progress__track";
+    track.setAttribute("role", "progressbar");
+    track.setAttribute("aria-label", "Article writing progress");
+    track.setAttribute("aria-valuemin", "0");
+    track.setAttribute("aria-valuemax", "100");
+    track.setAttribute("aria-valuenow", String(meta.percent));
+    const fill = document.createElement("div");
+    fill.className = "article-progress__fill";
+    fill.style.width = `${Math.min(meta.percent, Math.max(0, previousPercent))}%`;
+    track.append(fill);
+
+    const timing = document.createElement("p");
+    timing.className = "article-progress__timing";
+    const started = articleMinutesAgo(job?.createdAt);
+    const quiet = articleMinutesAgo(job?.updatedAt);
+    const timingParts = [`Step ${meta.step} of ${meta.total}`];
+    if (started !== null) timingParts.push(started < 1 ? "Started just now" : `Started ${started} min ago`);
+    if (!complete && quiet !== null && quiet >= 2) timingParts.push(`Last update ${quiet} min ago`);
+    timing.textContent = timingParts.join(" · ");
+    body.append(label, track, timing);
+
+    const percent = document.createElement("p");
+    percent.className = "article-progress__percent";
+    percent.textContent = `${meta.percent}%`;
+    progress.append(spinner, body, percent);
+    panel.append(progress);
+    window.requestAnimationFrame(() => {
+      fill.style.width = `${meta.percent}%`;
+    });
   }
 
   function appendArticleContext(panel, brief) {
@@ -717,6 +808,9 @@
 
   function renderArticlePanel(payload) {
     const previousPanel = elements.conversation.querySelector(".article-panel");
+    const previousPercent = Number(
+      previousPanel?.querySelector("[role='progressbar']")?.getAttribute("aria-valuenow") ?? 0,
+    );
     const brief = payload?.brief;
     if (!brief) {
       previousPanel?.remove();
@@ -731,6 +825,7 @@
     panel.className = "article-panel";
     panel.dataset.briefId = brief.briefId;
     panel.dataset.status = brief.status;
+    panel.dataset.stage = payload.job?.stage ?? "";
 
     const eyebrow = document.createElement("p");
     eyebrow.className = "article-panel__eyebrow";
@@ -741,33 +836,70 @@
     const title = document.createElement("h3");
     title.className = "article-panel__title";
 
-    if (brief.status === "writing") {
+    if (
+      brief.status === "writing" &&
+      !["failed", "interrupted"].includes(payload.job?.status)
+    ) {
       title.textContent = "Writing your article";
       const selected = document.createElement("p");
       selected.className = "article-panel__selected";
-      selected.textContent = brief.selection?.title ?? "Your selected article";
-      const progress = document.createElement("p");
-      progress.className = "article-panel__progress";
-      progress.textContent = articleStatusText(payload.job);
-      panel.append(eyebrow, title, selected, progress);
+      selected.textContent = payload.job?.requestedTopic ?? brief.selection?.title ?? "Your selected article";
+      panel.append(eyebrow, title, selected);
+      if (payload.job?.strategy?.primaryKeyword) {
+        const keyword = document.createElement("p");
+        keyword.className = "article-panel__strategy";
+        keyword.textContent = `Search focus: ${payload.job.strategy.primaryKeyword}`;
+        panel.append(keyword);
+      }
+      appendArticleProgress(panel, payload.job, previousPercent);
     } else if (brief.status === "complete" && payload.article) {
-      title.textContent = "Your article is ready";
+      title.textContent = payload.article.metadata?.seoTitle ?? "Your article is ready";
       const selected = document.createElement("p");
       selected.className = "article-panel__selected";
-      selected.textContent = brief.selection?.title ?? "SEO article";
+      selected.textContent = `Requested topic: ${payload.job?.requestedTopic ?? brief.selection?.title ?? "SEO article"}`;
+      panel.append(eyebrow, title, selected);
+      if (payload.job?.strategy?.primaryKeyword) {
+        const strategy = document.createElement("p");
+        strategy.className = "article-panel__strategy";
+        strategy.textContent = `Search focus: ${payload.job.strategy.primaryKeyword}. ${payload.job.strategy.rationale ?? ""}`.trim();
+        panel.append(strategy);
+      }
+      const quality = Number(payload.article.qualityReport?.score);
+      const warning = payload.article.warnings?.find((value) => typeof value === "string" && value.trim());
+      if (Number.isFinite(quality) || warning) {
+        const detail = document.createElement("p");
+        detail.className = "article-panel__progress";
+        detail.textContent = [
+          Number.isFinite(quality) ? `Quality score: ${quality}/100.` : "",
+          warning ? shortArticleText(warning, 220) : "",
+        ].filter(Boolean).join(" ");
+        panel.append(detail);
+      }
+      appendArticleProgress(panel, payload.job, previousPercent, true);
       const download = document.createElement("a");
       download.className = "article-panel__primary";
       download.href = payload.article.downloadUrl;
       download.download = "";
       download.textContent = "Download article";
-      panel.append(eyebrow, title, selected, download);
-    } else if (brief.status === "failed") {
+      panel.append(download);
+    } else if (
+      brief.status === "failed" ||
+      ["failed", "interrupted"].includes(payload.job?.status)
+    ) {
       title.textContent = "This draft needs attention";
       const detail = document.createElement("p");
       detail.className = "article-panel__progress";
       detail.textContent = payload.job?.errorMessage ??
         "The article could not be completed. Ask the agent what is needed next.";
       panel.append(eyebrow, title, detail);
+      if (payload.previousArticle?.downloadUrl) {
+        const previous = document.createElement("a");
+        previous.className = "article-panel__secondary article-panel__previous";
+        previous.href = payload.previousArticle.downloadUrl;
+        previous.download = "";
+        previous.textContent = "Download previous successful draft";
+        panel.append(previous);
+      }
     } else if (brief.status === "needs_details") {
       title.textContent = "One quick detail before I write";
       const detail = document.createElement("p");
@@ -856,7 +988,10 @@
         panel.scrollIntoView({ behavior: "smooth", block: "start" });
       });
     }
-    if (brief.status === "writing") {
+    if (
+      brief.status === "writing" &&
+      ["queued", "running"].includes(payload.job?.status)
+    ) {
       articleRefreshTimer = window.setTimeout(() => {
         void refreshArticlePanel();
       }, 4_000);
@@ -1952,6 +2087,9 @@
       if (activeAgentId === FUNDING_AGENT_ID) {
         void refreshScanProgress();
       }
+      if (activeAgentId === "marketing") {
+        void refreshArticlePanel();
+      }
     }
     return delivered;
   }
@@ -2307,6 +2445,7 @@
     if (!document.hidden) {
       void refreshScanProgress();
       void refreshScheduleResults();
+      void refreshArticlePanel();
     }
   });
 
