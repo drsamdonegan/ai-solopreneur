@@ -652,6 +652,8 @@ if (agentWorkflow) {
       /job IDs out of normal replies/i.test(
         startSeoArticleTool?.parameters?.description ?? "",
       ) &&
+      startSeoArticleTool?.parameters?.workflowInputs?.value?.currentInstruction ===
+        "={{ $('Validate and Normalise').first().json.message }}" &&
       startSeoArticleTool?.parameters?.workflowInputs?.value?.requestedTopic &&
       /never publishes/i.test(startSeoArticleTool?.parameters?.description ?? ""),
     "Agent: start_seo_article must start exact custom topics, bound research, hide internals, and never publish",
@@ -1635,6 +1637,9 @@ if (startSeoArticleWorkflow) {
   );
   const registrationBody =
     nodeByName(startSeoArticleWorkflow, "Register Article Job")?.parameters?.jsonBody ?? "";
+  const startTrigger = startSeoArticleWorkflow.nodes.find(
+    (node) => node.type === "n8n-nodes-base.executeWorkflowTrigger",
+  );
   const registrationCheck =
     nodeByName(startSeoArticleWorkflow, "Check Job Registration")?.parameters?.jsCode ?? "";
   const startValidation =
@@ -1652,6 +1657,11 @@ if (startSeoArticleWorkflow) {
       /voice/.test(registrationBody) &&
       /needs_selection/.test(registrationCheck) &&
       /needs_details/.test(registrationCheck) &&
+      startTrigger?.parameters?.workflowInputs?.values?.some(
+        (value) => value.name === "currentInstruction" && value.type === "string",
+      ) &&
+      /currentInstruction/.test(startValidation) &&
+      /inferredTopic/.test(startValidation) &&
       /CONFLICTING_MODE/.test(startValidation) &&
       /requestedTopic/.test(startResult) &&
       /progress/.test(startResult) &&

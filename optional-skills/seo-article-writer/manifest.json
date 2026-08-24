@@ -22,6 +22,7 @@
           "value": {
             "sessionId": "={{ $('Validate and Normalise').first().json.sessionId }}",
             "requestId": "={{ $('Validate and Normalise').first().json.requestId }}",
+            "currentInstruction": "={{ $('Validate and Normalise').first().json.message }}",
             "domain": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('domain', 'Bare saved business domain for the requested article.', 'string') }}",
             "primaryKeyword": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('primaryKeyword', 'Deprecated custom-topic alias. Leave empty when requestedTopic is supplied.', 'string') }}",
             "selectionNumber": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('selectionNumber', 'The exact article number 1, 2 or 3 chosen by the user. Use 0 when no numbered choice was made.', 'number') }}",
@@ -50,6 +51,15 @@
             {
               "id": "requestId",
               "displayName": "requestId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "currentInstruction",
+              "displayName": "currentInstruction",
               "required": false,
               "defaultMatch": false,
               "display": true,

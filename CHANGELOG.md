@@ -17,6 +17,9 @@ versioning for local workshop releases.
 
 ### Changed
 
+- Custom Marketing article requests now pass the current instruction directly
+  to the writer tool, so an omitted model argument cannot turn an explicit
+  topic into a numbered-choice prompt.
 - Agent cards now show stable packages and installation/sync state instead of
   exposing every internal Markdown skill as a separate product feature.
 - Existing capabilities are retained as package modules or add-ons: paid
