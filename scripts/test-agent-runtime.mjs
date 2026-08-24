@@ -115,6 +115,39 @@ const unknown = runValidation({
 assert.equal(unknown.valid, false);
 assert.equal(unknown.errorCode, "INVALID_REQUEST");
 
+const directArticleCode = workflow.nodes.find(
+  (node) => node.name === "Detect Direct Article Request",
+).parameters.jsCode;
+const runDirectArticleDetection = new Function("$json", directArticleCode);
+const directArticle = runDirectArticleDetection({
+  agentId: "marketing",
+  message:
+    "write an article for mlai.au about 'what is artificial intelligence in simple terms?'",
+  documents: [],
+}).json;
+assert.equal(directArticle.directArticleRequest, true);
+assert.equal(directArticle.directArticleDomain, "mlai.au");
+assert.equal(
+  directArticle.directArticleTopic,
+  "what is artificial intelligence in simple terms?",
+);
+assert.equal(
+  runDirectArticleDetection({
+    agentId: "project-manager",
+    message: "write an article for mlai.au about 'AI basics'",
+    documents: [],
+  }).json.directArticleRequest,
+  false,
+);
+assert.equal(
+  runDirectArticleDetection({
+    agentId: "marketing",
+    message: "write an article for mlai.au about 'AI basics'",
+    documents: [{ id: "source-document" }],
+  }).json.directArticleRequest,
+  false,
+);
+
 const fixtureWorkflow = structuredClone(workflow);
 
 /**
