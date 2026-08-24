@@ -35,6 +35,9 @@ versioning for local workshop releases.
   no longer exists in the article. Remaining claims still require verified IDs
   and excerpts, and terminal failures now distinguish incomplete model output,
   source mismatches, and genuinely unsupported content.
+- Reference excerpts that the model paraphrases are now replaced with exact text
+  from the same already-verified source page. The selected source ID and URL must
+  still match, and claim-ledger excerpts keep their strict grounding checks.
 - Agent cards now show stable packages and installation/sync state instead of
   exposing every internal Markdown skill as a separate product feature.
 - Existing capabilities are retained as package modules or add-ons: paid
