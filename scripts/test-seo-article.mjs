@@ -19,6 +19,12 @@ const projectRoot = fileURLToPath(new URL("..", import.meta.url));
 const startWorkflow = JSON.parse(
   await readFile(join(projectRoot, "n8n", "workflows", "56-tool-start-seo-article.json"), "utf8"),
 );
+const writerWorkflow = JSON.parse(
+  await readFile(
+    join(projectRoot, "n8n", "workflows", "57-internal-write-seo-article.json"),
+    "utf8",
+  ),
+);
 const startValidationCode = startWorkflow.nodes.find(
   (node) => node.name === "Validate Article Brief",
 ).parameters.jsCode;
@@ -38,6 +44,67 @@ assert.equal(directRequest.domain, "mlai.au");
 assert.equal(directRequest.requestedTopic, directTopic);
 assert.equal(directRequest.selectionNumber, 0);
 assert.equal(directRequest.chooseStrongestKeyword, false);
+
+const groundingPages = [1, 2, 3, 4].map((number) => ({
+  id: `S${number}`,
+  url: `https://source${number}.example/article`,
+  title: `Source ${number}`,
+  text: `Evidence ${number}\nline supporting this draft.`,
+}));
+const groundedDraft = {
+  markdown: '# AI basics\n\nAI systems can "recognise" patterns.',
+  sources: groundingPages.map((page, index) => ({
+    id: page.id,
+    url: page.url,
+    title: page.title,
+    excerpt: `Evidence ${index + 1} line`,
+  })),
+  claims: [
+    {
+      sentence: 'AI systems can "recognise" patterns.',
+      sourceIds: ["S1"],
+      excerpts: ["Evidence 1 line"],
+      support: "entailed",
+      repairAction: "",
+    },
+  ],
+};
+const groundedResponse = {
+  statusCode: 200,
+  body: {
+    stop_reason: "tool_use",
+    content: [{ type: "tool_use", name: "save_seo_article", input: groundedDraft }],
+  },
+};
+const workflowLookup = (name) => ({
+  first: () => {
+    assert.ok(
+      name === "Prepare Grounded Draft" || name === "Prepare One Repair",
+      `Unexpected workflow lookup: ${name}`,
+    );
+    return { json: { pages: groundingPages } };
+  },
+});
+const inspectDraftCode = writerWorkflow.nodes.find(
+  (node) => node.name === "Inspect Draft",
+).parameters.jsCode;
+const inspectRepairedDraftCode = writerWorkflow.nodes.find(
+  (node) => node.name === "Inspect Repaired Draft",
+).parameters.jsCode;
+assert.deepEqual(
+  new Function("$json", "$", inspectDraftCode)(groundedResponse, workflowLookup).json,
+  {
+    pages: groundingPages,
+    valid: true,
+    draft: groundedDraft,
+    needsRepair: false,
+  },
+);
+assert.equal(
+  new Function("$json", "$", inspectRepairedDraftCode)(groundedResponse, workflowLookup).json
+    .valid,
+  true,
+);
 
 const temporary = await mkdtemp(join(tmpdir(), "seo-article-test-"));
 const store = new ChatStore(join(temporary, "chat.sqlite"));

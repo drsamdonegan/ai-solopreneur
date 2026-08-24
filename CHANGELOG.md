@@ -27,6 +27,10 @@ versioning for local workshop releases.
 - Article registration now accepts the workflow's documented zero sentinel for
   a custom topic, so an explicit topic cannot be rejected as an invalid numbered
   choice before keyword research starts.
+- Grounding checks now normalize Unicode and whitespace and inspect actual draft
+  strings rather than JSON-escaped text. Formatting-only differences no longer
+  produce false unsupported-claim failures; URLs and source wording still have
+  to match the verified evidence.
 - Agent cards now show stable packages and installation/sync state instead of
   exposing every internal Markdown skill as a separate product feature.
 - Existing capabilities are retained as package modules or add-ons: paid
