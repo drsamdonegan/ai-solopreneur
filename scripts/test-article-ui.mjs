@@ -36,6 +36,9 @@ assert.match(source, /payload\.job\?\.strategy\?\.primaryKeyword/);
 assert.match(source, /querySelector\("\.article-panel"\)/);
 assert.match(source, /previousPanel\?\.remove\(\)/);
 assert.match(source, /window\.setTimeout\(\(\) => \{\s*void refreshArticlePanel\(\);\s*\}, 4_000\)/);
+assert.match(source, /articleRefreshFailures = Math\.min\(articleRefreshFailures \+ 1, 4\)/);
+assert.match(source, /Math\.min\(30_000, 4_000 \* \(2 \*\* \(articleRefreshFailures - 1\)\)\)/);
+assert.match(source, /Reconnecting…/);
 assert.match(source, /visibilitychange[\s\S]*refreshArticlePanel\(\)/);
 
 for (const selector of [

@@ -652,6 +652,9 @@ if (agentWorkflow) {
       /job IDs out of normal replies/i.test(
         startSeoArticleTool?.parameters?.description ?? "",
       ) &&
+      /do not call get_seo_article in the same turn/i.test(
+        startSeoArticleTool?.parameters?.description ?? "",
+      ) &&
       startSeoArticleTool?.parameters?.workflowInputs?.value?.currentInstruction ===
         "={{ $('Validate and Normalise').first().json.message }}" &&
       startSeoArticleTool?.parameters?.workflowInputs?.value?.requestedTopic &&
@@ -690,6 +693,8 @@ if (agentWorkflow) {
   check(
     getSeoArticleTool?.parameters?.workflowId?.value === "phase13GetSeoArticle" &&
       /Read-only source of truth/i.test(getSeoArticleTool?.parameters?.description ?? "") &&
+      /later user message/i.test(getSeoArticleTool?.parameters?.description ?? "") &&
+      /Never self-poll/i.test(getSeoArticleTool?.parameters?.description ?? "") &&
       /this conversation/i.test(getSeoArticleTool?.parameters?.description ?? ""),
     "Agent: get_seo_article must remain conversation-bound and read-only",
   );
@@ -736,6 +741,7 @@ if (agentWorkflow) {
       /syncRequired/.test(contextCode) &&
       /Delete, archive, bulk changes/.test(contextCode) &&
       /untrusted source material/.test(contextCode) &&
+      /never call get_seo_article in that same turn/i.test(contextCode) &&
       /BEGIN UNTRUSTED DOCUMENT/.test(contextCode),
     "Agent: context builder must apply enabled skills and safely delimit untrusted documents",
   );
@@ -1496,6 +1502,24 @@ if (startPaidResearchWorkflow) {
       /languageCode/.test(validation),
     "start_paid_domain_research must validate explicit paid authority, market, language, and reserved caps",
   );
+  const defaultedPaidInput = new Function("$json", validation)({
+    sessionId: "11111111-1111-4111-8111-111111111111",
+    requestId: "22222222-2222-4222-8222-222222222222",
+    domain: "example.com",
+    companyName: "Example",
+    researchDepth: "",
+    locationCode: "",
+    languageCode: "",
+    authorizationConfirmed: true,
+    paidResearchConfirmed: true,
+  }).json;
+  check(
+    defaultedPaidInput.valid === true &&
+      defaultedPaidInput.researchDepth === "standard" &&
+      defaultedPaidInput.locationCode === 2036 &&
+      defaultedPaidInput.languageCode === "en",
+    "start_paid_domain_research must apply documented defaults to empty optional inputs",
+  );
   const dataForSeoUrls = [
     "https://api.dataforseo.com/v3/dataforseo_labs/google/ranked_keywords/live",
     "https://api.dataforseo.com/v3/dataforseo_labs/google/competitors_domain/live",
@@ -1677,6 +1701,64 @@ if (startSeoArticleWorkflow) {
     nodeByName(startSeoArticleWorkflow, "Validate Article Brief")?.parameters?.jsCode ?? "";
   const startResult =
     nodeByName(startSeoArticleWorkflow, "Shape Start Result")?.parameters?.jsCode ?? "";
+  const dispatchGate = nodeByName(startSeoArticleWorkflow, "Dispatch Failed?");
+  const dispatchFailure = nodeByName(startSeoArticleWorkflow, "Mark Dispatch Failed");
+  const dispatchRestore = nodeByName(startSeoArticleWorkflow, "Restore Dispatch Failure");
+  const dispatchFailureBody = dispatchFailure?.parameters?.jsonBody ?? "";
+  const hostRequest = nodeByName(startSeoArticleWorkflow, "Check Article Host Contract");
+  const hostInspection = nodeByName(startSeoArticleWorkflow, "Inspect Article Host Contract");
+  const hostGate = nodeByName(startSeoArticleWorkflow, "Article Host Is Compatible?");
+  check(
+    hostRequest?.parameters?.method === "GET" &&
+      hostRequest?.parameters?.url ===
+        "http://127.0.0.1:3000/api/seo-article/capabilities" &&
+      hostRequest?.onError === "continueRegularOutput" &&
+      /seoArticleWriterHostContract/.test(hostInspection?.parameters?.jsCode ?? "") &&
+      /ARTICLE_HOST_UPGRADE_REQUIRED/.test(hostInspection?.parameters?.jsCode ?? "") &&
+      hostGate?.parameters?.conditions?.conditions?.[0]?.leftValue ===
+        "={{ $json.hostCompatible }}" &&
+      connectionTargets(startSeoArticleWorkflow, "Input Is Valid?", "main", 0)[0] ===
+        "Check Article Host Contract" &&
+      connectionTargets(startSeoArticleWorkflow, "Check Article Host Contract", "main", 0)[0] ===
+        "Inspect Article Host Contract" &&
+      connectionTargets(startSeoArticleWorkflow, "Inspect Article Host Contract", "main", 0)[0] ===
+        "Article Host Is Compatible?" &&
+      connectionTargets(startSeoArticleWorkflow, "Article Host Is Compatible?", "main", 0)[0] ===
+        "Register Article Job" &&
+      connectionTargets(startSeoArticleWorkflow, "Article Host Is Compatible?", "main", 1)[0] ===
+        "Prepare Audit",
+    "start_seo_article must fail closed before registration when the copied host is incompatible",
+  );
+  check(
+    queue?.onError === "continueRegularOutput" &&
+      /rawError/.test(startResult) &&
+      /i\.created===true/.test(startResult) &&
+      /dispatchFailed:true/.test(startResult) &&
+      /ok:false/.test(startResult) &&
+      /ARTICLE_DISPATCH_FAILED/.test(startResult) &&
+      /const status=i\.created\?'queued':i\.job\.status/.test(startResult) &&
+      dispatchGate?.parameters?.conditions?.conditions?.[0]?.leftValue ===
+        "={{ $json.dispatchFailed }}" &&
+      dispatchFailure?.parameters?.method === "PATCH" &&
+      dispatchFailure?.parameters?.url ===
+        "http://127.0.0.1:3000/api/seo-article/jobs" &&
+      dispatchFailure?.onError === "continueRegularOutput" &&
+      /status:'failed'/.test(dispatchFailureBody) &&
+      /stage:'failed'/.test(dispatchFailureBody) &&
+      /ARTICLE_DISPATCH_FAILED/.test(dispatchFailureBody) &&
+      /Shape Start Result/.test(dispatchRestore?.parameters?.jsCode ?? "") &&
+      connectionTargets(startSeoArticleWorkflow, "Shape Start Result", "main", 0)[0] ===
+        "Dispatch Failed?" &&
+      connectionTargets(startSeoArticleWorkflow, "Dispatch Failed?", "main", 0)[0] ===
+        "Mark Dispatch Failed" &&
+      connectionTargets(startSeoArticleWorkflow, "Dispatch Failed?", "main", 1)[0] ===
+        "Prepare Audit" &&
+      connectionTargets(startSeoArticleWorkflow, "Mark Dispatch Failed", "main", 0)[0] ===
+        "Restore Dispatch Failure" &&
+      connectionTargets(startSeoArticleWorkflow, "Restore Dispatch Failure", "main", 0)[0] ===
+        "Prepare Audit",
+    "start_seo_article must report dispatch failures, terminally fail new jobs, and preserve existing-job status",
+  );
   check(
     /requestedTopic/.test(registrationBody) &&
       /selectionNumber/.test(registrationBody) &&
@@ -1769,13 +1851,13 @@ if (writeSeoArticleWorkflow) {
   // article payload if it fed the worker directly, so each write is followed
   // by a tiny node that restores the pre-write payload.
   const progressBeforeWork = [
-    ["Prepare Topic Research", 0, "Mark Researching Keywords", "Restore Topic Research", "Saved Topic Evidence?"],
+    ["Topic Context Is Ready?", 0, "Mark Researching Keywords", "Restore Topic Research", "Saved Topic Evidence?"],
     ["Choose Public Sources", 0, "Mark Finding Sources", "Restore Public Sources", "Context Is Ready?"],
     ["Enough Sources?", 0, "Mark Drafting", "Restore Grounded Draft", "Draft With Claude"],
     ["Draft With Claude", 0, "Mark Checking Claims", "Restore Draft Response", "Inspect Draft"],
     ["Prepare One Repair", 0, "Mark Repairing", "Restore Repair Request", "Repair With Claude"],
-    ["Draft Needs Repair?", 1, "Mark Saving", "Restore Save Payload", "Save Article Version"],
-    ["Repair Is Valid?", 0, "Mark Saving", "Restore Save Payload", "Save Article Version"],
+    ["Draft Needs Repair?", 1, "Mark Saving", "Restore Save Payload", "Prepare Save Request"],
+    ["Repaired Quality Is Valid?", 0, "Mark Saving", "Restore Save Payload", "Prepare Save Request"],
   ];
   check(
     expectedStages.every((stage) => workflowText.includes(stage)) &&
@@ -1798,7 +1880,13 @@ if (writeSeoArticleWorkflow) {
             restoreTargets.length === 1 &&
             restoreTargets[0] === workNode;
         },
-      ),
+      ) &&
+      connectionTargets(writeSeoArticleWorkflow, "Prepare Topic Research", "main", 0)[0] ===
+        "Topic Context Is Ready?" &&
+      connectionTargets(writeSeoArticleWorkflow, "Topic Context Is Ready?", "main", 1)[0] ===
+        "Prepare Honest Failure" &&
+      connectionTargets(writeSeoArticleWorkflow, "Prepare Save Request", "main", 0)[0] ===
+        "Save Article Version",
     "write_seo_article must persist every monotonic stage without feeding progress responses into the draft chain",
   );
   check(
@@ -1809,18 +1897,38 @@ if (writeSeoArticleWorkflow) {
       /UNTRUSTED DATA/.test(
         nodeByName(writeSeoArticleWorkflow, "Prepare Grounded Draft")?.parameters?.jsCode ?? "",
       ) &&
+      /dataforseo\.com/.test(
+        nodeByName(writeSeoArticleWorkflow, "Choose Public Sources")?.parameters?.jsCode ?? "",
+      ) &&
+      /seoCompetitors/.test(
+        nodeByName(writeSeoArticleWorkflow, "Choose Public Sources")?.parameters?.jsCode ?? "",
+      ) &&
       ["Inspect Draft", "Inspect Repaired Draft"].every((name) => {
         const code = nodeByName(writeSeoArticleWorkflow, name)?.parameters?.jsCode ?? "";
         return (
           /unsupported/.test(code) &&
           /normalize\('NFKC'\)/.test(code) &&
-          /contains\(p\?\.text,s\.excerpt\)/.test(code) &&
-          /contains\(assembled,c\.sentence\)/.test(code) &&
-          /presentClaims/.test(code) &&
+          /containsExcerpt/.test(code) &&
+          /contains\(assembled, claim\.sentence\)/.test(code) &&
+          /repairReasons|groundingErrors/.test(code) &&
+          /Every FAQ entry must have a text question and answer/.test(code) &&
           /sanitizedSources/.test(code) &&
           /sanitizedDraft/.test(code)
         );
-      }),
+      }) &&
+      ["Validate Draft Quality", "Validate Repaired Quality"].every((name) =>
+        /api\/seo-article\/validate/.test(
+          nodeByName(writeSeoArticleWorkflow, name)?.parameters?.url ?? "",
+        ),
+      ) &&
+      /repairReasons/.test(
+        nodeByName(writeSeoArticleWorkflow, "Prepare One Repair")?.parameters?.jsCode ?? "",
+      ) &&
+      nodeByName(writeSeoArticleWorkflow, "Save Article Version")?.parameters?.jsonBody ===
+        "={{ JSON.stringify($json.saveBody) }}" &&
+      /saveBody/.test(
+        nodeByName(writeSeoArticleWorkflow, "Prepare Save Request")?.parameters?.jsCode ?? "",
+      ),
     "write_seo_article must require four sources, resist prompt injection, and allow one repair only",
   );
 }

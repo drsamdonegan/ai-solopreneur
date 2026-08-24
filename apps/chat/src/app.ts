@@ -1848,6 +1848,10 @@ export function createChatHandler(options: ChatGatewayOptions): RequestListener 
             return;
           }
           const sessionId = validateSessionId(url.searchParams.get("sessionId"));
+          // This is the endpoint the transcript progress card polls. Reconcile
+          // a worker that outlived n8n's execution window before returning the
+          // linked brief, otherwise the card could remain on "writing" forever.
+          chatStore.expireStaleSeoArticleJobs(sessionId);
           const requestedDomain = url.searchParams.get("domain");
           const brief = chatStore.getLatestArticleBrief(
             sessionId,
@@ -1992,6 +1996,10 @@ export function createChatHandler(options: ChatGatewayOptions): RequestListener 
           }
           if (request.method === "GET") {
             const sessionId = validateSessionId(url.searchParams.get("sessionId"));
+            // n8n's execution timeout cannot update the job after a hard worker
+            // crash. Reconcile it on the progress read so the UI cannot poll a
+            // dead attempt forever.
+            chatStore.expireStaleSeoArticleJobs(sessionId);
             const jobId = url.searchParams.get("jobId");
             const domain = url.searchParams.get("domain");
             const job = jobId !== null
@@ -2150,8 +2158,12 @@ export function createChatHandler(options: ChatGatewayOptions): RequestListener 
           const brief = job.briefId
             ? chatStore.getArticleBrief(sessionId, job.briefId)
             : undefined;
-          const memory = brief === undefined ? chatStore.getBusinessMemory(job.domain) : undefined;
-          const snapshot = brief === undefined ? chatStore.getLatestSeoSnapshot(job.domain) : undefined;
+          // A compact saved brief is useful for reproducibility, but it does not
+          // contain every source-discovery field (notably the full competitor
+          // lists). Return the current records as well so old briefs cannot hide
+          // valid public sources from the writer.
+          const memory = chatStore.getBusinessMemory(job.domain);
+          const snapshot = chatStore.getLatestSeoSnapshot(job.domain);
           const profile = profileStore === undefined ? undefined : await profileStore.read();
           sendJson(response, 200, {
             schemaVersion: 1,
@@ -2166,6 +2178,75 @@ export function createChatHandler(options: ChatGatewayOptions): RequestListener 
           else {
             options.logError?.("Could not prepare SEO article context", error);
             sendError(response, new PublicError(500, "SEO_ARTICLE_ERROR", "The saved research could not be prepared."));
+          }
+        }
+        return;
+      }
+
+      if (url.pathname === "/api/seo-article/capabilities") {
+        if (request.method !== "GET") {
+          sendJson(
+            response,
+            405,
+            { error: { code: "INVALID_REQUEST", message: "That method is not supported." } },
+            { Allow: "GET" },
+          );
+        } else {
+          sendJson(response, 200, {
+            schemaVersion: 1,
+            seoArticleWriterHostContract: 2,
+          });
+        }
+        return;
+      }
+
+      if (url.pathname === "/api/seo-article/validate") {
+        try {
+          if (request.method !== "POST") {
+            sendJson(
+              response,
+              405,
+              { error: { code: "INVALID_REQUEST", message: "That method is not supported." } },
+              { Allow: "POST" },
+            );
+            return;
+          }
+          const candidate = businessMemoryObject(
+            await readRequestBody(request, MAX_SEO_ARTICLE_REQUEST_BYTES),
+            "article validation",
+          );
+          const sessionId = validateSessionId(candidate.sessionId);
+          const jobId = businessMemoryText(candidate.jobId, "article job ID", 160);
+          const job = chatStore.getSeoArticleJob(sessionId, jobId);
+          if (job === undefined) {
+            throw new PublicError(404, "SEO_ARTICLE_NOT_FOUND", "That article job is not saved for this conversation.");
+          }
+          try {
+            const result = validateSeoArticleResult(
+              candidate.result,
+              job.primaryKeyword,
+              job.requestedTopic,
+            );
+            sendJson(response, 200, {
+              schemaVersion: 1,
+              valid: result.qualityReport.passed,
+              errors: result.qualityReport.errors,
+              warnings: result.qualityReport.warnings,
+              qualityReport: result.qualityReport,
+            });
+          } catch (error) {
+            sendJson(response, 200, {
+              schemaVersion: 1,
+              valid: false,
+              errors: [error instanceof Error ? error.message : "Invalid article result"],
+              warnings: [],
+            });
+          }
+        } catch (error) {
+          if (error instanceof PublicError) sendError(response, error);
+          else {
+            options.logError?.("Could not validate SEO article version", error);
+            sendError(response, new PublicError(500, "SEO_ARTICLE_ERROR", "The article could not be validated."));
           }
         }
         return;
@@ -2191,6 +2272,13 @@ export function createChatHandler(options: ChatGatewayOptions): RequestListener 
           const job = chatStore.getSeoArticleJob(sessionId, jobId);
           if (job === undefined) {
             throw new PublicError(404, "SEO_ARTICLE_NOT_FOUND", "That article job is not saved for this conversation.");
+          }
+          if (job.status !== "queued" && job.status !== "running") {
+            throw new PublicError(
+              409,
+              "SEO_ARTICLE_ERROR",
+              "That article attempt is no longer active, so a late worker cannot replace its final status.",
+            );
           }
           const saved = chatStore.saveSeoArticleVersion(
             sessionId,

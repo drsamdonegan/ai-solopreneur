@@ -101,6 +101,9 @@ run("chat TypeScript build", process.execPath, [
   "--project",
   "apps/chat/tsconfig.json",
 ]);
+run("chat store migration reconciliation", process.execPath, [
+  "scripts/test-chat-store-migrations.mjs",
+]);
 run("agent card and settings API", process.execPath, [
   "scripts/test-agent-card-api.mjs",
 ]);

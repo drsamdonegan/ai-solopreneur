@@ -1,4 +1,9 @@
-import { evaluateArticleQuality, type ArticleClaim, type ArticleQualityReport } from "./article-quality.js";
+import {
+  articleTextContainsClaim,
+  evaluateArticleQuality,
+  type ArticleClaim,
+  type ArticleQualityReport,
+} from "./article-quality.js";
 
 export type SeoArticleJobStatus =
   | "queued"
@@ -137,8 +142,17 @@ export function validateSeoArticleResult(
   if (claims.some((claim) => claim.sourceIds.some((id) => !sourceIds.has(id)))) {
     throw new Error("A claim refers to an unknown source");
   }
-  const assembled = JSON.stringify({ ...candidate, claims: undefined, sources: undefined });
-  if (claims.some((claim) => !assembled.includes(claim.sentence))) {
+  const collectStrings = (value: unknown, output: string[] = []): string[] => {
+    if (typeof value === "string") output.push(value);
+    else if (Array.isArray(value)) value.forEach((entry) => collectStrings(entry, output));
+    else if (typeof value === "object" && value !== null) {
+      Object.values(value).forEach((entry) => collectStrings(entry, output));
+    }
+    return output;
+  };
+  // NUL separators stop a claim from matching across two unrelated fields.
+  const assembled = collectStrings({ ...candidate, claims: undefined, sources: undefined }).join("\0");
+  if (claims.some((claim) => !articleTextContainsClaim(assembled, claim.sentence))) {
     throw new Error("A claim sentence is not present in the assembled article");
   }
   if (candidate.status === "completed" && claims.some((claim) => claim.support === "partial")) {

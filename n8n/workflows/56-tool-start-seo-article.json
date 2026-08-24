@@ -26,17 +26,17 @@
               "name": "sessionId",
               "type": "string"
             },
-          {
-            "name": "requestId",
-            "type": "string"
-          },
-          {
-            "name": "currentInstruction",
-            "type": "string"
-          },
-          {
-            "name": "domain",
-            "type": "string"
+            {
+              "name": "requestId",
+              "type": "string"
+            },
+            {
+              "name": "currentInstruction",
+              "type": "string"
+            },
+            {
+              "name": "domain",
+              "type": "string"
             },
             {
               "name": "requestedTopic",
@@ -312,7 +312,7 @@
       "parameters": {
         "mode": "runOnceForEachItem",
         "language": "javaScript",
-        "jsCode": "const i=$('Check Job Registration').first().json,status=i.created?'queued':i.job.status;const messages={queued:'I’m researching the strongest search angle for that topic and writing the article now. Follow its progress in the chat.',running:'That article is already being written. Follow its progress in the chat.',completed:'That article is ready to download.',partial:'That article is ready with a short warning.',failed:'That earlier article attempt needs attention.',interrupted:'That earlier article attempt stopped before it finished.'};return{json:{...i,response:{ok:true,status,domain:i.domain,requestedTopic:i.requestedTopic,primaryKeyword:i.primaryKeyword,articleBrief:i.articleBrief,message:messages[status]??messages.queued}}};"
+        "jsCode": "const i=$('Check Job Registration').first().json,rawError=$json?.error,dispatchFailed=i.created===true&&((typeof rawError==='string'&&rawError.trim().length>0)||(rawError&&typeof rawError==='object'));if(dispatchFailed)return{json:{...i,dispatchFailed:true,response:{ok:false,error:{code:'ARTICLE_DISPATCH_FAILED',message:'The background article writer could not be started. Nothing was written.'}}}};const status=i.created?'queued':i.job.status,messages={queued:'I’m researching the strongest search angle for that topic and writing the article now. Follow its progress in the chat.',running:'That article is already being written. Follow its progress in the chat.',completed:'That article is ready to download.',partial:'That article is ready with a short warning.',failed:'That earlier article attempt needs attention.',interrupted:'That earlier article attempt stopped before it finished.'};return{json:{...i,dispatchFailed:false,response:{ok:true,status,domain:i.domain,requestedTopic:i.requestedTopic,primaryKeyword:i.primaryKeyword,articleBrief:i.articleBrief,message:messages[status]??messages.queued}}};"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -325,6 +325,83 @@
     },
     {
       "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "b560-dispatch-failed",
+              "leftValue": "={{ $json.dispatchFailed }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2020,
+        -280
+      ],
+      "id": "b5600000-0000-4000-8000-000000000018",
+      "name": "Dispatch Failed?"
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "http://127.0.0.1:3000/api/seo-article/jobs",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({sessionId:$json.sessionId,jobId:$json.jobId,status:'failed',stage:'failed',errorCode:'ARTICLE_DISPATCH_FAILED',errorMessage:'The background article writer could not be started.'}) }}",
+        "options": {
+          "timeout": 10000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2260,
+        -360
+      ],
+      "id": "b5600000-0000-4000-8000-000000000019",
+      "name": "Mark Dispatch Failed",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "return{json:$('Shape Start Result').first().json};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2500,
+        -360
+      ],
+      "id": "b5600000-0000-4000-8000-000000000020",
+      "name": "Restore Dispatch Failure"
+    },
+    {
+      "parameters": {
         "mode": "runOnceForEachItem",
         "language": "javaScript",
         "jsCode": "const base=$('Validate Article Brief').first().json,r=$json.response??{ok:false,error:{code:'ARTICLE_QUEUE_FAILED',message:'The article could not be queued.'}};return{json:{occurredAt:new Date().toISOString(),sessionId:base.sessionId,requestId:base.requestId,toolName:'start_seo_article',proposedInput:JSON.stringify({domain:base.domain,requestedTopic:base.requestedTopic,selectionNumber:base.selectionNumber,chooseStrongestKeyword:base.chooseStrongestKeyword}),result:JSON.stringify(r),error:r.ok===false?String(r.error?.message??'Tool failed'):'',response:r}};"
@@ -332,7 +409,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2020,
+        2740,
         20
       ],
       "id": "b5600000-0000-4000-8000-000000000014",
@@ -368,7 +445,7 @@
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1.1,
       "position": [
-        2260,
+        2980,
         20
       ],
       "id": "b5600000-0000-4000-8000-000000000015",
@@ -384,11 +461,84 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2500,
+        3220,
         20
       ],
       "id": "b5600000-0000-4000-8000-000000000016",
       "name": "Return Tool Result"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://127.0.0.1:3000/api/seo-article/capabilities",
+        "options": {
+          "timeout": 10000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -140,
+        -100
+      ],
+      "id": "b5600000-0000-4000-8000-000000000021",
+      "name": "Check Article Host Contract",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const base=$('Validate Article Brief').first().json,status=Number($json.statusCode??0),body=$json.body??$json.data??{},hostCompatible=status===200&&Number(body.seoArticleWriterHostContract)>=2;return{json:{...base,hostCompatible,...(hostCompatible?{}:{response:{ok:false,error:{code:'ARTICLE_HOST_UPGRADE_REQUIRED',message:'This article writer needs the matching core app update before it can run. Nothing was queued; merge or update the main chat host, then try again.'}}})}};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        100,
+        -100
+      ],
+      "id": "b5600000-0000-4000-8000-000000000022",
+      "name": "Inspect Article Host Contract"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "b560-host-compatible",
+              "leftValue": "={{ $json.hostCompatible }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        340,
+        -100
+      ],
+      "id": "b5600000-0000-4000-8000-000000000023",
+      "name": "Article Host Is Compatible?"
     }
   ],
   "connections": {
@@ -418,7 +568,7 @@
       "main": [
         [
           {
-            "node": "Register Article Job",
+            "node": "Check Article Host Contract",
             "type": "main",
             "index": 0
           }
@@ -505,6 +655,46 @@
       "main": [
         [
           {
+            "node": "Dispatch Failed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dispatch Failed?": {
+      "main": [
+        [
+          {
+            "node": "Mark Dispatch Failed",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Dispatch Failed": {
+      "main": [
+        [
+          {
+            "node": "Restore Dispatch Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Restore Dispatch Failure": {
+      "main": [
+        [
+          {
             "node": "Prepare Audit",
             "type": "main",
             "index": 0
@@ -528,6 +718,46 @@
         [
           {
             "node": "Return Tool Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Article Host Contract": {
+      "main": [
+        [
+          {
+            "node": "Inspect Article Host Contract",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Inspect Article Host Contract": {
+      "main": [
+        [
+          {
+            "node": "Article Host Is Compatible?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Article Host Is Compatible?": {
+      "main": [
+        [
+          {
+            "node": "Register Article Job",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Audit",
             "type": "main",
             "index": 0
           }

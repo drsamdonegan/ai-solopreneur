@@ -285,6 +285,7 @@
   let activeConversationTitle = "New conversation";
   let pendingRefreshTimer = null;
   let articleRefreshTimer = null;
+  let articleRefreshFailures = 0;
   let agentSettings = null;
   let agentDialogAgentId = "";
   let agentDialogReturnFocus = null;
@@ -807,6 +808,7 @@
   }
 
   function renderArticlePanel(payload) {
+    articleRefreshFailures = 0;
     const previousPanel = elements.conversation.querySelector(".article-panel");
     const previousPercent = Number(
       previousPanel?.querySelector("[role='progressbar']")?.getAttribute("aria-valuenow") ?? 0,
@@ -1017,7 +1019,23 @@
       if (sessionId !== expectedSessionId) return;
       renderArticlePanel(body);
     } catch {
-      // The normal chat stays usable when the optional article panel is offline.
+      // Keep the normal chat usable, but do not strand an active progress card
+      // after one transient network error. Retry with a capped backoff while a
+      // writing panel is visible, or briefly while the first panel is loading.
+      if (sessionId !== expectedSessionId) return;
+      const panel = elements.conversation.querySelector(".article-panel");
+      const writing = panel?.dataset.status === "writing";
+      articleRefreshFailures = Math.min(articleRefreshFailures + 1, 4);
+      if (writing || articleRefreshFailures <= 3) {
+        const timing = panel?.querySelector(".article-progress__timing");
+        if (timing && articleRefreshFailures >= 2 && !/Reconnecting/.test(timing.textContent)) {
+          timing.textContent = `${timing.textContent} · Reconnecting…`;
+        }
+        const delay = Math.min(30_000, 4_000 * (2 ** (articleRefreshFailures - 1)));
+        articleRefreshTimer = window.setTimeout(() => {
+          void refreshArticlePanel();
+        }, delay);
+      }
     }
   }
 
@@ -1311,6 +1329,7 @@
       window.clearTimeout(articleRefreshTimer);
       articleRefreshTimer = null;
     }
+    articleRefreshFailures = 0;
     elements.conversation.replaceChildren();
     if (nextMessageBefore) {
       const older = document.createElement("button");

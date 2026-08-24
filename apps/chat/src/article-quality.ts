@@ -24,6 +24,60 @@ export interface ArticleQualityReport {
   };
 }
 
+/**
+ * Normalise presentation-only differences without changing words, numbers,
+ * punctuation, or negation. Claim ledgers describe visible prose, so Markdown
+ * links and emphasis must not make an otherwise exact sentence disappear.
+ */
+export function normalizeArticleEvidenceText(value: unknown): string {
+  return String(value ?? "")
+    .normalize("NFKC")
+    .replace(/!\[([^\]]*)\]\([^\n)]*\)/g, "$1")
+    .replace(/\[([^\]]+)\]\([^\n)]*\)/g, "$1")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/^\s{0,3}(?:#{1,6}|>)\s*/gm, "")
+    .replace(/^\s*[-+]\s+/gm, "")
+    .replace(/[`*_~]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+export function articleTextContainsClaim(haystack: unknown, needle: unknown): boolean {
+  const normalNeedle = normalizeArticleEvidenceText(needle);
+  return normalNeedle.length > 0 &&
+    normalizeArticleEvidenceText(haystack).includes(normalNeedle);
+}
+
+/**
+ * Source excerpts are evidence, not presentation text. Only Unicode case and
+ * whitespace differences are ignored here; Markdown, HTML, punctuation,
+ * numbers, and URLs must remain exact so invented markup cannot be smuggled
+ * into a stored excerpt.
+ */
+export function normalizeArticleExcerptText(value: unknown): string {
+  return String(value ?? "")
+    .normalize("NFKC")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+/**
+ * Extracted HTML can insert whitespace inside a word at an inline-tag
+ * boundary. The compact comparison ignores whitespace only; letters,
+ * punctuation, numbers, and order must still match.
+ */
+export function articleTextContainsExcerpt(haystack: unknown, needle: unknown): boolean {
+  const normalNeedle = normalizeArticleExcerptText(needle);
+  if (normalNeedle.length > 0 && normalizeArticleExcerptText(haystack).includes(normalNeedle)) {
+    return true;
+  }
+  const compact = (value: unknown) => normalizeArticleExcerptText(value).replace(/\s+/g, "");
+  const compactNeedle = compact(needle);
+  return compactNeedle.length > 0 && compact(haystack).includes(compactNeedle);
+}
+
 const TOPIC_STOP_WORDS = new Set([
   "a", "an", "and", "are", "as", "at", "be", "by", "can", "do", "does",
   "for", "from", "guide", "how", "in", "is", "it", "of", "on", "or", "simple",
@@ -134,7 +188,7 @@ export function evaluateArticleQuality(input: {
     );
   if (
     riskyFactSentences.some(
-      (sentence) => !input.claims.some((claim) => sentence.includes(claim.sentence)),
+      (sentence) => !input.claims.some((claim) => articleTextContainsClaim(sentence, claim.sentence)),
     )
   ) {
     errors.push("A statistic, date, or attributed claim is missing from the claim ledger.");

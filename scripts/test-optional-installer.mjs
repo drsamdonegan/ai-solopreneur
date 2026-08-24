@@ -19,6 +19,7 @@ const temporary = await mkdtemp(join(tmpdir(), "optional-installer-test-"));
 async function makeScratch(name) {
   const root = join(temporary, name);
   for (const directory of [
+    "apps",
     "optional-skills",
     "skill-packs",
     "scripts",
@@ -129,6 +130,37 @@ try {
     readFile(join(atomicRoot, "skills", "domain-research", "SKILL.md"), "utf8"),
     /ENOENT/,
     "a package dependency must not copy before every selected module passes preflight",
+  );
+
+  const incompatibleHostRoot = await makeScratch("incompatible-seo-host");
+  await rm(join(incompatibleHostRoot, "skills", "seo-article-writer"), {
+    recursive: true,
+    force: true,
+  });
+  const incompatibleHostPath = join(incompatibleHostRoot, "apps", "chat", "src", "app.ts");
+  await writeFile(
+    incompatibleHostPath,
+    (await readFile(incompatibleHostPath, "utf8")).replace(
+      "/api/seo-article/validate",
+      "/api/seo-article/quality-disabled",
+    ),
+  );
+  const incompatibleBefore = await snapshot(incompatibleHostRoot);
+  const incompatibleInstall = install(incompatibleHostRoot, "seo-article-writer", false);
+  assert.match(incompatibleInstall.stderr, /matching core chat-host changes/i);
+  assert.match(incompatibleInstall.stderr, /No skill, workflow, agent, or policy file was changed/i);
+  assert.deepEqual(
+    await snapshot(incompatibleHostRoot),
+    incompatibleBefore,
+    "an incompatible host must be rejected before any install destination changes",
+  );
+  await assert.rejects(
+    readFile(
+      join(incompatibleHostRoot, "skills", "seo-article-writer", "SKILL.md"),
+      "utf8",
+    ),
+    /ENOENT/,
+    "the writer skill must remain absent when its core host is incompatible",
   );
 
   const freeFirstRoot = await makeScratch("free-first-seo");

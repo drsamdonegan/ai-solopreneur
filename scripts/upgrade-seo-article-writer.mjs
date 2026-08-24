@@ -6,6 +6,35 @@ import { fileURLToPath } from "node:url";
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const packageRoot = join(projectRoot, "optional-skills", "seo-article-writer");
 
+// Workflow 57 now delegates its final quality decision to the chat host. A
+// copied optional-skill package must not upgrade an older private fork into a
+// state where every article deterministically fails at that unavailable route.
+const requiredHostCapabilities = [
+  ["apps/chat/src/app.ts", "seoArticleWriterHostContract: 2"],
+  ["apps/chat/src/app.ts", "/api/seo-article/validate"],
+  ["apps/chat/src/seo-article.ts", "articleTextContainsClaim"],
+  ["apps/chat/src/article-quality.ts", "articleTextContainsExcerpt"],
+  ["apps/chat/src/article-brief.ts", "seoCompetitors"],
+  ["apps/chat/src/chat-store.ts", "reconcileSeoArticleSchema"],
+];
+const missingHostCapabilities = [];
+for (const [relativePath, marker] of requiredHostCapabilities) {
+  try {
+    const source = await readFile(join(projectRoot, relativePath), "utf8");
+    if (!source.includes(marker)) missingHostCapabilities.push(relativePath);
+  } catch {
+    missingHostCapabilities.push(relativePath);
+  }
+}
+if (missingHostCapabilities.length > 0) {
+  throw new Error(
+    "SEO Article Writer 1.1.7 requires the matching core chat-host changes before its " +
+      "workflows can be upgraded. Merge the core host release/commit into this private fork " +
+      `first (missing: ${missingHostCapabilities.join(", ")}). ` +
+      "The upgrade stopped before writing anything.",
+  );
+}
+
 const files = [
   {
     source: "skill/agents/openai.yaml",
@@ -20,7 +49,10 @@ const files = [
   {
     source: "skill/SKILL.md",
     target: "skills/seo-article-writer/SKILL.md",
-    previous: "3dac8b0cc34a4a92ea4fac57aa37115cb92271024a5c81b083f5ea6440723254",
+    previous: [
+      "3dac8b0cc34a4a92ea4fac57aa37115cb92271024a5c81b083f5ea6440723254",
+      "d1905b767aadf47c2e95f8b0d13c67f3ce4aea14729e22425415a07e0d93b426",
+    ],
   },
   {
     source: "skill/skill.yaml",
@@ -33,6 +65,7 @@ const files = [
       "839603e7ed5c4f4e6902a703093fc933f21d76baab35a8e459407ef3d3ea1d39",
       "68b615c09b8138edbad70ba9fffe32bd713184a2aa77c18d1c7397d14286a368",
       "e8b1938664c7d4896cac60e69d71e8bfc4739621bcb6dd979edcc1cc9e91d7b9",
+      "48819d8320233fb6a450094009b9e0e86ea1b266df3cb5fde606a03c2038f328",
     ],
   },
   {
@@ -46,6 +79,7 @@ const files = [
     previous: [
       "4547b427b0ba860024235951c8ff7329234211a16481b5dbe367fdc5a58e99d3",
       "7e1a4ac42b983cffa282187181c86897a2e3996c5d9a07ad71b43aefaa3424fe",
+      "b869451203db7ca049470ff9acc11c7d39c0803c8b09cb6923891f57805ef1d1",
     ],
     json: true,
   },
@@ -59,6 +93,7 @@ const files = [
       "69b20e228676b211b3b83f08b541e6e31b45001d8362191dbbbf3ca47df4dccd",
       "f823d19b1da1da4a9d8b1617f027872b3163e3101854814352bd46f2e297f00a",
       "0205c6f730dedc6870ca12b6a311c9f99f08ba029b2914bffc98df05e2e58461",
+      "aad467ba512d4af0efafa30639faed76adaed0f6ed6033245154f5f499bdbbda",
     ],
     json: true,
   },
@@ -73,9 +108,15 @@ const files = [
 const oldToolHashes = [
   "d4b9faecb77f410bd2ecdfffaaad49d13c59911435ef0e8ab40d9574ef3bc976",
   "3088d5b4ef201430d7ffe6e18869b3e132f06e0b16a76b64d1fad35e18afa4e2",
+  "1890ef9e625915ee8eb70e26cc076812cf1aa59bd96c5e867c01163710e549af",
 ];
 const oldRules = [
   "- start_seo_article is risk=bounded_local_write. Use it only when the current user explicitly asks to draft an article. It starts a local writing job and saves the draft to this conversation; it never publishes anything anywhere.",
+  "- get_seo_article is risk=read and is the source of truth for a draft started in this conversation. It reports a saved draft; it never writes one.",
+];
+const previousRules = [
+  "- start_seo_article is risk=bounded_external_read_and_local_write. Use it once when the current user explicitly asks to draft an article. A custom topic starts immediately and wins over saved ideas; never invent a numbered article list in prose. Its background topic research may use only the reviewed DataForSEO endpoints within the US$0.15 application ceiling, never retries, falls back safely, stores actual provider cost, and never publishes.",
+  "- Keep article job IDs, provider task IDs, internal workflow names, market codes, and strategy scores out of normal replies. The transcript progress card is the source of truth while writing runs.",
   "- get_seo_article is risk=read and is the source of truth for a draft started in this conversation. It reports a saved draft; it never writes one.",
 ];
 
@@ -91,7 +132,9 @@ function node(workflow, name) {
 
 const manifest = JSON.parse(await readFile(join(packageRoot, "manifest.json"), "utf8"));
 const sourceTool = manifest.agentTools.find((entry) => entry.name === "start_seo_article");
+const sourceGetTool = manifest.agentTools.find((entry) => entry.name === "get_seo_article");
 const sourceToolHash = hash(JSON.stringify(sourceTool.parameters));
+const sourceGetToolHash = hash(JSON.stringify(sourceGetTool.parameters));
 const pendingFiles = [];
 
 for (const entry of files) {
@@ -113,19 +156,28 @@ for (const entry of files) {
 const agentPath = join(projectRoot, "n8n", "workflows", "00-start-here-project-partner.json");
 const agent = JSON.parse(await readFile(agentPath, "utf8"));
 const installedTool = node(agent, "start_seo_article");
+const installedGetTool = node(agent, "get_seo_article");
 const installedToolHash = hash(JSON.stringify(installedTool.parameters));
+const installedGetToolHash = hash(JSON.stringify(installedGetTool.parameters));
 if (![...oldToolHashes, sourceToolHash].includes(installedToolHash)) {
   throw new Error(
     "The installed start_seo_article tool has local changes. The upgrade stopped before writing anything.",
   );
 }
+if (!["42b98ab57dc7be841a48580ddcee42dd590052125e21ce7602b1e1830d70697e", sourceGetToolHash].includes(installedGetToolHash)) {
+  throw new Error(
+    "The installed get_seo_article tool has local changes. The upgrade stopped before writing anything.",
+  );
+}
 
 const context = node(agent, "Build Agent Context");
-const hasOldRules = oldRules.every((rule) => context.parameters.jsCode.includes(JSON.stringify(rule)));
+const installedPreviousRules = [oldRules, previousRules].find((rules) =>
+  rules.every((rule) => context.parameters.jsCode.includes(JSON.stringify(rule))),
+);
 const hasNewRules = manifest.policyRules.every((rule) =>
   context.parameters.jsCode.includes(JSON.stringify(rule)),
 );
-if (!hasOldRules && !hasNewRules) {
+if (installedPreviousRules === undefined && !hasNewRules) {
   throw new Error(
     "The installed Marketing article policy has local or partial changes. The upgrade stopped before writing anything.",
   );
@@ -146,8 +198,9 @@ if (
 for (const { targetPath, source } of pendingFiles) await writeFile(targetPath, source);
 
 installedTool.parameters = structuredClone(sourceTool.parameters);
+installedGetTool.parameters = structuredClone(sourceGetTool.parameters);
 if (!hasNewRules) {
-  for (const rule of oldRules) {
+  for (const rule of installedPreviousRules) {
     context.parameters.jsCode = context.parameters.jsCode.replace(
       `${JSON.stringify(rule)},\n      `,
       "",
@@ -167,7 +220,10 @@ await writeFile(agentPath, `${JSON.stringify(agent, null, 2)}\n`);
 await writeFile(policyPath, `${JSON.stringify(policy, null, 2)}\n`);
 
 process.stdout.write(
-  pendingFiles.length === 0 && installedToolHash === sourceToolHash && hasNewRules
+  pendingFiles.length === 0 &&
+      installedToolHash === sourceToolHash &&
+      installedGetToolHash === sourceGetToolHash &&
+      hasNewRules
     ? "SEO Article Writer is already current.\n"
     : "SEO Article Writer upgraded safely. Run npm run sync-skills and npm run import-workflows, then restart the services.\n",
 );

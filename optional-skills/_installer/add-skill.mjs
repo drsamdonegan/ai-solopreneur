@@ -21,7 +21,7 @@
 //   node optional-skills/_installer/add-skill.mjs --list
 
 import { readFile, writeFile, readdir, mkdir, copyFile, access, rm } from "node:fs/promises";
-import { dirname, join, resolve, relative } from "node:path";
+import { dirname, isAbsolute, join, resolve, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   AGENT_IDS,
@@ -498,6 +498,48 @@ async function validateModule(id, plannedIds) {
     throw new Error(
       `The manifest assigns "${id}" to ${manifest.agent}, but skill.yaml ` +
         `declares ${metadata.id} for ${metadata.agent}.`,
+    );
+  }
+
+  const missingHostCapabilities = [];
+  for (const requirement of manifest.requiredHostCapabilities ?? []) {
+    if (
+      typeof requirement?.path !== "string" ||
+      requirement.path.length === 0 ||
+      typeof requirement?.marker !== "string" ||
+      requirement.marker.length === 0 ||
+      typeof requirement?.name !== "string" ||
+      requirement.name.length === 0
+    ) {
+      throw new Error(
+        `optional-skills/${id}/manifest.json has an invalid host-capability requirement.`,
+      );
+    }
+    const capabilityPath = resolve(projectRoot, requirement.path);
+    const projectRelativePath = relative(projectRoot, capabilityPath);
+    if (
+      projectRelativePath === ".." ||
+      projectRelativePath.startsWith(`..${sep}`) ||
+      isAbsolute(projectRelativePath)
+    ) {
+      throw new Error(
+        `optional-skills/${id}/manifest.json has a host-capability path outside the project.`,
+      );
+    }
+    try {
+      const source = await readFile(capabilityPath, "utf8");
+      if (!source.includes(requirement.marker)) {
+        missingHostCapabilities.push(requirement.name);
+      }
+    } catch {
+      missingHostCapabilities.push(requirement.name);
+    }
+  }
+  if (missingHostCapabilities.length > 0) {
+    throw new Error(
+      `"${id}" requires the matching core chat-host changes before it can be installed. ` +
+        `Merge or update the main app first (missing: ${missingHostCapabilities.join(", ")}). ` +
+        "No skill, workflow, agent, or policy file was changed.",
     );
   }
 

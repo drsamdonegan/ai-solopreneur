@@ -6,10 +6,42 @@
   "requires": [
     "domain-research"
   ],
+  "requiredHostCapabilities": [
+    {
+      "name": "article writer host contract v2",
+      "path": "apps/chat/src/app.ts",
+      "marker": "seoArticleWriterHostContract: 2"
+    },
+    {
+      "name": "article validation route",
+      "path": "apps/chat/src/app.ts",
+      "marker": "/api/seo-article/validate"
+    },
+    {
+      "name": "claim evidence matcher",
+      "path": "apps/chat/src/seo-article.ts",
+      "marker": "articleTextContainsClaim"
+    },
+    {
+      "name": "source excerpt matcher",
+      "path": "apps/chat/src/article-quality.ts",
+      "marker": "articleTextContainsExcerpt"
+    },
+    {
+      "name": "competitor source context",
+      "path": "apps/chat/src/article-brief.ts",
+      "marker": "seoCompetitors"
+    },
+    {
+      "name": "article schema reconciliation",
+      "path": "apps/chat/src/chat-store.ts",
+      "marker": "reconcileSeoArticleSchema"
+    }
+  ],
   "agentTools": [
     {
       "parameters": {
-        "description": "Start one grounded SEO article immediately when the current user supplies a custom topic, chooses a rendered saved idea, or asks you to choose. A custom topic wins and is never replaced by a broader saved keyword. Never invent or restate numbered choices in prose. The background writer first reuses sufficient fresh evidence, otherwise performs one reviewed bounded topic-keyword pass with a US$0.15 application ceiling and no retries, then falls back to saved/free evidence when necessary. It never publishes. If domain research is missing, run start_domain_research and continue with the original topic in the same turn. Keep internal job IDs out of normal replies and call this tool only once per request.",
+        "description": "Start one grounded SEO article immediately when the current user supplies a custom topic, chooses a rendered saved idea, or asks you to choose. A custom topic wins and is never replaced by a broader saved keyword. Never invent or restate numbered choices in prose. The background writer first reuses sufficient fresh evidence, otherwise performs one reviewed bounded topic-keyword pass with a US$0.15 application ceiling and no retries, then falls back to saved/free evidence when necessary. It never publishes. If domain research is missing, run start_domain_research and continue with the original topic in the same turn. Keep internal job IDs out of normal replies and call this tool only once per request. After a queued response, end the reply and do not call get_seo_article in the same turn.",
         "source": "database",
         "workflowId": {
           "__rl": true,
@@ -195,7 +227,7 @@
     },
     {
       "parameters": {
-        "description": "Read-only source of truth for an SEO article job in this conversation. Use when the user asks whether the background article is ready, asks for the latest draft for a domain, or wants its download link. Pass the exact job ID when available; otherwise pass the saved business domain. It makes no model call, no paid call, and never changes or publishes an article.",
+        "description": "Read-only source of truth for an SEO article job in this conversation. Use only after a later user message asks whether the background article is ready, asks for the latest draft for a domain, or wants its download link. Never self-poll after start_seo_article in the same turn. Pass the exact job ID when available; otherwise pass the saved business domain. It makes no model call, no paid call, and never changes or publishes an article.",
         "source": "database",
         "workflowId": {
           "__rl": true,
@@ -288,8 +320,8 @@
   ],
   "policyRules": [
     "- start_seo_article is risk=bounded_external_read_and_local_write. Use it once when the current user explicitly asks to draft an article. A custom topic starts immediately and wins over saved ideas; never invent a numbered article list in prose. Its background topic research may use only the reviewed DataForSEO endpoints within the US$0.15 application ceiling, never retries, falls back safely, stores actual provider cost, and never publishes.",
-    "- Keep article job IDs, provider task IDs, internal workflow names, market codes, and strategy scores out of normal replies. The transcript progress card is the source of truth while writing runs.",
-    "- get_seo_article is risk=read and is the source of truth for a draft started in this conversation. It reports a saved draft; it never writes one."
+    "- Keep article job IDs, provider task IDs, internal workflow names, market codes, and strategy scores out of normal replies. The transcript progress card is the source of truth while writing runs. After start_seo_article queues a job, end the reply and never call get_seo_article in that same turn; wait for a later user message.",
+    "- get_seo_article is risk=read and is the source of truth for a draft started in this conversation. Call it only after a later user message asks for status or the draft. It reports a saved draft; it never writes one."
   ],
   "unavailableCapabilities": [],
   "folders": [

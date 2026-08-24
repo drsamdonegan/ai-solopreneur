@@ -37,6 +37,8 @@ npm run import-workflows
 
 The upgrade preflights every installed article file and stops before writing anything if it finds local customisations.
 
+If your installation is a private fork, merge the matching core chat-host changes before installing or upgrading. Version 1.1.7 depends on the host-side article validation route and schema reconciliation; both installers check for those capabilities and stop before writing any skill or workflow file when the core host is older.
+
 ## Try it
 
 Research a domain first, then ask for any topic directly:

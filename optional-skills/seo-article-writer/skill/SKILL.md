@@ -48,13 +48,13 @@ Do not ask optional setup questions.
 
 1. Call `start_seo_article` once for the current request. Put an exact custom topic in `requestedTopic`; otherwise pass exactly one selected number or `chooseStrongestKeyword: true`. Leave the deprecated `primaryKeyword` alias empty when `requestedTopic` is set. Pass only business details supplied or corrected now; the saved brief resolves the rest.
 2. If the tool asks for a selection or details, ask one concise question and stop. Do not claim writing started.
-3. If queued, say simply that keyword research and writing have started and the progress card will update automatically. Keep job IDs, provider details, internal stage names, market codes, cost mechanics, and strategy scores internal.
+3. If queued, say simply that keyword research and writing have started and the progress card will update automatically. Then end this turn. Never call `get_seo_article` again in the same turn; wait for a new user message before checking. Keep job IDs, provider details, internal stage names, market codes, cost mechanics, and strategy scores internal.
 
 Fail honestly when saved research, a selected idea, required business details, or reliable sources are missing. Never substitute made-up research.
 
 ## Check progress
 
-Call `get_seo_article` when the user asks for status or the latest draft. Use the exact internal job ID when available, or the domain for this conversation.
+Call `get_seo_article` only when a later user message asks for status or the latest draft. Starting an article is not permission to self-poll in the same turn. Use the exact internal job ID when available, or the domain for this conversation.
 
 - `queued` or `running`: explain the current stage in one simple sentence.
 - `completed` or `partial`: give a short preview, important warning, and local download link.

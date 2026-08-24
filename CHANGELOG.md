@@ -17,6 +17,34 @@ versioning for local workshop releases.
 
 ### Changed
 
+- SEO article jobs now prebuild their version payload in a Code node before the
+  n8n HTTP request, so the expression parser can no longer stop every draft at
+  the save boundary. The real expression is covered by the pinned n8n runtime.
+- Article source discovery now rejects DataForSEO API provenance URLs and carries
+  paid and free competitor domains into the writer as public-page candidates.
+- Draft and repaired-draft checks now use the same Markdown-, case-, and inline-
+  whitespace-aware evidence rules as server storage, and the server's complete
+  quality gate runs before the one permitted repair instead of first appearing
+  at save time.
+- Background writer dispatch failures now terminally fail the new job instead of
+  reporting a queue that will never run. Marketing also ends its reply after a
+  successful queue and never self-polls the article tool in the same turn. The
+  article progress card retries transient read failures with capped backoff.
+- Article context-load failures and malformed model FAQ entries now enter an
+  explicit repair or terminal-failure branch instead of throwing out of the
+  workflow. Progress reads also fail stale workers after the n8n execution
+  window, so a crashed attempt cannot display as writing forever.
+- ChatStore now reconciles the required article tables, columns, and indexes from
+  SQLite structure as well as `user_version`, making copied installations safe
+  when a private fork already used schema version 6 for different changes. A
+  late worker can no longer resurrect a failed or interrupted article attempt.
+- Both the generic optional-skill installer and the dedicated writer upgrader
+  now reject an older private-fork chat host before changing any installed
+  skill, workflow, agent, or policy file. Workflow 56 also checks a versioned
+  host contract before job creation, protecting installs made by an older
+  generic installer.
+- Paid domain research now applies its documented `standard`, Australia, and
+  English defaults when n8n supplies empty optional fields.
 - Simple custom Marketing article requests now bypass model discretion and
   call the writer deterministically. The current instruction also reaches the
   tool directly, so neither a skipped call nor an omitted model argument can
@@ -31,10 +59,10 @@ versioning for local workshop releases.
   strings rather than JSON-escaped text. Formatting-only differences no longer
   produce false unsupported-claim failures; URLs and source wording still have
   to match the verified evidence.
-- Repaired drafts now discard obsolete claim-ledger rows only when their sentence
-  no longer exists in the article. Remaining claims still require verified IDs
-  and excerpts, and terminal failures now distinguish incomplete model output,
-  source mismatches, and genuinely unsupported content.
+- Repaired drafts retain every claim-ledger row for review and reject any row
+  whose sentence no longer exists in the article. Claims still require verified
+  IDs and excerpts, and terminal failures now distinguish incomplete model
+  output, source mismatches, and genuinely unsupported content.
 - Reference excerpts that the model paraphrases are now replaced with exact text
   from the same already-verified source page. The selected source ID and URL must
   still match, and claim-ledger excerpts keep their strict grounding checks.

@@ -631,6 +631,120 @@ export class ChatStore {
     this.markPendingInterrupted();
   }
 
+  private reconcileSeoArticleSchema(): void {
+    this.transaction(() => {
+      this.database.exec(`
+        CREATE TABLE IF NOT EXISTS seo_article_jobs (
+          job_id TEXT PRIMARY KEY,
+          session_id TEXT NOT NULL,
+          request_id TEXT NOT NULL,
+          domain TEXT NOT NULL,
+          primary_keyword TEXT NOT NULL,
+          supporting_keywords_json TEXT NOT NULL,
+          input_json TEXT NOT NULL,
+          status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'completed', 'partial', 'failed', 'interrupted')),
+          stage TEXT NOT NULL,
+          error_code TEXT,
+          error_message TEXT,
+          latest_version_id TEXT,
+          brief_id TEXT,
+          requested_topic TEXT NOT NULL DEFAULT '',
+          topic_source TEXT NOT NULL DEFAULT 'custom',
+          strategy_json TEXT NOT NULL DEFAULT '{}',
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          UNIQUE(session_id, request_id)
+        ) STRICT;
+
+        CREATE TABLE IF NOT EXISTS seo_article_versions (
+          version_id TEXT PRIMARY KEY,
+          job_id TEXT NOT NULL REFERENCES seo_article_jobs(job_id) ON DELETE CASCADE,
+          version_number INTEGER NOT NULL CHECK (version_number > 0),
+          parent_version_id TEXT,
+          status TEXT NOT NULL CHECK (status IN ('completed', 'partial')),
+          domain TEXT NOT NULL,
+          primary_keyword TEXT NOT NULL,
+          supporting_keywords_json TEXT NOT NULL,
+          context_json TEXT NOT NULL,
+          plan_json TEXT NOT NULL,
+          markdown TEXT NOT NULL,
+          structured_data_json TEXT NOT NULL,
+          metadata_json TEXT NOT NULL,
+          answer_blocks_json TEXT NOT NULL,
+          faq_json TEXT NOT NULL,
+          sources_json TEXT NOT NULL,
+          claim_ledger_json TEXT NOT NULL,
+          quality_report_json TEXT NOT NULL,
+          warnings_json TEXT NOT NULL,
+          review_status TEXT NOT NULL CHECK (review_status = 'ready_for_review'),
+          model TEXT NOT NULL,
+          download_token TEXT NOT NULL UNIQUE,
+          created_at TEXT NOT NULL,
+          UNIQUE(job_id, version_number)
+        ) STRICT;
+
+        CREATE TABLE IF NOT EXISTS seo_article_briefs (
+          brief_id TEXT PRIMARY KEY,
+          session_id TEXT NOT NULL,
+          domain TEXT NOT NULL,
+          research_key TEXT NOT NULL,
+          status TEXT NOT NULL CHECK (status IN ('choosing', 'needs_details', 'writing', 'complete', 'failed')),
+          brief_json TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          UNIQUE(session_id, domain, research_key)
+        ) STRICT;
+      `);
+
+      const jobColumns = new Set(
+        (
+          this.database.prepare("PRAGMA table_info(seo_article_jobs)").all() as Array<{
+            name: string;
+          }>
+        ).map((column) => column.name),
+      );
+      if (!jobColumns.has("brief_id")) {
+        this.database.exec("ALTER TABLE seo_article_jobs ADD COLUMN brief_id TEXT");
+      }
+      if (!jobColumns.has("requested_topic")) {
+        this.database.exec(
+          "ALTER TABLE seo_article_jobs ADD COLUMN requested_topic TEXT NOT NULL DEFAULT ''",
+        );
+      }
+      if (!jobColumns.has("topic_source")) {
+        this.database.exec(
+          "ALTER TABLE seo_article_jobs ADD COLUMN topic_source TEXT NOT NULL DEFAULT 'custom'",
+        );
+      }
+      if (!jobColumns.has("strategy_json")) {
+        this.database.exec(
+          "ALTER TABLE seo_article_jobs ADD COLUMN strategy_json TEXT NOT NULL DEFAULT '{}'",
+        );
+      }
+
+      this.database.exec(`
+        UPDATE seo_article_jobs
+        SET requested_topic = primary_keyword
+        WHERE requested_topic = '';
+
+        CREATE INDEX IF NOT EXISTS seo_article_jobs_session_updated
+        ON seo_article_jobs(session_id, updated_at DESC);
+
+        CREATE INDEX IF NOT EXISTS seo_article_jobs_domain_updated
+        ON seo_article_jobs(session_id, domain, updated_at DESC);
+
+        CREATE INDEX IF NOT EXISTS seo_article_jobs_brief
+        ON seo_article_jobs(brief_id, updated_at DESC);
+
+        CREATE INDEX IF NOT EXISTS seo_article_versions_job_created
+        ON seo_article_versions(job_id, created_at DESC);
+
+        CREATE INDEX IF NOT EXISTS seo_article_briefs_session_updated
+        ON seo_article_briefs(session_id, updated_at DESC);
+      `);
+    });
+  }
+
   private migrate(): void {
     const versionRow = this.database.prepare("PRAGMA user_version").get() as
       | { user_version: number }
@@ -919,6 +1033,9 @@ export class ChatStore {
         `);
       });
     }
+    // Private forks may already use this version number for a different migration.
+    // Reconcile the article schema from its structure instead of trusting the number alone.
+    this.reconcileSeoArticleSchema();
     this.database.prepare("SELECT rowid FROM message_search LIMIT 1").all();
     this.database.prepare("SELECT domain FROM business_memory LIMIT 1").all();
     this.database.prepare("SELECT job_id FROM domain_research_jobs LIMIT 1").all();
@@ -2033,6 +2150,48 @@ export class ChatStore {
     return stored;
   }
 
+  expireStaleSeoArticleJobs(
+    sessionId: string,
+    maxAgeMs: number = 35 * 60 * 1_000,
+  ): number {
+    if (!Number.isFinite(maxAgeMs) || maxAgeMs < 0) {
+      throw new Error("Article timeout must be a non-negative duration");
+    }
+    return this.transaction(() => {
+      const timestamp = nowIso();
+      const cutoff = new Date(Date.now() - maxAgeMs).toISOString();
+      const result = this.database
+        .prepare(
+          `UPDATE seo_article_jobs
+           SET status = 'failed', stage = 'failed',
+               error_code = 'ARTICLE_WORKER_TIMED_OUT',
+               error_message = 'The article worker stopped reporting progress before it finished.',
+               updated_at = ?
+           WHERE session_id = ?
+             AND status IN ('queued', 'running')
+             AND updated_at < ?`,
+        )
+        .run(timestamp, sessionId, cutoff);
+      if (Number(result.changes) > 0) {
+        this.database
+          .prepare(
+            `UPDATE seo_article_briefs
+             SET status = 'failed', updated_at = ?
+             WHERE session_id = ?
+               AND brief_id IN (
+                 SELECT brief_id FROM seo_article_jobs
+                 WHERE session_id = ?
+                   AND error_code = 'ARTICLE_WORKER_TIMED_OUT'
+                   AND updated_at = ?
+                   AND brief_id IS NOT NULL
+               )`,
+          )
+          .run(timestamp, sessionId, sessionId, timestamp);
+      }
+      return Number(result.changes);
+    });
+  }
+
   getSeoArticleJob(sessionId: string, jobId: string): SeoArticleJobRecord | undefined {
     const row = this.database
       .prepare("SELECT * FROM seo_article_jobs WHERE job_id = ? AND session_id = ?")
@@ -2061,6 +2220,9 @@ export class ChatStore {
         .prepare("SELECT * FROM seo_article_jobs WHERE job_id = ? AND session_id = ?")
         .get(jobId, sessionId) as SeoArticleJobRow | undefined;
       if (job === undefined) throw new Error("Article job is not registered to this conversation");
+      if (job.status !== "queued" && job.status !== "running") {
+        throw new Error("Article job is no longer active");
+      }
       if (job.domain !== input.domain || job.primary_keyword !== input.primaryKeyword) {
         throw new Error("Article result does not match the registered request");
       }

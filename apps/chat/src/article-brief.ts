@@ -53,6 +53,12 @@ export interface ArticleBriefResearch {
   offeringProfile: Record<string, unknown>;
   selectedKeywords: Array<Record<string, unknown>>;
   keywordCandidates: Array<Record<string, unknown>>;
+  seoCompetitors: Array<Record<string, unknown>>;
+  competitors: {
+    direct: Array<Record<string, unknown>>;
+    seo: Array<Record<string, unknown>>;
+    adjacent: Array<Record<string, unknown>>;
+  };
   serpEvidence: Array<Record<string, unknown>>;
   sources: Array<Record<string, unknown>>;
   warnings: string[];
@@ -283,6 +289,12 @@ export function createArticleBriefData(input: {
       memory?.keywordCandidates ??
       []
     ).slice(0, 80),
+    seoCompetitors: (snapshot?.seoCompetitors ?? []).slice(0, 40),
+    competitors: {
+      direct: (memory?.competitors.direct ?? []).slice(0, 20),
+      seo: (memory?.competitors.seo ?? []).slice(0, 20),
+      adjacent: (memory?.competitors.adjacent ?? []).slice(0, 20),
+    },
     serpEvidence: (snapshot?.serpEvidence ?? []).slice(0, 40),
     sources: [...(snapshot?.sources ?? []), ...(memory?.sources ?? [])].slice(0, 120),
     warnings: [...(snapshot?.warnings ?? []), ...(memory?.warnings ?? [])].slice(0, 40),
