@@ -618,9 +618,10 @@ function validateSeoArticleStartRequest(body: unknown): SeoArticleStartRequest {
   }
   const requestedTopic = preferredTopic || legacyTopic;
   const rawSelection = candidate.selectionNumber ?? candidate.articleChoice;
-  const selectionNumber = rawSelection === undefined || rawSelection === ""
-    ? undefined
-    : Number(rawSelection);
+  const selectionNumber =
+    rawSelection === undefined || rawSelection === "" || Number(rawSelection) === 0
+      ? undefined
+      : Number(rawSelection);
   if (
     selectionNumber !== undefined &&
     (!Number.isInteger(selectionNumber) || selectionNumber < 1 || selectionNumber > 3)

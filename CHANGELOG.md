@@ -24,6 +24,9 @@ versioning for local workshop releases.
 - Deterministic article replies now consume the writer tool's actual top-level
   result contract, preserving precise queued, prerequisite, and failure states
   instead of masking them behind a generic safe-failure message.
+- Article registration now accepts the workflow's documented zero sentinel for
+  a custom topic, so an explicit topic cannot be rejected as an invalid numbered
+  choice before keyword research starts.
 - Agent cards now show stable packages and installation/sync state instead of
   exposing every internal Markdown skill as a separate product feature.
 - Existing capabilities are retained as package modules or add-ons: paid

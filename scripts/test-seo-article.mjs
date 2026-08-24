@@ -257,6 +257,9 @@ try {
       requestId: "77777777-7777-4777-8777-777777777777",
       domain: "example.com",
       requestedTopic: customTopic,
+      // Workflow 56 uses zero as the explicit custom-topic sentinel. The API
+      // must normalize it away instead of treating it as a numbered choice.
+      selectionNumber: 0,
     }),
   });
   assert.equal(customTopicRequest.response.status, 201);
