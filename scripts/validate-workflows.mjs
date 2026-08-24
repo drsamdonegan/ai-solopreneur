@@ -1801,9 +1801,10 @@ if (writeSeoArticleWorkflow) {
         return (
           /unsupported/.test(code) &&
           /normalize\('NFKC'\)/.test(code) &&
-          /contains\(p\.text,s\.excerpt\)/.test(code) &&
+          /contains\(p\?\.text,s\.excerpt\)/.test(code) &&
           /contains\(assembled,c\.sentence\)/.test(code) &&
           /presentClaims/.test(code) &&
+          /sanitizedSources/.test(code) &&
           /sanitizedDraft/.test(code)
         );
       }),

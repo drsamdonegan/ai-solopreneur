@@ -57,7 +57,7 @@ const groundedDraft = {
     id: page.id,
     url: page.url,
     title: page.title,
-    excerpt: `Evidence ${index + 1} line`,
+    excerpt: index === 1 ? "A paraphrase that is not on the page" : `Evidence ${index + 1} line`,
   })),
   claims: [
     {
@@ -78,6 +78,11 @@ const groundedDraft = {
 };
 const sanitizedGroundedDraft = {
   ...groundedDraft,
+  sources: groundedDraft.sources.map((source, index) =>
+    index === 1
+      ? { ...source, excerpt: "Evidence 2 line supporting this draft." }
+      : source,
+  ),
   claims: [groundedDraft.claims[0]],
 };
 const groundedResponse = {
