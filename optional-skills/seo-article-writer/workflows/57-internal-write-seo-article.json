@@ -1064,12 +1064,12 @@
       "main": [
         [
         {
-          "node": "Mark Finding Sources",
+          "node": "Context Is Ready?",
           "type": "main",
           "index": 0
         },
         {
-          "node": "Context Is Ready?",
+          "node": "Mark Finding Sources",
             "type": "main",
             "index": 0
           }
@@ -1120,12 +1120,12 @@
       "main": [
         [
         {
-          "node": "Mark Drafting",
+          "node": "Draft With Claude",
             "type": "main",
             "index": 0
           },
           {
-          "node": "Draft With Claude",
+          "node": "Mark Drafting",
             "type": "main",
             "index": 0
           }
@@ -1143,12 +1143,12 @@
       "main": [
         [
         {
-          "node": "Mark Checking Claims",
+          "node": "Inspect Draft",
             "type": "main",
             "index": 0
           },
           {
-          "node": "Inspect Draft",
+          "node": "Mark Checking Claims",
             "type": "main",
             "index": 0
           }
@@ -1195,12 +1195,12 @@
         ],
         [
         {
-          "node": "Mark Saving",
+          "node": "Save Article Version",
             "type": "main",
             "index": 0
           },
           {
-          "node": "Save Article Version",
+          "node": "Mark Saving",
             "type": "main",
             "index": 0
           }
@@ -1211,12 +1211,12 @@
       "main": [
         [
         {
-          "node": "Mark Repairing",
+          "node": "Repair With Claude",
             "type": "main",
             "index": 0
           },
           {
-          "node": "Repair With Claude",
+          "node": "Mark Repairing",
             "type": "main",
             "index": 0
           }
@@ -1249,12 +1249,12 @@
       "main": [
         [
         {
-          "node": "Mark Saving",
+          "node": "Save Article Version",
             "type": "main",
             "index": 0
           },
           {
-          "node": "Save Article Version",
+          "node": "Mark Saving",
             "type": "main",
             "index": 0
           }
@@ -1323,12 +1323,12 @@
       "main": [
         [
         {
-          "node": "Mark Researching Keywords",
+          "node": "Saved Topic Evidence?",
             "type": "main",
             "index": 0
           },
           {
-          "node": "Saved Topic Evidence?",
+          "node": "Mark Researching Keywords",
             "type": "main",
             "index": 0
           }
