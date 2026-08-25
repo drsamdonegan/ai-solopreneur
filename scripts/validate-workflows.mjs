@@ -235,14 +235,61 @@ async function checkReservedColumns(label, path) {
   }
 }
 
+// Cloud startup calls each setup workflow through its temporary production
+// webhook. A manual trigger alone works locally but cannot be invoked by the
+// cloud supervisor, while a webhook without webhookId imports successfully and
+// never registers. Both failures otherwise surface only after deployment.
+async function checkSetupWebhook(label, path, file) {
+  if (!/^\d+-setup-/.test(file)) {
+    return;
+  }
+  let workflow;
+  try {
+    workflow = JSON.parse(await readFile(path, "utf8"));
+  } catch {
+    return;
+  }
+  const webhooks = (workflow.nodes ?? []).filter(
+    (node) => node.type === "n8n-nodes-base.webhook",
+  );
+  check(
+    webhooks.length === 1,
+    `${label}: setup workflows must expose exactly one temporary webhook for cloud startup`,
+  );
+  for (const webhook of webhooks) {
+    check(
+        webhook.parameters?.httpMethod === "POST" &&
+        webhook.parameters?.responseMode === "lastNode" &&
+        typeof webhook.parameters?.path === "string" &&
+        webhook.parameters.path.length > 0 &&
+        /^[a-f0-9-]{36}$/.test(webhook.webhookId ?? ""),
+      `${label}: temporary setup webhook must be a synchronous POST with a stable webhookId`,
+    );
+  }
+}
+
 for (const file of actualFiles) {
-  await checkReservedColumns(file, join(workflowDirectory, file));
+  const path = join(workflowDirectory, file);
+  await checkReservedColumns(file, path);
+  await checkSetupWebhook(file, path, file);
 }
 for (const skill of optionalSkills) {
   for (const file of skill.workflowFiles) {
+    const path = join(
+      projectRoot,
+      "optional-skills",
+      skill.id,
+      "workflows",
+      file,
+    );
     await checkReservedColumns(
       `optional-skills/${skill.id}/workflows/${file}`,
-      join(projectRoot, "optional-skills", skill.id, "workflows", file),
+      path,
+    );
+    await checkSetupWebhook(
+      `optional-skills/${skill.id}/workflows/${file}`,
+      path,
+      file,
     );
   }
 }

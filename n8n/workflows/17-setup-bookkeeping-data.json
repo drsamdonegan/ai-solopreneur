@@ -58,7 +58,8 @@
         420
       ],
       "id": "97900000-0000-4000-8000-000000000015",
-      "name": "Temporary Setup Webhook"
+      "name": "Temporary Setup Webhook",
+      "webhookId": "97900000-0000-4000-8000-000000000115"
     },
     {
       "parameters": {

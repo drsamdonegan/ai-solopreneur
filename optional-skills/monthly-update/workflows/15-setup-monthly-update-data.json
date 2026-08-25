@@ -46,6 +46,23 @@
     },
     {
       "parameters": {
+        "httpMethod": "POST",
+        "path": "setup-monthly-update-data",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -380,
+        160
+      ],
+      "id": "95600000-0000-4000-8000-000000000015",
+      "name": "Temporary Setup Webhook",
+      "webhookId": "95600000-0000-4000-8000-000000000115"
+    },
+    {
+      "parameters": {
         "resource": "table",
         "operation": "create",
         "tableName": "company_profile",
@@ -401,6 +418,17 @@
   "pinData": {},
   "connections": {
     "Run Setup Once": {
+      "main": [
+        [
+          {
+            "node": "Create Company Profile Table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Temporary Setup Webhook": {
       "main": [
         [
           {
