@@ -224,8 +224,8 @@ Reset asks you to type `RESET`. The [operations and recovery guide](docs/LOCAL_O
 - Durable local SQLite chat history with browsing, full-text search, rename,
   deletion, and restart-safe bounded conversation memory.
 - Four local Data Tables for tasks, audits, pending confirmations, and enabled skills.
-- Four editable base Markdown skills, six learner-facing skill packages, and
-  nine retained optional modules/extensions behind those packages and add-ons.
+- Four editable base Markdown skills, seven learner-facing skill packages, and
+  eleven retained optional modules/extensions behind those packages and add-ons.
 - A central registry with Project Manager, Sales, Marketing, Investment, and
   Bookkeeping active; prompts and tool connections are isolated by role.
 - Local extraction for searchable PDFs, DOCX, TXT, and pasted text.

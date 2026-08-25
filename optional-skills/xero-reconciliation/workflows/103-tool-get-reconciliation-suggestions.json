@@ -1,0 +1,446 @@
+{
+  "name": "103 - TOOL - get_reconciliation_suggestions",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## What did the review find?\n\nReads back what a finished review saved. Instant, free, and it never looks\nat Xero on the spot: if no review has finished, it says so rather than\nguessing.\n\nThe order is deliberate. The ones needing a person come first, then the\nones to match by hand in Xero, then the ones ready to prepare.",
+        "height": 300,
+        "width": 460,
+        "color": 6
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -900,
+        -300
+      ],
+      "id": "97900103-0000-4000-8000-000000000001",
+      "name": "Sticky 1"
+    },
+    {
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "sessionId",
+              "type": "string"
+            },
+            {
+              "name": "requestId",
+              "type": "string"
+            },
+            {
+              "name": "filter",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -880,
+        0
+      ],
+      "id": "97900103-0000-4000-8000-000000000010",
+      "name": "Tool Input"
+    },
+    {
+      "parameters": {
+        "jsCode": "const sessionId = typeof $json.sessionId === 'string' ? $json.sessionId.trim() : '';\nconst requestId = typeof $json.requestId === 'string' ? $json.requestId.trim() : '';\nconst uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;\nconst ALLOWED = ['all', 'ready', 'uncertain', 'accepted', 'executed'];\nconst raw = typeof $json.filter === 'string' ? $json.filter.trim().toLowerCase() : '';\nconst filter = ALLOWED.includes(raw) ? raw : 'all';\nconst error = (uuidPattern.test(sessionId) && uuidPattern.test(requestId))\n  ? null\n  : { code: 'INVALID_SESSION', message: 'Reading the suggestions needs a valid conversation and request ID.' };\nreturn [{ json: {\n  valid: error === null, sessionId, requestId, filter,\n  proposedInput: { sessionId, requestId, filter },\n  ...(error ? { response: { ok: false, error } } : {}),\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -660,
+        0
+      ],
+      "id": "97900103-0000-4000-8000-000000000011",
+      "name": "Validate Read Input"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "97900103-0000-4000-8000-000000000016-c1",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -440,
+        0
+      ],
+      "id": "97900103-0000-4000-8000-000000000016",
+      "name": "Input Is Valid?"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "reconciliation_runs",
+          "mode": "name"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": []
+        },
+        "returnAll": false,
+        "limit": 5,
+        "orderBy": true,
+        "sort": {
+          "field": "startedAt",
+          "direction": "DESC"
+        }
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -440,
+        -200
+      ],
+      "id": "97900103-0000-4000-8000-000000000012",
+      "name": "Read Recent Runs"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $('Validate Read Input').first().json;\nconst rows = $input.all().map((item) => item.json).filter((row) => row && row.runId);\n\nconst minutesSince = (value) => {\n  const parsed = Date.parse(String(value ?? ''));\n  if (Number.isNaN(parsed)) return null;\n  return Math.round((Date.now() - parsed) / 60000);\n};\n// Same number as the guard in 102: past the run workflow's own timeout, n8n\n// has certainly stopped it, so a row still saying 'running' is wreckage.\nconst DEAD_AFTER = 31;\n\nconst finished = rows.filter((row) => ['completed', 'partial'].includes(String(row.status ?? '')));\nconst running = rows.filter((row) => String(row.status ?? '') === 'running')\n  .map((row) => ({ ...row, age: minutesSince(row.startedAt) }))\n  .filter((row) => row.age !== null);\n\nconst live = running.find((row) => row.age < DEAD_AFTER) ?? null;\nconst wreck = running.find((row) => row.age >= DEAD_AFTER) ?? null;\nconst latest = finished[0] ?? null;\n\nreturn [{ json: { ...input,\n  runId: latest ? String(latest.runId) : '',\n  hasRun: latest !== null,\n  running: live !== null,\n  runningMinutes: live ? live.age : 0,\n  interrupted: latest === null && wreck !== null,\n  interruptedMinutes: wreck ? wreck.age : 0,\n  run: latest ?? null } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -220,
+        0
+      ],
+      "id": "97900103-0000-4000-8000-000000000013",
+      "name": "Pick Run"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "reconciliation_suggestions",
+          "mode": "name"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "runId",
+              "condition": "eq",
+              "keyValue": "={{ $json.runId }}"
+            }
+          ]
+        },
+        "returnAll": true,
+        "orderBy": false
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "97900103-0000-4000-8000-000000000014",
+      "name": "Read Suggestions"
+    },
+    {
+      "parameters": {
+        "jsCode": "const picked=$('Pick Run').first().json;\nconst rows=$input.all().map((item)=>item.json).filter((row)=>row&&row.suggestionId);\nif(!picked.hasRun){const message=picked.running?`A review has been running for ${picked.runningMinutes} minute${picked.runningMinutes===1?'':'s'} and has not finished yet.`:picked.interrupted?`A review started ${picked.interruptedMinutes} minutes ago and never finished. Offer to run another one.`:'No review has finished yet. Offer to capture the live Xero queue and run one rather than guessing.';return [{json:{...picked,response:{ok:true,hasRun:false,running:picked.running,interrupted:picked.interrupted,suggestions:[],message}}}];}\nconst money=(row)=>{const value=Number(row.amount??0);return `${value<0?'-':''}$${Math.abs(value).toFixed(2)}`;};\nconst who=(row)=>String(row.contactName||row.suggestedContact||row.narration||row.description||'unnamed').slice(0,60);\nconst render=(row)=>({suggestionId:String(row.suggestionId),statementLineId:String(row.statementLineId||''),line:`${String(row.occurredAt??'').slice(0,10)}  ${money(row)}  ${who(row)}`,date:String(row.occurredAt??'').slice(0,10),amount:money(row),counterparty:who(row),likelyDescription:String(row.likelyDescription||''),evidenceSummary:String(row.evidenceSummary||''),reviewQuestion:String(row.reviewQuestion||''),account:String(row.suggestedAccountCode||'')&&`${row.suggestedAccountCode} ${row.suggestedAccountName}`.trim(),taxType:String(row.suggestedTaxType||''),contactId:String(row.suggestedContactId||''),invoice:String(row.matchedInvoiceNumber||''),basis:String(row.basis||''),resultLane:String(row.resultLane||''),readyInXero:String(row.readyInXero)==='yes',confidence:Number(row.confidence||0),executionStatus:String(row.executionStatus||'')});\nconst executed=rows.filter((row)=>String(row.readyInXero)==='yes'||String(row.executionStatus)==='created');\nconst executedIds=new Set(executed.map((row)=>row.suggestionId));\nconst accepted=rows.filter((row)=>!executedIds.has(row.suggestionId)&&String(row.userDecision)==='accepted');\nconst decidedIds=new Set([...executed,...accepted,...rows.filter((row)=>String(row.userDecision||''))].map((row)=>row.suggestionId));\nconst pending=rows.filter((row)=>!decidedIds.has(row.suggestionId));\nconst ready=pending.filter((row)=>String(row.resultLane)==='ready_to_prepare');\nconst matchInXero=pending.filter((row)=>String(row.resultLane)==='existing_match');\nconst needsYou=pending.filter((row)=>String(row.resultLane)==='likely');\nconst blocked=pending.filter((row)=>String(row.resultLane)==='blocked');\nconst wanted={all:{ready,matchInXero,needsYou,blocked,accepted,executed},uncertain:{ready:[],matchInXero:[],needsYou,blocked,accepted:[],executed:[]},ready:{ready,matchInXero:[],needsYou:[],blocked:[],accepted:[],executed:[]},accepted:{ready:[],matchInXero:[],needsYou:[],blocked:[],accepted,executed:[]},executed:{ready:[],matchInXero:[],needsYou:[],blocked:[],accepted:[],executed}}[picked.filter];\nreturn [{json:{...picked,response:{ok:true,hasRun:true,runId:picked.runId,status:String(picked.run?.status||''),reportText:String(picked.run?.reportText||''),counts:{total:rows.length,readyToApprove:ready.length,matchInXero:matchInXero.length,needsYou:needsYou.length,blocked:blocked.length,accepted:accepted.length,readyInXero:executed.length},readyToApprove:wanted.ready.map(render),matchInXero:wanted.matchInXero.map(render),needsYou:wanted.needsYou.map(render),blocked:wanted.blocked.map(render),alreadyAccepted:wanted.accepted.map(render),readyInXero:wanted.executed.map(render),errorSummary:String(picked.run?.errorSummary||''),nextStep:'Lead with needsYou and blocked. Lower-certainty rows include a likelyDescription and one reviewQuestion. Get explicit approval for exact readyToApprove items before preparation. Nothing is reconciled until the user completes Match or Find & Match and clicks OK in Xero.'}}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ],
+      "id": "97900103-0000-4000-8000-000000000015",
+      "name": "Shape Suggestions Result"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $('Validate Read Input').first().json;\nconst response = $json.response ?? { ok: false, error: { code: 'TOOL_FAILED', message: 'The tool did not return a result.' } };\nreturn { json: {\n  occurredAt: new Date().toISOString(),\n  sessionId: input.sessionId,\n  requestId: input.requestId,\n  toolName: 'get_reconciliation_suggestions',\n  proposedInput: JSON.stringify(input.proposedInput ?? {}),\n  result: JSON.stringify(response),\n  error: response.ok === false ? String(response.error?.message ?? 'Tool failed') : '',\n  response\n} };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ],
+      "id": "97900103-0000-4000-8000-000000000090",
+      "name": "Prepare Audit"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "value": "tool_audit",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "occurredAt": "={{ $json.occurredAt }}",
+            "sessionId": "={{ $json.sessionId }}",
+            "requestId": "={{ $json.requestId }}",
+            "toolName": "={{ $json.toolName }}",
+            "proposedInput": "={{ $json.proposedInput }}",
+            "result": "={{ $json.result }}",
+            "error": "={{ $json.error }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "occurredAt",
+              "displayName": "occurredAt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "sessionId",
+              "displayName": "sessionId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "requestId",
+              "displayName": "requestId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "toolName",
+              "displayName": "toolName",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "proposedInput",
+              "displayName": "proposedInput",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "result",
+              "displayName": "result",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "error",
+              "displayName": "error",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        0
+      ],
+      "id": "97900103-0000-4000-8000-000000000091",
+      "name": "Write Tool Audit",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const prepared = $('Prepare Audit').first().json;\nconst response = { ...prepared.response };\nif (!Number.isInteger($json.id)) {\n  response.auditWarning = 'The tool result could not be written to the local audit table.';\n}\nreturn { json: response };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        0
+      ],
+      "id": "97900103-0000-4000-8000-000000000092",
+      "name": "Return Tool Result"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Tool Input": {
+      "main": [
+        [
+          {
+            "node": "Validate Read Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Read Input": {
+      "main": [
+        [
+          {
+            "node": "Input Is Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Input Is Valid?": {
+      "main": [
+        [
+          {
+            "node": "Read Recent Runs",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Recent Runs": {
+      "main": [
+        [
+          {
+            "node": "Pick Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick Run": {
+      "main": [
+        [
+          {
+            "node": "Read Suggestions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Suggestions": {
+      "main": [
+        [
+          {
+            "node": "Shape Suggestions Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shape Suggestions Result": {
+      "main": [
+        [
+          {
+            "node": "Prepare Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Audit": {
+      "main": [
+        [
+          {
+            "node": "Write Tool Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Tool Audit": {
+      "main": [
+        [
+          {
+            "node": "Return Tool Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "executionTimeout": 30
+  },
+  "versionId": "97900103-0000-4000-8000-000000000900",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "phase": 19,
+    "testedWithN8n": "2.30.5",
+    "toolRisk": "read",
+    "authorization": "automatic-current-context-read",
+    "externalWrite": "none",
+    "externalRead": "none"
+  },
+  "id": "phase19GetReconciliationSuggestions",
+  "tags": [
+    {
+      "id": "tagAgentCanDo",
+      "name": "What your agent can do"
+    }
+  ]
+}

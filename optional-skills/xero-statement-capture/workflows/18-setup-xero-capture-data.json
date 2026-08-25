@@ -1,0 +1,306 @@
+{
+  "name": "18 - SETUP - Xero Statement Capture Data",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Run this once\n\nCreates the local evidence tables used by browser-backed Xero reviews. Complete scans are the only source of the active queue. Incomplete scans are retained as blockers and never retire a previously observed line.",
+        "height": 300,
+        "width": 520,
+        "color": 6
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -700,
+        -260
+      ],
+      "id": "98000018-0000-4000-8000-000000000001",
+      "name": "Sticky Start"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -700,
+        180
+      ],
+      "id": "98000018-0000-4000-8000-000000000010",
+      "name": "Run Setup Once"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "setup-xero-capture-data",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -700,
+        360
+      ],
+      "id": "98000018-0000-4000-8000-000000000011",
+      "name": "Temporary Setup Webhook",
+      "webhookId": "98000018-0000-4000-8000-000000000115"
+    },
+    {
+      "parameters": {
+        "resource": "table",
+        "operation": "create",
+        "tableName": "xero_statement_scans",
+        "columns": {
+          "column": [
+            {
+              "name": "scanId",
+              "type": "string"
+            },
+            {
+              "name": "bankAccountId",
+              "type": "string"
+            },
+            {
+              "name": "startedAt",
+              "type": "date"
+            },
+            {
+              "name": "completedAt",
+              "type": "date"
+            },
+            {
+              "name": "expectedCount",
+              "type": "number"
+            },
+            {
+              "name": "observedCount",
+              "type": "number"
+            },
+            {
+              "name": "complete",
+              "type": "string"
+            },
+            {
+              "name": "layout",
+              "type": "string"
+            },
+            {
+              "name": "blockingReasonsJson",
+              "type": "string"
+            },
+            {
+              "name": "captureSourceHash",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {
+          "createIfNotExists": true
+        }
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -420,
+        220
+      ],
+      "id": "98000018-0000-4000-8000-000000000020",
+      "name": "Create Scan Table"
+    },
+    {
+      "parameters": {
+        "resource": "table",
+        "operation": "create",
+        "tableName": "xero_statement_lines",
+        "columns": {
+          "column": [
+            {
+              "name": "lineKey",
+              "type": "string"
+            },
+            {
+              "name": "statementLineId",
+              "type": "string"
+            },
+            {
+              "name": "scanId",
+              "type": "string"
+            },
+            {
+              "name": "bankAccountId",
+              "type": "string"
+            },
+            {
+              "name": "active",
+              "type": "string"
+            },
+            {
+              "name": "occurredAt",
+              "type": "string"
+            },
+            {
+              "name": "narration",
+              "type": "string"
+            },
+            {
+              "name": "reference",
+              "type": "string"
+            },
+            {
+              "name": "direction",
+              "type": "string"
+            },
+            {
+              "name": "amount",
+              "type": "number"
+            },
+            {
+              "name": "currency",
+              "type": "string"
+            },
+            {
+              "name": "visibleContact",
+              "type": "string"
+            },
+            {
+              "name": "visibleAccount",
+              "type": "string"
+            },
+            {
+              "name": "visibleDescription",
+              "type": "string"
+            },
+            {
+              "name": "visibleTaxType",
+              "type": "string"
+            },
+            {
+              "name": "visibleEventName",
+              "type": "string"
+            },
+            {
+              "name": "visibleProjectName",
+              "type": "string"
+            },
+            {
+              "name": "visibleFieldsJson",
+              "type": "string"
+            },
+            {
+              "name": "uiMode",
+              "type": "string"
+            },
+            {
+              "name": "matchedXeroTransactionId",
+              "type": "string"
+            },
+            {
+              "name": "sourceHash",
+              "type": "string"
+            },
+            {
+              "name": "capturedAt",
+              "type": "date"
+            }
+          ]
+        },
+        "options": {
+          "createIfNotExists": true
+        }
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -120,
+        220
+      ],
+      "id": "98000018-0000-4000-8000-000000000021",
+      "name": "Create Statement Line Table"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { ok: true, created: ['xero_statement_scans', 'xero_statement_lines'], nextStep: 'Configure the authenticated capture webhooks and load the read-only extension. See skills/xero-statement-capture/references/capture-setup.md.' } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        180,
+        220
+      ],
+      "id": "98000018-0000-4000-8000-000000000030",
+      "name": "Setup Complete"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Run Setup Once": {
+      "main": [
+        [
+          {
+            "node": "Create Scan Table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Temporary Setup Webhook": {
+      "main": [
+        [
+          {
+            "node": "Create Scan Table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Scan Table": {
+      "main": [
+        [
+          {
+            "node": "Create Statement Line Table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Statement Line Table": {
+      "main": [
+        [
+          {
+            "node": "Setup Complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "executionTimeout": 30
+  },
+  "versionId": "98000018-0000-4000-8000-000000000900",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "phase": 20,
+    "testedWithN8n": "2.30.5",
+    "toolRisk": "bounded_local_write",
+    "authorization": "operator-runs-once",
+    "externalWrite": "none"
+  },
+  "id": "phase20SetupXeroCaptureData",
+  "tags": [
+    {
+      "id": "tagSetup",
+      "name": "Setup"
+    }
+  ]
+}

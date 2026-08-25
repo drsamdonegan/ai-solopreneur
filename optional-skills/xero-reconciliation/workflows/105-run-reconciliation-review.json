@@ -1,0 +1,2263 @@
+{
+  "name": "105 - RUN - Reconciliation Review",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## The review itself\n\nStarted in the background by the chat tool, or by the weekly trigger. It\nreads Xero, works out what it can on its own, asks Claude about the rest,\nand saves one row per transaction.\n\nThe order matters. Everything the deterministic pass settles never reaches\nthe model at all: the user's own rules first, then an exact invoice, then a\ntransaction already in Xero, then unanimous history. Only what is genuinely\nunclear costs a model call.\n\nIt writes nothing to Xero and sends nothing anywhere.",
+        "height": 420,
+        "width": 460,
+        "color": 6
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -900,
+        -420
+      ],
+      "id": "97900105-0000-4000-8000-000000000001",
+      "name": "Sticky 1"
+    },
+    {
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "runId",
+              "type": "string"
+            },
+            {
+              "name": "period",
+              "type": "string"
+            },
+            {
+              "name": "mode",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -880,
+        0
+      ],
+      "id": "97900105-0000-4000-8000-000000000010",
+      "name": "Run Input"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "bookkeeping_profile",
+          "mode": "name"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "profileId",
+              "condition": "eq",
+              "keyValue": "default"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 1,
+        "orderBy": false
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -660,
+        0
+      ],
+      "id": "97900105-0000-4000-8000-000000000012",
+      "name": "Load Bookkeeping Profile"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "reconciliation_runs",
+          "mode": "name"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": []
+        },
+        "returnAll": false,
+        "limit": 10,
+        "orderBy": true,
+        "sort": {
+          "field": "startedAt",
+          "direction": "DESC"
+        }
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -440,
+        0
+      ],
+      "id": "97900105-0000-4000-8000-000000000013",
+      "name": "Load Recent Runs"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $('Run Input').first().json;\nconst profileRows = $('Load Bookkeeping Profile').all().map((item) => item.json).filter((row) => row && row.profileId === 'default');\nconst runRows = $('Load Recent Runs').all().map((item) => item.json).filter((row) => row && row.runId);\nconst captureRows = $input.all().map((item) => item.json).filter((row) => row && row.scanId);\nconst profile = profileRows[0] ?? null;\nconst runId = String(input.runId ?? '').trim() || 'run-' + Date.now() + '-auto';\nconst requestedMode = String(input.mode ?? '').trim().toLowerCase();\nconst queueMode = requestedMode === 'coding-review' ? 'coding-review' : 'browser-capture';\nconst minutesSince = (value) => { const parsed=Date.parse(String(value??'')); return Number.isNaN(parsed)?null:(Date.now()-parsed)/60000; };\nconst otherLive = runRows.some((row) => String(row.status ?? '') === 'running' && String(row.runId) !== runId && (minutesSince(row.startedAt) ?? 999) < 31);\nif (otherLive) return [{json:{runId,queueMode,ready:false,skip:true,status:'skipped',errorSummary:'already-running',reportText:''}}];\nif (!profile || !profile.organisationName) return [{json:{runId,queueMode,ready:false,skip:false,status:'failed',errorSummary:'no-profile',reportText:'There is no bookkeeping profile saved yet, so there was nothing to reason from.'}}];\n\ncaptureRows.sort((a,b)=>Date.parse(String(b.completedAt||0))-Date.parse(String(a.completedAt||0)));\nconst capture=captureRows[0]??null;\nlet captureBlocker='', captureReport='';\nif(queueMode==='browser-capture'){\n  if(!capture){captureBlocker='capture-missing';captureReport='No browser-observed Xero reconciliation queue has been captured. Run the one-shot capture helper on the relevant Xero bank reconciliation page, then start this review again.';}\n  else{\n    const age=minutesSince(capture.completedAt);let reasons=[];try{reasons=JSON.parse(String(capture.blockingReasonsJson||'[]'));}catch{reasons=['saved blocker details could not be read'];}\n    if(String(capture.complete)!=='yes'&&capture.complete!==true){captureBlocker='capture-incomplete';captureReport='The latest Xero queue capture is incomplete. Recapture every visible page with a new one-shot token; the previous complete queue remains untouched.';}\n    else if(age===null||age>30){captureBlocker='capture-stale';captureReport='The last complete Xero queue capture is more than 30 minutes old. Capture the live reconciliation page again before reviewing it.';}\n    else if(reasons.length){captureBlocker='capture-blocked';captureReport='The Xero queue capture has blockers: '+reasons.join('; ');}\n    else if(!/^[a-f0-9]{64}$/.test(String(capture.captureSourceHash||''))){captureBlocker='capture-hash-missing';captureReport='The latest Xero queue capture has no valid source hash. Recapture it with the current helper.';}\n  }\n}\nif(captureBlocker)return [{json:{runId,queueMode,ready:false,skip:false,status:'failed',errorSummary:captureBlocker,reportText:captureReport}}];\n\nconst rawPeriod=String(input.period??'').trim();let fromDate;const toDate=new Date();\nif(/^\\d{4}-(0[1-9]|1[0-2])$/.test(rawPeriod))fromDate=new Date(rawPeriod + '-01T00:00:00Z');\nelse if(/^\\d{1,3}d$/i.test(rawPeriod))fromDate=new Date(Date.now()-Number(rawPeriod.slice(0,-1))*86400000);\nelse fromDate=new Date(Date.now()-90*86400000);\nconst iso=(date)=>date.toISOString().slice(0,10);\nreturn [{json:{runId,queueMode,ready:true,skip:false,period:rawPeriod||'90d',fromDate:iso(fromDate),toDate:iso(toDate),startedAt:new Date().toISOString(),maxLines:200,batchSize:8,maxReceiptLookups:15,neverGuessAbove:Number(profile.neverGuessAbove??0),baseCurrency:String(profile.baseCurrency??'').toUpperCase(),captureScanId:queueMode==='browser-capture'?String(capture.scanId):'',captureBankAccountId:queueMode==='browser-capture'?String(capture.bankAccountId):'',captureSourceHash:queueMode==='browser-capture'?String(capture.captureSourceHash):'',captureCompletedAt:queueMode==='browser-capture'?String(capture.completedAt):'',profileJson:JSON.stringify({organisationName:profile.organisationName??'',baseCurrency:String(profile.baseCurrency??'').toUpperCase(),commonSuppliers:profile.commonSuppliers??'',commonCustomers:profile.commonCustomers??'',accountCodeNotes:profile.accountCodeNotes??'',gstTreatmentNotes:profile.gstTreatmentNotes??''})}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -220,
+        0
+      ],
+      "id": "97900105-0000-4000-8000-000000000011",
+      "name": "Plan Run"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "97900105-0000-4000-8000-000000000016-c1",
+              "leftValue": "={{ $json.ready }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "97900105-0000-4000-8000-000000000016",
+      "name": "Profile Ready?"
+    },
+    {
+      "parameters": {
+        "jsCode": "const planned = $('Plan Run').first().json;\nconst fromNode = (name) => { try { return $(name).first().json; } catch { return null; } };\nconst connection = fromNode('Effective Xero Connection') ?? fromNode('Read Custom Organisation') ?? fromNode('Read Tenant');\nconst source = connection && connection.tenantReady === false ? connection : planned;\nreturn [{ json: { ...source, runId: source.runId, startedAt: source.startedAt ?? new Date().toISOString(), finishedAt: new Date().toISOString(), status: source.status ?? 'failed', reportText: source.reportText ?? '', errorSummary: source.errorSummary ?? '', period: source.period ?? '', queueMode: source.queueMode ?? '', transactionsRead: 0, transactionsSuggested: 0, highConfidence: 0, needsHumanCount: 0, receiptsSearched: 0, receiptsFound: 0, inputTokens: 0, outputTokens: 0 } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        240
+      ],
+      "id": "97900105-0000-4000-8000-000000000040",
+      "name": "Shape Failed Run"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "value": "reconciliation_runs",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "runId": "={{ $json.runId }}",
+            "startedAt": "={{ $json.startedAt }}",
+            "status": "running",
+            "period": "={{ $json.period }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "runId",
+              "displayName": "runId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "startedAt",
+              "displayName": "startedAt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "period",
+              "displayName": "period",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        220,
+        -160
+      ],
+      "id": "97900105-0000-4000-8000-000000000017",
+      "name": "Mark Running"
+    },
+    {
+      "parameters": {
+        "url": "https://api.xero.com/connections",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "options": {
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        440,
+        -160
+      ],
+      "id": "97900105-0000-4000-8000-000000000014",
+      "name": "Discover Tenant",
+      "credentials": {
+        "oAuth2Api": {
+          "id": "phase19XeroReadonly",
+          "name": "Xero (read-only)"
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const planned = $('Plan Run').first().json;\nconst raw = $input.first().json ?? {};\nconst orgs = Number(raw.statusCode ?? 0) === 200 && Array.isArray(raw.body) ? raw.body : [];\nif (!orgs.length) return [{ json: { ...planned, tenantReady: false, connectionType: '' } }];\nreturn [{ json: { ...planned, tenantReady: true, connectionType: 'standard', tenantId: String(orgs[0].tenantId ?? ''), organisationName: String(orgs[0].tenantName ?? '') } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        0
+      ],
+      "id": "97900105-0000-4000-8000-000000000015",
+      "name": "Read Tenant"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "97900105-0000-4000-8000-000000000018-c1",
+              "leftValue": "={{ $json.tenantReady }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        880,
+        -160
+      ],
+      "id": "97900105-0000-4000-8000-000000000018",
+      "name": "Tenant Ready?"
+    },
+    {
+      "parameters": {
+        "url": "={{ \"https://api.xero.com/api.xro/2.0/Accounts\" }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "sendHeaders": "={{ $('Effective Xero Connection').first().json.connectionType !== 'custom' }}",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Xero-tenant-id",
+              "value": "={{ $('Effective Xero Connection').first().json.tenantId }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1100,
+        -420
+      ],
+      "id": "97900105-0000-4000-8000-000000000019",
+      "name": "Fetch Accounts",
+      "credentials": {
+        "oAuth2Api": {
+          "id": "phase19XeroReadonly",
+          "name": "Xero (read-only)"
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "xero_statement_lines",
+          "mode": "name"
+        },
+        "returnAll": true
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -80,
+        520
+      ],
+      "id": "97900105-0000-4000-8000-000000000025",
+      "name": "Read Captured Statement Lines",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "={{ \"https://api.xero.com/api.xro/2.0/TaxRates\" }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "sendHeaders": "={{ $('Effective Xero Connection').first().json.connectionType !== 'custom' }}",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Xero-tenant-id",
+              "value": "={{ $('Effective Xero Connection').first().json.tenantId }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1100,
+        -320
+      ],
+      "id": "97900105-0000-4000-8000-000000000020",
+      "name": "Fetch Tax Rates",
+      "credentials": {
+        "oAuth2Api": {
+          "id": "phase19XeroReadonly",
+          "name": "Xero (read-only)"
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "={{ \"https://api.xero.com/api.xro/2.0/Invoices?Statuses=AUTHORISED&page=1\" }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "sendHeaders": "={{ $('Effective Xero Connection').first().json.connectionType !== 'custom' }}",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Xero-tenant-id",
+              "value": "={{ $('Effective Xero Connection').first().json.tenantId }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1100,
+        -220
+      ],
+      "id": "97900105-0000-4000-8000-000000000021",
+      "name": "Fetch Unpaid Invoices",
+      "credentials": {
+        "oAuth2Api": {
+          "id": "phase19XeroReadonly",
+          "name": "Xero (read-only)"
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "={{ \"https://api.xero.com/api.xro/2.0/BankTransactions?where=IsReconciled%3D%3Dfalse&page=1\" }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "sendHeaders": "={{ $('Effective Xero Connection').first().json.connectionType !== 'custom' }}",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Xero-tenant-id",
+              "value": "={{ $('Effective Xero Connection').first().json.tenantId }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1100,
+        -120
+      ],
+      "id": "97900105-0000-4000-8000-000000000022",
+      "name": "Fetch Unreconciled Transactions",
+      "credentials": {
+        "oAuth2Api": {
+          "id": "phase19XeroReadonly",
+          "name": "Xero (read-only)"
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "={{ \"https://api.xero.com/api.xro/2.0/BankTransactions?order=Date DESC&page=1\" }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "sendHeaders": "={{ $('Effective Xero Connection').first().json.connectionType !== 'custom' }}",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Xero-tenant-id",
+              "value": "={{ $('Effective Xero Connection').first().json.tenantId }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1100,
+        -20
+      ],
+      "id": "97900105-0000-4000-8000-000000000023",
+      "name": "Fetch Coding History",
+      "credentials": {
+        "oAuth2Api": {
+          "id": "phase19XeroReadonly",
+          "name": "Xero (read-only)"
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "https://gmail.googleapis.com/gmail/v1/users/me/profile",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleOAuth2Api",
+        "options": {
+          "timeout": 15000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1100,
+        80
+      ],
+      "id": "97900105-0000-4000-8000-000000000027",
+      "name": "Probe Gmail",
+      "credentials": {
+        "googleOAuth2Api": {
+          "id": "phase16GmailReadonly",
+          "name": "Gmail (read-only)"
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "http://127.0.0.1:3000/api/business-memory",
+        "options": {
+          "timeout": 10000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1100,
+        180
+      ],
+      "id": "97900105-0000-4000-8000-000000000029",
+      "name": "Load Business Memory",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "reconciliation_suggestions",
+          "mode": "name"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": []
+        },
+        "returnAll": true,
+        "orderBy": false
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1100,
+        280
+      ],
+      "id": "97900105-0000-4000-8000-000000000131",
+      "name": "Load Prior Decisions"
+    },
+    {
+      "parameters": {
+        "jsCode": "const planned=$('Effective Xero Connection').first().json;\nconst read=(name)=>{try{return $(name).all().map((item)=>item.json);}catch{return[];}};\nconst bodies=(name)=>read(name).filter((row)=>Number(row.statusCode??0)===200).map((row)=>row.body??{});\nconst problems=[];\nfor(const name of ['Fetch Accounts','Fetch Tax Rates','Fetch Unpaid Invoices','Fetch Unreconciled Transactions','Fetch Coding History','Fetch Contacts']){const values=read(name);if(values.some((row)=>Number(row.statusCode??0)!==200))problems.push(name+' did not answer cleanly');}\nconst accounts=(bodies('Fetch Accounts')[0]?.Accounts??[]).filter((account)=>String(account.Status??'')==='ACTIVE'&&String(account.Type??'')!=='BANK').map((account)=>({Code:String(account.Code??''),Name:String(account.Name??''),Type:String(account.Type??'')})).filter((account)=>account.Code&&account.Name).slice(0,200);\nconst taxRates=(bodies('Fetch Tax Rates')[0]?.TaxRates??[]).filter((rate)=>String(rate.Status??'ACTIVE')==='ACTIVE').map((rate)=>({TaxType:String(rate.TaxType??''),Name:String(rate.Name??''),DisplayTaxRate:Number(rate.DisplayTaxRate??0)})).filter((rate)=>rate.TaxType);\nconst invoices=bodies('Fetch Unpaid Invoices').flatMap((body)=>body.Invoices??[]).filter((invoice)=>Number(invoice.AmountDue??0)>0).map((invoice)=>({InvoiceID:String(invoice.InvoiceID??''),InvoiceNumber:String(invoice.InvoiceNumber??''),Type:String(invoice.Type??''),AmountDue:Number(invoice.AmountDue??0),ContactID:String(invoice.Contact?.ContactID??''),ContactName:String(invoice.Contact?.Name??''),Date:String(invoice.DateString??invoice.Date??'').slice(0,10),DueDate:String(invoice.DueDateString??invoice.DueDate??'').slice(0,10)}));\nconst unreconciled=bodies('Fetch Unreconciled Transactions').flatMap((body)=>body.BankTransactions??[]);\nconst history=bodies('Fetch Coding History').flatMap((body)=>body.BankTransactions??[]).filter((txn)=>txn.IsReconciled===true);\nconst contacts=bodies('Fetch Contacts').flatMap((body)=>body.Contacts??[]).map((contact)=>({ContactID:String(contact.ContactID??''),Name:String(contact.Name??''),EmailAddress:String(contact.EmailAddress??'')})).filter((contact)=>contact.ContactID&&contact.Name).slice(0,500);\nconst captured=read('Read Captured Statement Lines').filter((row)=>row&&String(row.scanId)===String(planned.captureScanId)&&String(row.bankAccountId)===String(planned.captureBankAccountId)&&String(row.active)==='yes');\nconst capturedQueue=captured.map((row)=>{let visible={contact:String(row.visibleContact||''),account:String(row.visibleAccount||''),description:String(row.visibleDescription||''),taxType:String(row.visibleTaxType||''),eventName:String(row.visibleEventName||''),projectName:String(row.visibleProjectName||'')};if(!Object.values(visible).some(Boolean)){try{visible=JSON.parse(String(row.visibleFieldsJson||'{}'));}catch{problems.push('one captured line had unreadable visible fields');}}const positive=Math.abs(Number(row.amount??0)),debit=String(row.direction)==='debit';return {sourceType:'statement-line',sourceId:String(row.statementLineId),statementLineId:String(row.statementLineId),scanId:String(row.scanId),statementSourceHash:String(row.sourceHash||''),bankAccountId:String(row.bankAccountId),occurredAt:String(row.occurredAt||''),amount:debit?-positive:positive,direction:debit?'outflow':'inflow',currency:String(row.currency||'AUD'),contactName:String(visible.contact||''),description:String(visible.description||row.narration||'').slice(0,300),narration:String(row.narration||'').slice(0,300),reference:String(row.reference||'').slice(0,80),visibleAccount:String(visible.account||''),visibleTaxType:String(visible.taxType||''),visibleEventName:String(visible.eventName||''),visibleProjectName:String(visible.projectName||''),uiMode:String(row.uiMode||'unknown'),matchedXeroTransactionId:String(row.matchedXeroTransactionId||'')};}).filter((row)=>/^[a-f0-9]{64}$/.test(row.statementSourceHash)&&row.occurredAt>=planned.fromDate&&row.occurredAt<=planned.toDate);\nconst apiQueue=unreconciled.map((txn)=>{const type=String(txn.Type||'').toUpperCase(),outflow=type.startsWith('SPEND'),items=Array.isArray(txn.LineItems)?txn.LineItems:[],date=String(txn.DateString??txn.Date??'').slice(0,10),contact=String(txn.Contact?.Name??''),reference=String(txn.Reference??'');return {sourceType:'bank-transaction',sourceId:String(txn.BankTransactionID??''),statementLineId:'',scanId:'',statementSourceHash:'',bankAccountId:String(txn.BankAccount?.AccountID??''),occurredAt:date,amount:outflow?-Math.abs(Number(txn.Total??0)):Math.abs(Number(txn.Total??0)),direction:outflow?'outflow':'inflow',currency:String(txn.CurrencyCode||planned.baseCurrency||'AUD'),contactName:contact,description:items.map((item)=>String(item.Description??'')).filter(Boolean).join('; ').slice(0,300),narration:[contact,reference].filter(Boolean).join(' ').slice(0,300),reference:reference.slice(0,80),visibleAccount:items.length===1?String(items[0].AccountCode??''):'',visibleTaxType:items.length===1?String(items[0].TaxType??''):'',visibleEventName:'',visibleProjectName:'',uiMode:'unknown',matchedXeroTransactionId:'',existingXeroTransactionId:String(txn.BankTransactionID??''),sourceTransactionType:type};}).filter((row)=>row.sourceId&&Number.isFinite(row.amount)&&row.amount!==0&&row.occurredAt>=planned.fromDate&&row.occurredAt<=planned.toDate);\nif(planned.queueMode!=='coding-review'&&captured.some((row)=>!/^[a-f0-9]{64}$/.test(String(row.sourceHash||''))))problems.push('one captured statement line had no valid source hash');\nconst queue=(planned.queueMode==='coding-review'?apiQueue:capturedQueue).sort((a,b)=>a.occurredAt<b.occurredAt?1:-1);\nconst memoryRaw=read('Load Business Memory')[0]??{};\nconst memoryPayload=memoryRaw.body??memoryRaw;\nconst memories=Array.isArray(memoryPayload.memories)?memoryPayload.memories:[];\nlet memorySummary='';\nif(memories.length){const first=memories[0];const parts=[first.summary,first.description,first.whatTheBusinessDoes].filter((value)=>typeof value==='string'&&value.trim());memorySummary=(parts.length?parts.join(' '):JSON.stringify(first)).slice(0,1500);}\nconst gmailConnected=read('Probe Gmail').some((row)=>Number(row.statusCode??0)===200);\nconst capped=queue.slice(0,planned.maxLines);\nreturn [{json:{...planned,accounts,taxRates,invoices,unreconciled,history,contacts,queue:capped,queueMode:planned.queueMode==='coding-review'?'coding-review':'browser-capture',transactionsRead:queue.length,truncated:queue.length>capped.length,memorySummary,gmailConnected,problems}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        0
+      ],
+      "id": "97900105-0000-4000-8000-000000000026",
+      "name": "Normalise Queue"
+    },
+    {
+      "parameters": {
+        "jsCode": "const normalised=$('Normalise Queue').first().json;\nconst priorRows=(()=>{try{return $('Load Prior Decisions').all().map((item)=>item.json);}catch{return[];}})();\nconst STOP=new Set(['pty','ltd','the','and','aus','com','inc','visa','eftpos','tfr','card','purchase','payment','paypal','stripe','www','http','https']);\nconst tokens=(value)=>[...new Set(String(value??'').toLowerCase().replace(/[^a-z0-9 ]+/g,' ').split(/\\s+/).filter((word)=>word.length>=3&&!STOP.has(word)&&!/^\\d+$/.test(word)))];\nconst merchantKey=(value)=>tokens(value).slice(0,4).join(' ');\nconst accountNames=new Map(normalised.accounts.map((account)=>[String(account.Code),String(account.Name)]));\nconst taxTypes=new Set(normalised.taxRates.map((rate)=>String(rate.TaxType)));\nconst userTuples=new Map();\nfor(const row of priorRows){\n if(!['accepted','changed'].includes(String(row.userDecision??'')))continue;\n const key=merchantKey(`${row.narration??''} ${row.description??''} ${row.contactName??''} ${row.suggestedContact??''}`);\n const code=String(row.userAccountCode||row.suggestedAccountCode||''),tax=String(row.suggestedTaxType||'');if(!key||!code||!tax)continue;\n const tuple={code,tax,contactId:String(row.suggestedContactId||''),accepted:String(row.userDecision)==='accepted',conflict:false};const prior=userTuples.get(key);\n if(prior&&(prior.code!==tuple.code||prior.tax!==tuple.tax||prior.contactId!==tuple.contactId)){prior.conflict=true;}else if(!prior)userTuples.set(key,tuple);else prior.accepted=prior.accepted||tuple.accepted;\n}\nconst historyTuples=new Map();\nfor(const txn of normalised.history??[]){const items=txn.LineItems??[];if(items.length!==1)continue;const key=merchantKey(`${txn.Contact?.Name??''} ${txn.Reference??''}`),line=items[0],code=String(line.AccountCode||''),tax=String(line.TaxType||'');if(!key||!code||!tax)continue;const prior=historyTuples.get(key)??{code,tax,count:0,conflict:false};if(prior.code!==code||prior.tax!==tax)prior.conflict=true;prior.count+=1;historyTuples.set(key,prior);}\nconst cents=(value)=>Math.abs(Number(value??0)).toFixed(2);\nconst days=(a,b)=>{const x=Date.parse(String(a).slice(0,10)+'T00:00:00Z'),y=Date.parse(String(b).slice(0,10)+'T00:00:00Z');return Number.isNaN(x)||Number.isNaN(y)?9999:Math.abs(x-y)/86400000;};\nconst referenceAppears=(needle,haystack)=>{const clean=String(needle??'').replace(/[^A-Za-z0-9]/g,'');if(clean.length<4)return false;const flat=String(haystack??'').replace(/[^A-Za-z0-9]/g,'');const index=flat.toUpperCase().indexOf(clean.toUpperCase());if(index===-1)return false;const before=flat[index-1],after=flat[index+clean.length];return !(before&&/[A-Za-z0-9]/.test(before)&&/[0-9]/.test(clean[0]))&&!(after&&/[0-9]/.test(after));};\nconst settled=[],uncertain=[],shortlists={},contactLists={},historyLists={};\nfor(const line of normalised.queue){\n const base={...line,suggestedContact:'',suggestedContactId:'',suggestedAccountCode:'',suggestedAccountName:'',suggestedTaxType:'',matchedInvoiceId:'',matchedInvoiceNumber:'',identityConfidence:0,accountingConfidence:0,documentConfidence:0,basis:'',needsHuman:'yes',whatToCheck:'',likelyDescription:String(line.narration||line.description||'Unknown transaction').slice(0,300),evidenceSummary:'Visible in the captured Xero reconciliation queue.',reviewQuestion:''};\n if(line.uiMode==='green_match'&&line.matchedXeroTransactionId){settled.push({...base,basis:'browser-existing-match',needsHuman:'no',identityConfidence:1,accountingConfidence:1,whatToCheck:'Xero already shows an existing transaction for this line. Review it and click Match or OK in Xero.'});continue;}\n if(['unknown','discuss'].includes(line.uiMode)){settled.push({...base,basis:'structural-blocker',needsHuman:'yes',reviewQuestion:'This Xero row is in an unsupported or unclear screen state. Can you resolve it in Xero or recapture it on the Create or Match tab?',whatToCheck:'This row is in an unsupported or unclear Xero state, so no item will be created.'});continue;}\n if(line.visibleEventName||line.visibleProjectName){settled.push({...base,basis:'structural-blocker',needsHuman:'yes',reviewQuestion:'This row includes a tracking or project dimension. How should it be allocated in Xero?',whatToCheck:'Tracking and project allocation require your judgment, so no item will be created.'});continue;}\n if(normalised.baseCurrency&&line.currency&&String(line.currency).toUpperCase()!==String(normalised.baseCurrency).toUpperCase()){settled.push({...base,basis:'structural-blocker',needsHuman:'yes',reviewQuestion:`This ${line.currency} transaction differs from the ${normalised.baseCurrency} bookkeeping profile. How should the foreign-currency treatment be handled?`,whatToCheck:'Foreign-currency treatment requires your judgment, so no item will be created.'});continue;}\n const text=`${line.narration} ${line.description} ${line.reference}`, lineTokens=new Set(tokens(text)),key=merchantKey(text);\n const structuralIssue=[\n  [/\\b(?:bank transfer|internal transfer|transfer between|tfr)\\b/i,'bank transfer'],\n  [/\\b(?:split payment|part payment|partial payment)\\b/i,'split or part payment'],\n  [/\\b(?:payroll|salary|wages?)\\b/i,'payroll'],\n  [/\\b(?:loan|mortgage|finance repayment)\\b/i,'loan or finance'],\n  [/\\b(?:owner drawings?|shareholder|capital contribution|dividend)\\b/i,'owner or equity treatment'],\n ].find(([pattern])=>pattern.test(text));\n const matchingContacts=(normalised.contacts??[]).filter((contact)=>tokens(contact.Name).some((word)=>lineTokens.has(word))).slice(0,5);contactLists[line.sourceId]=matchingContacts;\n historyLists[line.sourceId]=(normalised.history??[]).filter((txn)=>merchantKey(`${txn.Contact?.Name??''} ${txn.Reference??''}`)===key).slice(0,5).map((txn)=>({ContactID:String(txn.Contact?.ContactID??''),ContactName:String(txn.Contact?.Name??''),Reference:String(txn.Reference??''),LineItems:(txn.LineItems??[]).slice(0,3).map((item)=>({AccountCode:String(item.AccountCode??''),TaxType:String(item.TaxType??'')}))}));\n const invoiceHits=normalised.invoices.filter((invoice)=>{if(cents(invoice.AmountDue)!==cents(line.amount)||![invoice.Date,invoice.DueDate].some((date)=>date&&days(line.occurredAt,date)<=45))return false;if(invoice.Type==='ACCREC'&&line.direction!=='inflow'||invoice.Type==='ACCPAY'&&line.direction!=='outflow')return false;return referenceAppears(invoice.InvoiceNumber,text)||tokens(invoice.ContactName).some((word)=>lineTokens.has(word));});\n shortlists[line.sourceId]=invoiceHits.slice(0,5);\n if(invoiceHits.length===1){const invoice=invoiceHits[0];settled.push({...base,suggestedContact:invoice.ContactName,suggestedContactId:invoice.ContactID,matchedInvoiceId:invoice.InvoiceID,matchedInvoiceNumber:invoice.InvoiceNumber,identityConfidence:1,accountingConfidence:1,documentConfidence:1,basis:'exact-invoice',needsHuman:'no',likelyDescription:`Payment for invoice ${invoice.InvoiceNumber} from ${invoice.ContactName}`,evidenceSummary:'Exact amount plus invoice reference or contact within 45 days.',whatToCheck:`Open Find & Match in Xero and select invoice ${invoice.InvoiceNumber}.`});continue;}\n if(invoiceHits.length>1){settled.push({...base,basis:'conflicting-invoices',reviewQuestion:`Which invoice is this: ${invoiceHits.slice(0,3).map((invoice)=>invoice.InvoiceNumber).join(', ')}?`,whatToCheck:'More than one invoice matches, so no item will be created.'});continue;}\n const existing=String(line.sourceType)==='statement-line'?normalised.unreconciled.filter((txn)=>{if(cents(txn.Total)!==cents(line.amount)||days(line.occurredAt,String(txn.DateString??txn.Date??''))>3)return false;const candidate=`${txn.Contact?.Name??''} ${txn.Reference??''}`;return tokens(candidate).some((word)=>lineTokens.has(word))||referenceAppears(txn.Reference,text);}):[];\n if(existing.length===1){settled.push({...base,suggestedContact:String(existing[0].Contact?.Name??''),suggestedContactId:String(existing[0].Contact?.ContactID??''),matchedXeroTransactionId:String(existing[0].BankTransactionID??''),identityConfidence:0.98,accountingConfidence:0.98,basis:'existing-match',needsHuman:'no',likelyDescription:`Existing Xero transaction for ${String(existing[0].Contact?.Name??line.narration)}`,evidenceSummary:'Same exact amount, nearby date, and matching contact token or reference.',whatToCheck:'Use Find & Match in Xero; creating another transaction would duplicate it.'});continue;}\n if(String(line.sourceType)==='bank-transaction'&&/TRANSFER/.test(String(line.sourceTransactionType))){settled.push({...base,basis:'structural-blocker',reviewQuestion:'This already-entered Xero transaction is a bank transfer. How should it be handled?',whatToCheck:'Coding-review mode cannot safely classify or prepare bank transfers.'});continue;}\n if(structuralIssue){const issue=structuralIssue[1];settled.push({...base,basis:'structural-blocker',reviewQuestion:`This looks like ${issue}. How should it be handled in Xero?`,whatToCheck:`This appears to involve ${issue}, so no item will be created.`});continue;}\n const userRule=key?userTuples.get(key):null,historyRule=key?historyTuples.get(key):null;\n if(userRule?.conflict){settled.push({...base,basis:'structural-blocker',reviewQuestion:'You have previously coded this merchant more than one way. Which treatment applies this time?',whatToCheck:'Prior user decisions conflict, so no item will be created.'});continue;}\n if(userRule&&accountNames.has(userRule.code)&&taxTypes.has(userRule.tax)){const contact=(normalised.contacts??[]).find((item)=>String(item.ContactID)===userRule.contactId&&matchingContacts.some((match)=>String(match.ContactID)===String(item.ContactID)));settled.push({...base,suggestedContact:String(contact?.Name||line.contactName||line.narration),suggestedContactId:String(contact?.ContactID||''),suggestedAccountCode:userRule.code,suggestedAccountName:accountNames.get(userRule.code),suggestedTaxType:userRule.tax,identityConfidence:userRule.accepted&&contact?0.96:0.85,accountingConfidence:0.98,basis:'user-rule',needsHuman:'no',likelyDescription:`Likely ${String(contact?.Name||line.narration||line.description)} based on a prior confirmed decision`,evidenceSummary:'A prior user decision supplies an exact current Xero account and tax tuple.',reviewQuestion:contact?'':'Which existing Xero contact is this transaction for?'});continue;}\n if(historyRule?.conflict){settled.push({...base,basis:'structural-blocker',reviewQuestion:'This merchant has conflicting coding history. Which account and tax treatment apply this time?',whatToCheck:'The organisation has coded this merchant more than one way before, so no item will be created.'});continue;}\n if(historyRule&&historyRule.count>=2&&accountNames.has(historyRule.code)&&taxTypes.has(historyRule.tax)){const contact=matchingContacts.length===1?matchingContacts[0]:null;settled.push({...base,suggestedContact:String(contact?.Name||line.contactName||line.narration),suggestedContactId:String(contact?.ContactID||''),suggestedAccountCode:historyRule.code,suggestedAccountName:accountNames.get(historyRule.code),suggestedTaxType:historyRule.tax,identityConfidence:contact?0.85:0.70,accountingConfidence:0.95,basis:'history-unanimous',needsHuman:'yes',likelyDescription:`Likely recurring ${String(contact?.Name||line.narration||line.description)} transaction`,evidenceSummary:`The same merchant used this exact Xero account and tax tuple in ${historyRule.count} reconciled transactions.`,reviewQuestion:'Is this the same kind of purchase as the prior transactions?'});continue;}\n uncertain.push(line);\n}\nreturn [{json:{...normalised,settled,uncertain,shortlists,contactLists,historyLists,anyUncertain:uncertain.length>0}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        0
+      ],
+      "id": "97900105-0000-4000-8000-000000000028",
+      "name": "Deterministic Pre-Pass"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "97900105-0000-4000-8000-000000000032-c1",
+              "leftValue": "={{ $json.anyUncertain }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1320,
+        0
+      ],
+      "id": "97900105-0000-4000-8000-000000000032",
+      "name": "Any Uncertain?"
+    },
+    {
+      "parameters": {
+        "jsCode": "const prepassed = $('Deterministic Pre-Pass').first().json;\nconst size = prepassed.batchSize;\nconst perBatchReceipts = Math.max(0, Math.floor(prepassed.maxReceiptLookups / Math.max(1, Math.ceil(prepassed.uncertain.length / size))));\nconst batches = [];\nfor (let i = 0; i < prepassed.uncertain.length; i += size) batches.push(prepassed.uncertain.slice(i, i + size));\n\nreturn batches.map((batch) => {\n  const ids = batch.map((txn) => txn.sourceId);\n  const pick = (source) => Object.fromEntries(ids.map((id) => [id, source[id] ?? []]));\n  return { json: {\n    runId: prepassed.runId,\n    batchJson: JSON.stringify(batch),\n    catalogJson: JSON.stringify(prepassed.accounts),\n    taxJson: JSON.stringify(prepassed.taxRates),\n    invoiceShortlistJson: JSON.stringify(pick(prepassed.shortlists)),\n    contactShortlistJson: JSON.stringify(pick(prepassed.contactLists)),\n    historyJson: JSON.stringify(pick(prepassed.historyLists ?? {})),\n    profileJson: prepassed.profileJson,\n    memorySummary: String(prepassed.memorySummary ?? ''),\n    gmailConnected: String(prepassed.gmailConnected === true),\n    receiptBudget: String(perBatchReceipts),\n  } };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        -160
+      ],
+      "id": "97900105-0000-4000-8000-000000000030",
+      "name": "Build Batches"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "phase19RunTransactionMatching",
+          "mode": "list",
+          "cachedResultName": "106 - RUN - Transaction Matching"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "runId": "={{ $json.runId }}",
+            "batchJson": "={{ $json.batchJson }}",
+            "catalogJson": "={{ $json.catalogJson }}",
+            "taxJson": "={{ $json.taxJson }}",
+            "invoiceShortlistJson": "={{ $json.invoiceShortlistJson }}",
+            "contactShortlistJson": "={{ $json.contactShortlistJson }}",
+            "historyJson": "={{ $json.historyJson }}",
+            "profileJson": "={{ $json.profileJson }}",
+            "memorySummary": "={{ $json.memorySummary }}",
+            "gmailConnected": "={{ $json.gmailConnected }}",
+            "receiptBudget": "={{ $json.receiptBudget }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "runId",
+              "displayName": "runId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "batchJson",
+              "displayName": "batchJson",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "catalogJson",
+              "displayName": "catalogJson",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "taxJson",
+              "displayName": "taxJson",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "invoiceShortlistJson",
+              "displayName": "invoiceShortlistJson",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "contactShortlistJson",
+              "displayName": "contactShortlistJson",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "historyJson",
+              "displayName": "historyJson",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "profileJson",
+              "displayName": "profileJson",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "memorySummary",
+              "displayName": "memorySummary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "gmailConnected",
+              "displayName": "gmailConnected",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "receiptBudget",
+              "displayName": "receiptBudget",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1760,
+        -160
+      ],
+      "id": "97900105-0000-4000-8000-000000000034",
+      "name": "Run Matching Batch",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Compact SHA-256. The n8n Code sandbox has no crypto module and no top-level\n// await, so this is written out by hand and kept synchronous. It has to be a\n// real cryptographic hash rather than the FNV trick used for UUIDs elsewhere:\n// this one decides whether a payment the user approved is still the payment\n// about to be created, so a collision an attacker can craft from transaction\n// text would defeat the check.\nconst sha256Hex = (message) => {\n  const K = [\n    0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,\n    0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,\n    0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,\n    0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,\n    0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,\n    0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,\n    0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,\n    0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];\n  let h = [0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];\n  // UTF-8 encode without TextEncoder, which is also absent from the sandbox.\n  const bytes = [];\n  for (let i = 0; i < message.length; i += 1) {\n    let c = message.charCodeAt(i);\n    if (c < 0x80) { bytes.push(c); }\n    else if (c < 0x800) { bytes.push(0xc0 | (c >> 6), 0x80 | (c & 63)); }\n    else if (c >= 0xd800 && c <= 0xdbff && i + 1 < message.length) {\n      const c2 = message.charCodeAt(i + 1); i += 1;\n      const cp = 0x10000 + ((c - 0xd800) << 10) + (c2 - 0xdc00);\n      bytes.push(0xf0 | (cp >> 18), 0x80 | ((cp >> 12) & 63), 0x80 | ((cp >> 6) & 63), 0x80 | (cp & 63));\n    } else { bytes.push(0xe0 | (c >> 12), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63)); }\n  }\n  const bitLen = bytes.length * 8;\n  bytes.push(0x80);\n  while (bytes.length % 64 !== 56) bytes.push(0);\n  for (let i = 7; i >= 0; i -= 1) bytes.push(Math.floor(bitLen / Math.pow(2, i * 8)) & 0xff);\n  const rotr = (x, n) => (x >>> n) | (x << (32 - n));\n  const w = new Array(64);\n  for (let chunk = 0; chunk < bytes.length; chunk += 64) {\n    for (let i = 0; i < 16; i += 1) {\n      w[i] = ((bytes[chunk + i * 4] << 24) | (bytes[chunk + i * 4 + 1] << 16)\n            | (bytes[chunk + i * 4 + 2] << 8) | bytes[chunk + i * 4 + 3]) >>> 0;\n    }\n    for (let i = 16; i < 64; i += 1) {\n      const s0 = (rotr(w[i - 15], 7) ^ rotr(w[i - 15], 18) ^ (w[i - 15] >>> 3)) >>> 0;\n      const s1 = (rotr(w[i - 2], 17) ^ rotr(w[i - 2], 19) ^ (w[i - 2] >>> 10)) >>> 0;\n      w[i] = (((w[i - 16] + s0) >>> 0) + ((w[i - 7] + s1) >>> 0)) >>> 0;\n    }\n    let [a, b, c, d, e, f, g, hh] = h;\n    for (let i = 0; i < 64; i += 1) {\n      const S1 = (rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25)) >>> 0;\n      const ch = ((e & f) ^ (~e & g)) >>> 0;\n      const t1 = (hh + S1 + ch + K[i] + w[i]) >>> 0;\n      const S0 = (rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22)) >>> 0;\n      const maj = ((a & b) ^ (a & c) ^ (b & c)) >>> 0;\n      const t2 = (S0 + maj) >>> 0;\n      hh = g; g = f; f = e; e = (d + t1) >>> 0; d = c; c = b; b = a; a = (t1 + t2) >>> 0;\n    }\n    h = [(h[0]+a)>>>0,(h[1]+b)>>>0,(h[2]+c)>>>0,(h[3]+d)>>>0,(h[4]+e)>>>0,(h[5]+f)>>>0,(h[6]+g)>>>0,(h[7]+hh)>>>0];\n  }\n  return h.map((x) => x.toString(16).padStart(8, '0')).join('');\n};\n\n// Hash every field that changes what can be created, including the captured source hash.\nconst payloadStringOf=(row)=>[\n String(row.scanId??''),String(row.statementLineId??row.sourceId??''),String(row.statementSourceHash??''),\n String(row.bankAccountId??''),String(row.direction??''),Number(row.amount??0).toFixed(2),String(row.currency??''),\n String(row.occurredAt??'').slice(0,10),String(row.suggestedContactId??''),String(row.suggestedAccountCode??''),\n String(row.suggestedAccountName??''),String(row.suggestedTaxType??''),String(row.likelyDescription??row.description??''),`AI-${String(row.statementSourceHash??'').slice(0,24)}`\n].join('|');\nconst payloadHashOf=(row)=>sha256Hex(payloadStringOf(row));\nconst prepassed=$('Deterministic Pre-Pass').first().json;\nconst batchResults=(()=>{try{return $('Run Matching Batch').all().map((item)=>item.json);}catch{return[];}})();\nconst byId=new Map(prepassed.uncertain.map((txn)=>[txn.sourceId,txn]));\nconst problems=[...(prepassed.problems??[])];\nlet inputTokens=0,outputTokens=0,receiptsSearched=0,receiptsFound=0;\nconst modelRows=[];\nfor(const result of batchResults){inputTokens+=Number(result.inputTokens??0);outputTokens+=Number(result.outputTokens??0);receiptsSearched+=Number(result.receiptsSearched??0);receiptsFound+=Number(result.receiptsFound??0);if(result.ok===false){problems.push(String(result.error??'a classification batch failed'));continue;}for(const row of result.suggestions??[])modelRows.push(row);}\nconst merged=[...prepassed.settled];\nfor(const row of modelRows){const txn=byId.get(row.sourceId);if(!txn)continue;merged.push({...txn,suggestedContact:row.contactName??'',suggestedContactId:row.suggestedContactId??'',suggestedAccountCode:row.suggestedAccountCode??'',suggestedAccountName:row.suggestedAccountName??'',suggestedTaxType:row.suggestedTaxType??'',matchedInvoiceId:row.matchedInvoiceId??'',matchedInvoiceNumber:String((prepassed.shortlists?.[row.sourceId]??[]).find((invoice)=>String(invoice.InvoiceID)===String(row.matchedInvoiceId??''))?.InvoiceNumber??''),identityConfidence:Number(row.identityConfidence??0),accountingConfidence:Number(row.accountingConfidence??0),documentConfidence:Number(row.documentConfidence??0),basis:row.basis??'model-only',needsHuman:row.needsHuman===true?'yes':'no',whatToCheck:row.whatToCheck??'',likelyDescription:String(row.likelyDescription??txn.narration??txn.description??'Unknown transaction').slice(0,300),evidenceSummary:String(row.evidenceSummary??'').slice(0,500),reviewQuestion:String(row.reviewQuestion??row.whatToCheck??'').slice(0,400)});}\nfor(const txn of prepassed.uncertain){if(!merged.some((row)=>row.sourceId===txn.sourceId))merged.push({...txn,suggestedContact:'',suggestedContactId:'',suggestedAccountCode:'',suggestedAccountName:'',suggestedTaxType:'',matchedInvoiceId:'',matchedInvoiceNumber:'',identityConfidence:0,accountingConfidence:0,documentConfidence:0,basis:'not-classified',needsHuman:'yes',whatToCheck:'I could not confidently identify this transaction.',likelyDescription:String(txn.narration||txn.description||'Unknown transaction').slice(0,300),evidenceSummary:'Only the bank narration, date, direction, and amount were available.',reviewQuestion:'What was this transaction for?'});}\nconst accountNames=new Map(prepassed.accounts.map((account)=>[String(account.Code),String(account.Name)]));\nconst taxTypes=new Set(prepassed.taxRates.map((rate)=>String(rate.TaxType)));\nconst threshold=Number(prepassed.neverGuessAbove??0);\nconst rows=merged.map((source,index)=>{\n let row=source;const identity=Number(row.identityConfidence??0),accounting=Number(row.accountingConfidence??0),confidence=Math.min(identity,accounting);\n const overThreshold=threshold>0&&Math.abs(Number(row.amount??0))>threshold;\n const matchLane=['exact-invoice','existing-match','browser-existing-match'].includes(String(row.basis))||Boolean(String(row.matchedInvoiceId??''))||Boolean(String(row.matchedXeroTransactionId??''));\n const structural=String(row.basis)==='structural-blocker'||String(row.basis)==='conflicting-invoices'||overThreshold;\n const catalogExact=Boolean(row.suggestedAccountCode)&&accountNames.get(String(row.suggestedAccountCode))===String(row.suggestedAccountName)&&taxTypes.has(String(row.suggestedTaxType));\n const hasExistingContact=Boolean(String(row.suggestedContactId??''));\n const nonExecutable=String(row.sourceType)!=='statement-line';\n const high=!nonExecutable&&identity>=0.80&&accounting>=0.90&&confidence>=0.92&&catalogExact&&hasExistingContact&&!overThreshold&&!structural&&!matchLane;\n const resultLane=matchLane?'existing_match':structural?'blocked':high?'ready_to_prepare':'likely';\n let whatToCheck=String(row.whatToCheck??''),reviewQuestion=String(row.reviewQuestion??'');\n if(overThreshold&&!reviewQuestion)reviewQuestion=`This is above your $${threshold} review limit. What was it for?`;\n if(!high&&!matchLane&&!structural&&!reviewQuestion)reviewQuestion=whatToCheck||'What was this transaction for?';\n if(!high&&!matchLane){row={...row,suggestedAccountCode:'',suggestedAccountName:'',suggestedTaxType:''};whatToCheck=whatToCheck||reviewQuestion;}\n const out={...row,confidence,needsHuman:['likely','blocked'].includes(resultLane)?'yes':'no',whatToCheck,reviewQuestion,likelyDescription:String(row.likelyDescription||row.narration||row.description||'Unknown transaction').slice(0,300),evidenceSummary:String(row.evidenceSummary||(prepassed.queueMode==='coding-review'?'The already-entered Xero BankTransaction supplied the date, amount, direction, and description; no stronger evidence matched.':'The captured Xero line supplied the date, amount, direction, and narration; no stronger evidence matched.')).slice(0,500),resultLane,readyInXero:'no',reviewedAt:new Date().toISOString()};\n return {...out,suggestionId:`sug-${prepassed.runId}-${index+1}`,runId:prepassed.runId,payloadHash:payloadHashOf(out),acceptedHash:'',userDecision:'',userAccountCode:'',decidedAt:'',executionStatus:'',xeroBankTransactionId:'',executedAt:'',executionError:'',receiptJson:''};\n});\nconst needsHumanCount=rows.filter((row)=>row.needsHuman==='yes').length;\nreturn [{json:{...prepassed,rows,transactionsSuggested:rows.length,needsHumanCount,highConfidence:rows.filter((row)=>row.resultLane==='ready_to_prepare').length,inputTokens,outputTokens,receiptsSearched,receiptsFound,problems,status:problems.length?'partial':'completed'}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1980,
+        0
+      ],
+      "id": "97900105-0000-4000-8000-000000000033",
+      "name": "Merge All Suggestions"
+    },
+    {
+      "parameters": {
+        "jsCode": "const merged=$('Merge All Suggestions').first().json;const rows=merged.rows??[];\nconst money=(row)=>(Number(row.amount??0)<0?'-':'')+'$'+Math.abs(Number(row.amount??0)).toFixed(2);\nconst who=(row)=>String(row.contactName||row.suggestedContact||row.narration||row.description||'unnamed').slice(0,60);\nconst head=(row)=>String(row.occurredAt??'').slice(0,10)+'  '+money(row)+'  '+who(row);\nconst lanes={ready_to_prepare:[],existing_match:[],likely:[],blocked:[]};\nfor(const row of rows)(lanes[row.resultLane]??lanes.blocked).push(row);\nconst codingReview=merged.queueMode==='coding-review';\nconst lines=[codingReview\n  ? \"I checked \"+rows.length+\" already-entered unreconciled BankTransaction\"+(rows.length===1?'':'s')+\" from Xero's Accounting API. This is coding-review mode, not the bank-feed queue; none of these rows can be prepared or reconciled by this review.\"\n  : 'I checked '+rows.length+' transaction'+(rows.length===1?'':'s')+' from a fresh, complete Xero queue capture. '+lanes.ready_to_prepare.length+' are ready for you to approve for preparation; '+lanes.likely.length+' need your help.'];\nif(lanes.ready_to_prepare.length){lines.push('','Ready for approval:');for(const row of lanes.ready_to_prepare.slice(0,40))lines.push('- '+head(row)+': '+row.suggestedContact+' → '+row.suggestedAccountCode+' '+row.suggestedAccountName+', '+row.suggestedTaxType+'. '+row.evidenceSummary);}\nif(lanes.existing_match.length){lines.push('','Already a Find & Match job in Xero:');for(const row of lanes.existing_match.slice(0,40))lines.push('- '+head(row)+': '+row.whatToCheck);}\nif(lanes.likely.length){lines.push('',codingReview?'Coding suggestions that need you:':'I need your help with:');for(const row of lanes.likely.slice(0,40))lines.push('- '+head(row)+': likely '+row.likelyDescription+'. '+row.reviewQuestion);}\nif(lanes.blocked.length){lines.push('','Blocked from preparation:');for(const row of lanes.blocked.slice(0,40))lines.push('- '+head(row)+': '+row.whatToCheck);}\nif(merged.receiptsSearched)lines.push('','I looked in your mailbox for receipts on '+merged.receiptsSearched+' of these and found '+merged.receiptsFound+'.');\nif(merged.truncated)lines.push('',codingReview?'There were more than '+merged.maxLines+' source rows, so I reviewed the '+merged.maxLines+' most recent.':'There were more than '+merged.maxLines+' captured lines, so I reviewed the '+merged.maxLines+' most recent.');\nif((merged.problems??[]).length)lines.push('','Some context did not come back cleanly: '+merged.problems.join('; ')+'.');\nlines.push('',codingReview?'This result cannot say what is waiting in the bank feed. Capture the live Xero Reconcile screen for preparation or reconciliation guidance.':'Nothing here is reconciled. After you explicitly approve prepared items, you still use Match or Find & Match and click OK in Xero.');\nreturn [{json:{...merged,reportText:lines.join('\\n'),errorSummary:(merged.problems??[]).join('; ').slice(0,900),finishedAt:new Date().toISOString()}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        0
+      ],
+      "id": "97900105-0000-4000-8000-000000000035",
+      "name": "Compose Report"
+    },
+    {
+      "parameters": {
+        "jsCode": "const composed=$('Compose Report').first().json;const rows=composed.rows??[];if(!rows.length)return [{json:{hasSuggestion:false}}];return rows.map((row)=>({json:{...row,hasSuggestion:true}}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2420,
+        -160
+      ],
+      "id": "97900105-0000-4000-8000-000000000036",
+      "name": "Split Suggestions"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "has-suggestion",
+              "leftValue": "={{ $json.hasSuggestion }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1640,
+        100
+      ],
+      "id": "97900105-0000-4000-8000-000000000075",
+      "name": "Any Suggestions To Save?"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "value": "reconciliation_suggestions",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "suggestionId": "={{ $json.suggestionId }}",
+            "runId": "={{ $json.runId }}",
+            "sourceType": "={{ $json.sourceType }}",
+            "sourceId": "={{ $json.sourceId }}",
+            "bankAccountId": "={{ $json.bankAccountId }}",
+            "occurredAt": "={{ $json.occurredAt }}",
+            "amount": "={{ $json.amount }}",
+            "direction": "={{ $json.direction }}",
+            "currency": "={{ $json.currency }}",
+            "contactName": "={{ $json.contactName }}",
+            "reference": "={{ $json.reference }}",
+            "description": "={{ $json.description }}",
+            "suggestedContact": "={{ $json.suggestedContact }}",
+            "suggestedContactId": "={{ $json.suggestedContactId }}",
+            "suggestedAccountCode": "={{ $json.suggestedAccountCode }}",
+            "suggestedAccountName": "={{ $json.suggestedAccountName }}",
+            "suggestedTaxType": "={{ $json.suggestedTaxType }}",
+            "matchedInvoiceId": "={{ $json.matchedInvoiceId }}",
+            "matchedInvoiceNumber": "={{ $json.matchedInvoiceNumber }}",
+            "confidence": "={{ $json.confidence }}",
+            "identityConfidence": "={{ $json.identityConfidence }}",
+            "accountingConfidence": "={{ $json.accountingConfidence }}",
+            "documentConfidence": "={{ $json.documentConfidence }}",
+            "basis": "={{ $json.basis }}",
+            "needsHuman": "={{ $json.needsHuman }}",
+            "whatToCheck": "={{ $json.whatToCheck }}",
+            "receiptJson": "={{ $json.receiptJson }}",
+            "payloadHash": "={{ $json.payloadHash }}",
+            "acceptedHash": "={{ $json.acceptedHash }}",
+            "userDecision": "={{ $json.userDecision }}",
+            "userAccountCode": "={{ $json.userAccountCode }}",
+            "decidedAt": "={{ $json.decidedAt }}",
+            "executionStatus": "={{ $json.executionStatus }}",
+            "xeroBankTransactionId": "={{ $json.xeroBankTransactionId }}",
+            "executedAt": "={{ $json.executedAt }}",
+            "executionError": "={{ $json.executionError }}",
+            "scanId": "={{ $json.scanId }}",
+            "statementLineId": "={{ $json.statementLineId }}",
+            "statementSourceHash": "={{ $json.statementSourceHash }}",
+            "likelyDescription": "={{ $json.likelyDescription }}",
+            "evidenceSummary": "={{ $json.evidenceSummary }}",
+            "reviewQuestion": "={{ $json.reviewQuestion }}",
+            "resultLane": "={{ $json.resultLane }}",
+            "readyInXero": "={{ $json.readyInXero }}",
+            "reviewedAt": "={{ $json.reviewedAt }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "suggestionId",
+              "displayName": "suggestionId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "runId",
+              "displayName": "runId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "sourceType",
+              "displayName": "sourceType",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "sourceId",
+              "displayName": "sourceId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "bankAccountId",
+              "displayName": "bankAccountId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "occurredAt",
+              "displayName": "occurredAt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "amount",
+              "displayName": "amount",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "direction",
+              "displayName": "direction",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "currency",
+              "displayName": "currency",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "contactName",
+              "displayName": "contactName",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "reference",
+              "displayName": "reference",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "description",
+              "displayName": "description",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "suggestedContact",
+              "displayName": "suggestedContact",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "suggestedContactId",
+              "displayName": "suggestedContactId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "suggestedAccountCode",
+              "displayName": "suggestedAccountCode",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "suggestedAccountName",
+              "displayName": "suggestedAccountName",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "suggestedTaxType",
+              "displayName": "suggestedTaxType",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "matchedInvoiceId",
+              "displayName": "matchedInvoiceId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "matchedInvoiceNumber",
+              "displayName": "matchedInvoiceNumber",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "confidence",
+              "displayName": "confidence",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "identityConfidence",
+              "displayName": "identityConfidence",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "accountingConfidence",
+              "displayName": "accountingConfidence",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "documentConfidence",
+              "displayName": "documentConfidence",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "basis",
+              "displayName": "basis",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "needsHuman",
+              "displayName": "needsHuman",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "whatToCheck",
+              "displayName": "whatToCheck",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "receiptJson",
+              "displayName": "receiptJson",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "payloadHash",
+              "displayName": "payloadHash",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "acceptedHash",
+              "displayName": "acceptedHash",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "userDecision",
+              "displayName": "userDecision",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "userAccountCode",
+              "displayName": "userAccountCode",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "decidedAt",
+              "displayName": "decidedAt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "executionStatus",
+              "displayName": "executionStatus",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "xeroBankTransactionId",
+              "displayName": "xeroBankTransactionId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "executedAt",
+              "displayName": "executedAt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "executionError",
+              "displayName": "executionError",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "scanId",
+              "displayName": "scanId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "statementLineId",
+              "displayName": "statementLineId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "statementSourceHash",
+              "displayName": "statementSourceHash",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "likelyDescription",
+              "displayName": "likelyDescription",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "evidenceSummary",
+              "displayName": "evidenceSummary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "reviewQuestion",
+              "displayName": "reviewQuestion",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "resultLane",
+              "displayName": "resultLane",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "readyInXero",
+              "displayName": "readyInXero",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "reviewedAt",
+              "displayName": "reviewedAt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2640,
+        -160
+      ],
+      "id": "97900105-0000-4000-8000-000000000037",
+      "name": "Save Suggestions"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "upsert",
+        "dataTableId": {
+          "__rl": true,
+          "value": "reconciliation_runs",
+          "mode": "name"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "runId",
+              "condition": "eq",
+              "keyValue": "={{ $json.runId }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "runId": "={{ $json.runId }}",
+            "startedAt": "={{ $json.startedAt }}",
+            "finishedAt": "={{ $json.finishedAt }}",
+            "status": "={{ $json.status }}",
+            "period": "={{ $json.period }}",
+            "queueMode": "={{ $json.queueMode }}",
+            "transactionsRead": "={{ $json.transactionsRead }}",
+            "transactionsSuggested": "={{ $json.transactionsSuggested }}",
+            "highConfidence": "={{ $json.highConfidence }}",
+            "needsHuman": "={{ $json.needsHumanCount }}",
+            "receiptsSearched": "={{ $json.receiptsSearched }}",
+            "receiptsFound": "={{ $json.receiptsFound }}",
+            "inputTokens": "={{ $json.inputTokens }}",
+            "outputTokens": "={{ $json.outputTokens }}",
+            "reportText": "={{ $json.reportText }}",
+            "errorSummary": "={{ $json.errorSummary }}"
+          },
+          "matchingColumns": [
+            "runId"
+          ],
+          "schema": [
+            {
+              "id": "runId",
+              "displayName": "runId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "startedAt",
+              "displayName": "startedAt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "finishedAt",
+              "displayName": "finishedAt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "period",
+              "displayName": "period",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "queueMode",
+              "displayName": "queueMode",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "transactionsRead",
+              "displayName": "transactionsRead",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "transactionsSuggested",
+              "displayName": "transactionsSuggested",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "highConfidence",
+              "displayName": "highConfidence",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "needsHuman",
+              "displayName": "needsHuman",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "receiptsSearched",
+              "displayName": "receiptsSearched",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "receiptsFound",
+              "displayName": "receiptsFound",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "inputTokens",
+              "displayName": "inputTokens",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "outputTokens",
+              "displayName": "outputTokens",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "reportText",
+              "displayName": "reportText",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "errorSummary",
+              "displayName": "errorSummary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2860,
+        0
+      ],
+      "id": "97900105-0000-4000-8000-000000000038",
+      "name": "Save Run"
+    },
+    {
+      "parameters": {
+        "jsCode": "const composed = $('Compose Report').first().json;\nreturn [{ json: { ...composed, needsHumanCount: composed.needsHumanCount ?? 0 } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2640,
+        60
+      ],
+      "id": "97900105-0000-4000-8000-000000000039",
+      "name": "Collect Before Save"
+    },
+    {
+      "parameters": {
+        "jsCode": "const saved = $('Save Run').first().json;\nreturn [{ json: { ok: true, runId: saved.runId ?? '', status: saved.status ?? '' } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3080,
+        0
+      ],
+      "id": "97900105-0000-4000-8000-000000000041",
+      "name": "Finish"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "xero_statement_scans",
+          "mode": "name"
+        },
+        "returnAll": true
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -980,
+        -20
+      ],
+      "id": "97900105-0000-4000-8000-000000000114",
+      "name": "Load Capture Gate",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "url": "https://api.xero.com/api.xro/2.0/Contacts?where=ContactStatus%3D%3D%22ACTIVE%22&page=1",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "sendHeaders": "={{ $('Effective Xero Connection').first().json.connectionType !== 'custom' }}",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Xero-tenant-id",
+              "value": "={{ $('Effective Xero Connection').first().json.tenantId }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1140,
+        520
+      ],
+      "id": "97900105-0000-4000-8000-000000000031",
+      "name": "Fetch Contacts",
+      "credentials": {
+        "oAuth2Api": {
+          "id": "phase19XeroReadonly",
+          "name": "Xero (read-only)"
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "97900105-0000-4000-8000-000000000045-c1",
+              "leftValue": "={{ $json.tenantReady }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        880,
+        -160
+      ],
+      "id": "97900105-0000-4000-8000-000000000045",
+      "name": "Standard Connection?"
+    },
+    {
+      "parameters": {
+        "url": "https://api.xero.com/api.xro/2.0/Organisation",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "options": {
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        880,
+        80
+      ],
+      "id": "97900105-0000-4000-8000-000000000046",
+      "name": "Probe Custom Organisation",
+      "credentials": {
+        "oAuth2Api": {
+          "id": "phase19XeroReadonly",
+          "name": "Xero (read-only)"
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const planned = $('Plan Run').first().json;\nconst raw = $input.first().json ?? {};\nconst organisations = Number(raw.statusCode ?? 0) === 200 && Array.isArray(raw.body?.Organisations) ? raw.body.Organisations : [];\nif (!organisations.length) return [{ json: { ...planned, tenantReady: false, connectionType: '', status: 'failed', errorSummary: 'xero-not-connected', reportText: 'I could not reach Xero with either supported read-only connection type, so there was nothing to review. Check Xero (read-only) in n8n.' } }];\nconst organisation = organisations[0];\nreturn [{ json: { ...planned, tenantReady: true, connectionType: 'custom', tenantId: String(organisation.OrganisationID ?? ''), organisationName: String(organisation.Name ?? organisation.LegalName ?? '') } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        80
+      ],
+      "id": "97900105-0000-4000-8000-000000000047",
+      "name": "Read Custom Organisation"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { ...$input.first().json } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        -160
+      ],
+      "id": "97900105-0000-4000-8000-000000000048",
+      "name": "Effective Xero Connection"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Run Input": {
+      "main": [
+        [
+          {
+            "node": "Load Bookkeeping Profile",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Bookkeeping Profile": {
+      "main": [
+        [
+          {
+            "node": "Load Recent Runs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Recent Runs": {
+      "main": [
+        [
+          {
+            "node": "Load Capture Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plan Run": {
+      "main": [
+        [
+          {
+            "node": "Profile Ready?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Profile Ready?": {
+      "main": [
+        [
+          {
+            "node": "Mark Running",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Shape Failed Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Running": {
+      "main": [
+        [
+          {
+            "node": "Discover Tenant",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Discover Tenant": {
+      "main": [
+        [
+          {
+            "node": "Read Tenant",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Tenant": {
+      "main": [
+        [
+          {
+            "node": "Standard Connection?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tenant Ready?": {
+      "main": [
+        [
+          {
+            "node": "Fetch Accounts",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Shape Failed Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Accounts": {
+      "main": [
+        [
+          {
+            "node": "Read Captured Statement Lines",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Tax Rates": {
+      "main": [
+        [
+          {
+            "node": "Fetch Unpaid Invoices",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Unpaid Invoices": {
+      "main": [
+        [
+          {
+            "node": "Fetch Unreconciled Transactions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Unreconciled Transactions": {
+      "main": [
+        [
+          {
+            "node": "Fetch Coding History",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Coding History": {
+      "main": [
+        [
+          {
+            "node": "Fetch Contacts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Probe Gmail": {
+      "main": [
+        [
+          {
+            "node": "Load Business Memory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Business Memory": {
+      "main": [
+        [
+          {
+            "node": "Load Prior Decisions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Prior Decisions": {
+      "main": [
+        [
+          {
+            "node": "Normalise Queue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalise Queue": {
+      "main": [
+        [
+          {
+            "node": "Deterministic Pre-Pass",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Deterministic Pre-Pass": {
+      "main": [
+        [
+          {
+            "node": "Any Uncertain?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Any Uncertain?": {
+      "main": [
+        [
+          {
+            "node": "Build Batches",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge All Suggestions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Batches": {
+      "main": [
+        [
+          {
+            "node": "Run Matching Batch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Matching Batch": {
+      "main": [
+        [
+          {
+            "node": "Merge All Suggestions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge All Suggestions": {
+      "main": [
+        [
+          {
+            "node": "Compose Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compose Report": {
+      "main": [
+        [
+          {
+            "node": "Split Suggestions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Suggestions": {
+      "main": [
+        [
+          {
+            "node": "Any Suggestions To Save?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Suggestions": {
+      "main": [
+        [
+          {
+            "node": "Collect Before Save",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect Before Save": {
+      "main": [
+        [
+          {
+            "node": "Save Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shape Failed Run": {
+      "main": [
+        [
+          {
+            "node": "Save Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Run": {
+      "main": [
+        [
+          {
+            "node": "Finish",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Capture Gate": {
+      "main": [
+        [
+          {
+            "node": "Plan Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Captured Statement Lines": {
+      "main": [
+        [
+          {
+            "node": "Fetch Tax Rates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Contacts": {
+      "main": [
+        [
+          {
+            "node": "Probe Gmail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Any Suggestions To Save?": {
+      "main": [
+        [
+          {
+            "node": "Save Suggestions",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Collect Before Save",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Standard Connection?": {
+      "main": [
+        [
+          {
+            "node": "Effective Xero Connection",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Probe Custom Organisation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Probe Custom Organisation": {
+      "main": [
+        [
+          {
+            "node": "Read Custom Organisation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Custom Organisation": {
+      "main": [
+        [
+          {
+            "node": "Effective Xero Connection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Effective Xero Connection": {
+      "main": [
+        [
+          {
+            "node": "Tenant Ready?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "executionTimeout": 1800
+  },
+  "versionId": "97900105-0000-4000-8000-000000000900",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "phase": 19,
+    "testedWithN8n": "2.30.5",
+    "toolRisk": "bounded_external_read_and_local_write",
+    "authorization": "internal-background-only",
+    "externalWrite": "none",
+    "externalRead": "xero-accounting-context-only-no-statement-report",
+    "dataSource": "browser-observed-xero-queue-plus-accounting-api-context"
+  },
+  "id": "phase19RunReconciliationReview",
+  "tags": []
+}

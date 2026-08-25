@@ -101,6 +101,42 @@ try {
     "package installs must enable their core modules",
   );
 
+  const xeroPackageRoot = await makeScratch("xero-package");
+  for (const id of ["xero-statement-capture", "xero-reconciliation"]) {
+    await rm(join(xeroPackageRoot, "skills", id), { recursive: true, force: true });
+  }
+  const xeroEnabledPath = join(xeroPackageRoot, "skills", "enabled.txt");
+  const xeroEnabled = (await readFile(xeroEnabledPath, "utf8"))
+    .split(/\r?\n/)
+    .filter((line) => !["xero-statement-capture", "xero-reconciliation"].includes(line))
+    .join("\n");
+  await writeFile(xeroEnabledPath, `${xeroEnabled.replace(/\n+$/, "")}\n`);
+  install(xeroPackageRoot, "xero-bookkeeping");
+  await readFile(join(xeroPackageRoot, "skills", "xero-statement-capture", "scripts", "capture-server.mjs"), "utf8");
+  const installedExtensionManifest = JSON.parse(await readFile(
+    join(xeroPackageRoot, "skills", "xero-statement-capture", "assets", "xero-statement-capture", "manifest.json"),
+    "utf8",
+  ));
+  await readFile(join(xeroPackageRoot, "skills", "xero-statement-capture", "assets", "xero-statement-capture", "content.js"), "utf8");
+  assert.deepEqual(installedExtensionManifest.permissions, ["activeTab", "storage"], "the package must copy the reviewed extension assets");
+  await readFile(join(xeroPackageRoot, "skills", "xero-reconciliation", "SKILL.md"), "utf8");
+  assert.match(
+    await readFile(xeroEnabledPath, "utf8"),
+    /xero-statement-capture[\s\S]*xero-reconciliation/,
+    "the Xero package must enable capture before review",
+  );
+  const xeroBeforeSecondInstall = await snapshot(xeroPackageRoot);
+  install(xeroPackageRoot, "xero-bookkeeping");
+  assert.deepEqual(await snapshot(xeroPackageRoot), xeroBeforeSecondInstall, "the Xero package must be idempotent");
+
+  const xeroDependencyRoot = await makeScratch("xero-dependency");
+  const rejectedXero = install(xeroDependencyRoot, "xero-reconciliation", false);
+  assert.match(
+    `${rejectedXero.stdout}\n${rejectedXero.stderr}`,
+    /needs the "xero-statement-capture" skill first/i,
+    "direct review installation must explain its capture dependency",
+  );
+
   const atomicRoot = await makeScratch("package-preflight");
   for (const id of ["domain-research", "seo-article-writer"]) {
     await rm(join(atomicRoot, "skills", id), { recursive: true, force: true });
@@ -200,6 +236,8 @@ try {
     "funding-radar",
     "monthly-update",
     "scheduler",
+    "xero-statement-capture",
+    "xero-reconciliation",
   ];
   for (const skillId of installed) {
     install(root, skillId);

@@ -1,7 +1,7 @@
 # Skill packages and optional modules
 
 The generated learner base starts out able to manage projects and tasks.
-The agent card presents six understandable **packages**. A package can contain
+The agent card presents seven understandable **packages**. A package can contain
 several internal Markdown skills and workflows, so useful capability is not
 lost just to make the interface simpler. A maintainer checkout may already have
 some packages installed while testing the release; `skills/enabled.txt` remains
@@ -21,9 +21,10 @@ edits together and is safe to run twice.
 | Marketing | `domain-research` | Free website research; paid search evidence is an optional extension | Anthropic; DataForSEO only for the extension |
 | Marketing | `seo-aeo-article-writer` | Grounded SEO/AEO article writing; installs Domain Research first | Anthropic |
 | Investment | `funding-and-investor-updates` | Funding Radar; Monthly Update is an optional extension | Anthropic; read-only Gmail for the extension |
+| Bookkeeping | `xero-bookkeeping` | Read-only Xero statement capture and evidence-backed coding review | Chrome; Xero; Anthropic |
 
-Bookkeeping intentionally has no packaged skill yet. It remains a real,
-separately scoped agent and must say that no accounting connector is installed.
+The Bookkeeping package installs its two core modules together because a review
+must never fall back to an unsupported API source when capture is absent.
 
 Scheduler and Telegram are cross-cutting delivery add-ons, not extra icons on
 one agent card. Nothing has been deleted: the underlying module catalogue is:
@@ -39,6 +40,8 @@ one agent card. Nothing has been deleted: the underlying module catalogue is:
 | [`monthly-update`](monthly-update/) | Funding & Investor Updates optional extension |
 | [`scheduler`](scheduler/) | Global add-on |
 | [`telegram-trigger`](telegram-trigger/) | Cloud delivery add-on |
+| [`xero-statement-capture`](xero-statement-capture/) | Xero Bookkeeping queue-evidence core |
+| [`xero-reconciliation`](xero-reconciliation/) | Xero Bookkeeping review and preparation core |
 
 Open any skill's folder and read its `skill/README.md` before you install it. Each one tells you what it costs, what it can't do, and how to prove it loaded.
 
@@ -141,7 +144,7 @@ node scripts/make-base.mjs ../ai-solopreneur-base
 
 Writes a clean copy with no installed optional modules, no optional tools, and
 no module catalogue. The small `optional-skills/_installer/` and `skill-packs/`
-contracts remain so the learner sees the six intended packages and can fetch
+contracts remain so the learner sees the seven intended packages and can fetch
 one surgically. It reads from the last commit, not your working folder, so
 uncommitted testing cannot leak into the handout.
 

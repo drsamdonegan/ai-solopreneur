@@ -20,12 +20,13 @@ const byAgent = Object.fromEntries(
 
 assert.deepEqual(
   Object.fromEntries(Object.entries(byAgent).map(([agent, values]) => [agent, values.length])),
-  { "project-manager": 1, sales: 2, marketing: 2, investment: 1, bookkeeping: 0 },
+  { "project-manager": 1, sales: 2, marketing: 2, investment: 1, bookkeeping: 1 },
 );
 assert.deepEqual(byAgent["project-manager"], ["meeting-to-actions"]);
 assert.deepEqual(byAgent.sales, ["linkedin-profile-lookup", "linkedin-prospect-search"]);
 assert.deepEqual(byAgent.marketing, ["domain-research", "seo-aeo-article-writer"]);
 assert.deepEqual(byAgent.investment, ["funding-and-investor-updates"]);
+assert.deepEqual(byAgent.bookkeeping, ["xero-bookkeeping"]);
 
 for (const pack of packs) {
   for (const module of pack.modules) {
@@ -65,4 +66,4 @@ try {
   await rm(invalidDirectory, { recursive: true, force: true });
 }
 
-process.stdout.write("Six public packages map to the full internal module inventory. Checks passed.\n");
+process.stdout.write("Seven public packages map to the full internal module inventory. Checks passed.\n");

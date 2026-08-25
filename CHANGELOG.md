@@ -7,13 +7,31 @@ versioning for local workshop releases.
 
 ### Added
 
-- Six learner-facing skill packages with the intended agent-card inventory:
-  Project Manager 1, Sales 2, Marketing 2, Investment 1, and Bookkeeping 0.
+- Seven learner-facing skill packages with the intended agent-card inventory:
+  Project Manager 1, Sales 2, Marketing 2, Investment 1, and Bookkeeping 1.
 - A real Crustdata-backed LinkedIn Prospect Search for role, sector, location,
   and company-size discovery, capped at ten public professional results and
   0.30 credits after fresh approval for every call.
 - Package-aware surgical installation, dependency resolution, optional
   extensions, GitHub package links, and legacy module-ID compatibility.
+- A two-module Xero Bookkeeping package for the Bookkeeping agent. A read-only
+  Chrome helper captures the complete queue visible on the learner's open Xero
+  Reconcile page through a one-use loopback token; the accounting reasoner then
+  uses current Xero catalogues, invoices, contacts and history plus saved company
+  context. It prepares only explicitly approved high-certainty rows and keeps a
+  likely description and one useful question for everything less certain.
+- An optional write lane in that skill, behind a separate `Xero (read-write)`
+  credential the learner consents to on its own: it creates accepted suggestions
+  as new unreconciled Xero transactions. It never reconciles, edits or deletes
+  anything, and it refuses any row that changed after the learner accepted it.
+- Freshness, source-hash, existing-ContactID, exact catalogue, duplicate-reference,
+  structural-case, and confidence gates that fail closed before any Xero create.
+- Receipt evidence from the learner's own mailbox when the Monthly Update
+  skill's `Gmail (read-only)` credential happens to be connected. Reviews work
+  unchanged without it.
+- `docs/XERO_RECONCILIATION.md`, covering the Xero developer app for both the
+  local and Railway callbacks, why the built-in Xero node is not used, and what
+  a review sends where.
 
 ### Changed
 

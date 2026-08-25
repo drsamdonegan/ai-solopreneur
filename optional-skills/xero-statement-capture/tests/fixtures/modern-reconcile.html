@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en" data-currency="AUD">
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font: 14px sans-serif; }
+    .row, [role="tab"], input, button, a { display: block; min-height: 12px; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body data-bank-account-id="bank-modern-redacted">
+  <main>
+    <section class="row" data-testid="bank-reconciliation-row" data-statement-line-id="modern-blank" data-statement-date="2026-07-14" data-amount="84.70" data-direction="debit" data-currency="AUD" data-narration="REDACTED SUPPLIER" data-reference="REF-001">
+      <button role="tab" aria-selected="true">Create</button>
+      <div class="hidden"><input data-testid="contact-input" value="Hidden stale contact"></div>
+    </section>
+    <section class="row" data-testid="bank-reconciliation-row" data-statement-line-id="modern-prefilled" data-statement-date="15 Jul 2026" data-amount="$121.10" data-direction="debit" data-currency="AUD" data-narration="REDACTED TRAVEL" data-reference="REF-002" data-current-contact="Redacted Travel Vendor" data-current-account="Travel - National" data-current-description="Travel for a reviewed activity" data-current-tax="INPUT">
+      <button role="tab" aria-selected="true">Create</button>
+    </section>
+    <section class="row" data-testid="bank-reconciliation-row" data-statement-line-id="modern-discuss" data-statement-date="15/07/2026" data-amount="29.50" data-direction="debit" data-currency="AUD" data-narration="REDACTED QUESTION" data-reference="REF-003">
+      <button role="tab" aria-selected="true">Discuss</button>
+    </section>
+    <section class="row" data-testid="bank-reconciliation-row" data-statement-line-id="modern-match" data-statement-date="2026-07-16" data-amount="250.00" data-direction="credit" data-currency="AUD" data-narration="REDACTED MATCH" data-reference="REF-004" data-existing-transaction-id="txn-modern-redacted">
+      <button role="tab" aria-selected="true">Match</button>
+      <button>OK</button>
+    </section>
+    <section class="row" data-testid="bank-reconciliation-row" data-statement-line-id="modern-unknown" data-statement-date="2026-07-17" data-amount="7.25" data-direction="debit" data-currency="AUD" data-narration="REDACTED UNKNOWN" data-reference="REF-005"></section>
+  </main>
+  <nav data-testid="pagination" data-total-count="5" data-page-count="1"><button aria-current="page">1</button></nav>
+</body>
+</html>

@@ -57,7 +57,7 @@ At least one skill must remain enabled.
 
 The agent card deliberately groups the internal modules into one Project
 Manager package, two Sales packages, two Marketing packages, one Investment
-package, and no Bookkeeping package. A full repository checkout keeps nine
+package, and one Bookkeeping package. A full repository checkout keeps eleven
 optional modules in [`optional-skills/`](../optional-skills/). A generated
 learner base omits that large catalogue but retains the small `skill-packs/`
 contracts, so it can fetch only the requested modules from GitHub.
@@ -76,6 +76,12 @@ Or run it yourself from the top of your project folder:
 
 ```bash
 npm run add-skill -- funding-and-investor-updates
+```
+
+For Xero bookkeeping, install the package rather than either internal module:
+
+```bash
+npm run add-skill -- xero-bookkeeping
 ```
 
 Then sync the skills and restart the services, exactly as you would after editing a skill by hand.
