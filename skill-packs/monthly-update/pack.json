@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "id": "monthly-update",
+  "agent": "investment",
+  "name": "Monthly Update",
+  "description": "Reads a month of your email and writes the company update that comes out of it, with every line traceable to a real message.",
+  "icon": "mailUpdate",
+  "installable": true,
+  "requires": [],
+  "modules": [
+    { "id": "monthly-update", "name": "Monthly company update", "role": "core", "source": "optional" }
+  ]
+}

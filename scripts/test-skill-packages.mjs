@@ -20,12 +20,12 @@ const byAgent = Object.fromEntries(
 
 assert.deepEqual(
   Object.fromEntries(Object.entries(byAgent).map(([agent, values]) => [agent, values.length])),
-  { "project-manager": 1, sales: 2, marketing: 2, investment: 1, bookkeeping: 1 },
+  { "project-manager": 1, sales: 2, marketing: 2, investment: 2, bookkeeping: 1 },
 );
 assert.deepEqual(byAgent["project-manager"], ["meeting-to-actions"]);
 assert.deepEqual(byAgent.sales, ["linkedin-profile-lookup", "linkedin-prospect-search"]);
 assert.deepEqual(byAgent.marketing, ["domain-research", "seo-aeo-article-writer"]);
-assert.deepEqual(byAgent.investment, ["funding-and-investor-updates"]);
+assert.deepEqual(byAgent.investment, ["funding-and-investor-updates", "monthly-update"]);
 assert.deepEqual(byAgent.bookkeeping, ["xero-bookkeeping"]);
 
 for (const pack of packs) {
