@@ -91,6 +91,8 @@ Is my email connected?
 
 It checks and tells you which mailbox it is connected to. It will also refuse to start an update run while the connection is missing, rather than spending several minutes and a couple of dollars failing.
 
+Once a run starts, the chat shows its live stage in a progress bar. When the worker saves the result, the chat asks the agent to read that saved update back automatically; there is no second “is it ready?” step.
+
 ### Reconnecting later, without hunting for the screen
 
 When the connection is missing or has lapsed, your agent gives you a **Connect Gmail** button that opens n8n on the right credential. Select **Connect my account** and grant access. You do not need to come back and say so — the chat watches for Gmail to start answering and carries on by itself.

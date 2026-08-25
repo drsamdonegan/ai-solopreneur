@@ -449,6 +449,18 @@
       ],
       "id": "95610000-0000-4000-8000-000000000023",
       "name": "Shape Auth Needed"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const item = $input.first().json ?? {};\nconst response = item.response ?? {};\nif (response.ok !== true || !['queued', 'running'].includes(String(response.status ?? ''))) {\n  return [{ json: item }];\n}\nconst existing = String(response.message ?? '')\n  .replace(/\\s*Ask me for it again in a few minutes(?: and I will read it back)?\\./gi, '')\n  .trim();\nreturn [{ json: {\n  ...item,\n  response: {\n    ...response,\n    message: [\n      existing,\n      'The progress bar in this chat will update as the work moves through each stage, and the finished update will appear here automatically.',\n    ].filter(Boolean).join(' '),\n  },\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1260, 100],
+      "id": "95610000-0000-4000-8000-000000000024",
+      "name": "Describe Automatic Delivery"
     }
   ],
   "pinData": {},
@@ -506,9 +518,9 @@
             "index": 0
           }
         ],
-        [
-          {
-            "node": "Prepare Audit",
+      [
+        {
+          "node": "Describe Automatic Delivery",
             "type": "main",
             "index": 0
           }
@@ -529,8 +541,8 @@
     "Shape Start Result": {
       "main": [
         [
-          {
-            "node": "Prepare Audit",
+        {
+          "node": "Describe Automatic Delivery",
             "type": "main",
             "index": 0
           }
@@ -600,6 +612,17 @@
       ]
     },
     "Shape Auth Needed": {
+      "main": [
+        [
+          {
+            "node": "Prepare Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Describe Automatic Delivery": {
       "main": [
         [
           {

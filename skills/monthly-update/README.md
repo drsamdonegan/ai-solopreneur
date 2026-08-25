@@ -75,6 +75,8 @@ Then, in order:
 4. Ask it whether Gmail is connected. It checks, and talks you through it if not.
 5. Ask it for last month's update.
 
+The chat shows a progress bar while it lists, filters, reads, drafts, and checks the update. Leave the tab open or come back to it later: when the run finishes, the saved update is read into the conversation automatically. You do not have to ask for it a second time.
+
 The monthly schedule ships switched off. Turn it on once you have seen an update you are happy with.
 
 ## It can only read your email

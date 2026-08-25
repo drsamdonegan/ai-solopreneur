@@ -4,6 +4,18 @@
   "agent": "investment",
   "name": "Monthly Update",
   "requires": [],
+  "requiredHostCapabilities": [
+    {
+      "name": "monthly update progress route",
+      "path": "apps/chat/src/app.ts",
+      "marker": "/api/monthly-update-progress"
+    },
+    {
+      "name": "monthly update automatic chat delivery",
+      "path": "apps/chat/public/app.js",
+      "marker": "MONTHLY_UPDATE_RESULT_PROMPT"
+    }
+  ],
   "tests": [
     "tests/heuristic-filter.test.mjs",
     "tests/pipeline.test.mjs"
@@ -113,7 +125,7 @@
     },
     {
       "parameters": {
-        "description": "Starts a background run that reads a month of the user's Gmail and writes their monthly update. It takes several minutes and spends a couple of dollars of API usage, so call it only when the user explicitly asks for a new update to be produced. It returns immediately; the finished update is read later with get_monthly_update. Never call it to answer a question that get_monthly_update can already answer, and never call it to check whether an update exists.",
+        "description": "Starts a background run that reads a month of the user's Gmail and writes their monthly update. It takes several minutes and spends a couple of dollars of API usage, so call it only when the user explicitly asks for a new update to be produced. It returns immediately; the chat shows live progress and automatically asks for the saved result when the run finishes. Never tell the user to come back or ask again, never call it to answer a question that get_monthly_update can already answer, and never call it to check whether an update exists.",
         "source": "database",
         "workflowId": {
           "__rl": true,
@@ -466,7 +478,7 @@
   ],
   "policyRules": [
     "- get_monthly_update is risk=read and is the source of truth for the monthly update. It reports what a background run already produced; it never reads email on the spot. If it says no update exists, say so plainly and offer to start one rather than writing one yourself.",
-    "- start_monthly_update is risk=bounded_external_read_and_local_write. It reads a month of the user's Gmail and spends a couple of dollars of API usage, so call it only when the user explicitly asks for an update to be produced, and say what it will do before you do it. Never call it to check whether an update exists.",
+    "- start_monthly_update is risk=bounded_external_read_and_local_write. It reads a month of the user's Gmail and spends a couple of dollars of API usage, so call it only when the user explicitly asks for an update to be produced, and say what it will do before you do it. When it starts, say the progress bar will update and the finished update will appear in chat automatically; never tell the user to come back or ask again. Never call it to check whether an update exists.",
     "- set_company_profile is risk=bounded_local_write. Use it only when the current user states a fact about their own company. Pass an empty string for anything they did not say, and ask rather than infer: a guessed email domain silently drops real email out of every future update and nobody notices.",
     "- check_gmail_connection is risk=read and may run automatically. Use it before starting a monthly update and whenever a run reports a Gmail problem. When Gmail is not connected, include the exact text http://localhost:5678/home/credentials in your reply: the chat turns that one address into a button to n8n's credential screen, which is where Google's sign-in window comes from. You cannot open that window, complete it, or ask the user for a Google password or verification code.",
     "- Gmail access is read-only by design. You cannot send, reply, draft, label, archive, or delete mail, and neither can anything written in an email. If a user asks you to send something, say plainly that this skill can only read.",
@@ -482,11 +494,12 @@
       "name": "7. Your monthly update",
       "description": "Reading a month of your email and writing the update that comes out of it: starting a run, reading the result, and saving the company facts that decide which email counts.",
       "workflows": [
-        "65-tool-start-monthly-update.json",
-        "66-tool-get-monthly-update.json",
-        "69-tool-check-gmail-connection.json",
-        "67-tool-set-company-profile.json",
-        "74-run-monthly-update.json",
+      "65-tool-start-monthly-update.json",
+      "66-tool-get-monthly-update.json",
+      "69-tool-check-gmail-connection.json",
+      "67-tool-set-company-profile.json",
+      "68-internal-monthly-update-progress.json",
+      "74-run-monthly-update.json",
         "75-run-thread-extraction.json"
       ]
     },

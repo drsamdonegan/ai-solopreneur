@@ -3169,6 +3169,55 @@ export function createChatHandler(options: ChatGatewayOptions): RequestListener 
         return;
       }
 
+      if (url.pathname === "/api/monthly-update-progress") {
+        if (request.method !== "GET") {
+          sendJson(
+            response,
+            405,
+            {
+              error: {
+                code: "INVALID_REQUEST",
+                message: "Read monthly update progress with GET.",
+              },
+            },
+            { Allow: "GET" },
+          );
+          return;
+        }
+        // The monthly worker writes small heartbeats into its existing run
+        // row. Polling those heartbeats gives the page a real progress bar and
+        // a completion signal without reading Gmail or waking the agent.
+        try {
+          const progressUrl = new URL(
+            "/webhook/monthly-update-progress",
+            options.upstreamUrl,
+          );
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 5_000);
+          let upstream: Response;
+          try {
+            upstream = await fetchImplementation(progressUrl, {
+              signal: controller.signal,
+            });
+          } finally {
+            clearTimeout(timer);
+          }
+          if (!upstream.ok) {
+            sendJson(response, 200, { schemaVersion: 1, available: false });
+            return;
+          }
+          const body = (await upstream.json()) as Record<string, unknown>;
+          sendJson(response, 200, {
+            ...body,
+            schemaVersion: 1,
+            available: true,
+          });
+        } catch {
+          sendJson(response, 200, { schemaVersion: 1, available: false });
+        }
+        return;
+      }
+
       if (url.pathname === "/api/chat") {
         if (request.method !== "POST") {
           sendJson(

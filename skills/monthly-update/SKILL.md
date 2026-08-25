@@ -5,7 +5,7 @@ description: Produce and read the company's monthly update, built from a month o
 
 # Monthly Update
 
-Reading a month of email takes minutes, so this works in two halves. `start_monthly_update` sets a background run going and returns immediately. `get_monthly_update` reads what a run already produced. You never write an update yourself.
+Reading a month of email takes minutes, so `start_monthly_update` sets a background run going and returns immediately. The chat follows the run with a progress bar and asks you to read the saved result when it finishes; `get_monthly_update` remains the only source of the update. You never write an update yourself.
 
 ## Connecting Gmail
 
@@ -33,7 +33,7 @@ Call `get_monthly_update` whenever the user asks for their update, what happened
 - Leave `month` empty for the most recent update. Pass a month name or `2026-07` when they ask about a specific one.
 - Read `updateText` back as it is written. It is already in the user's voice; rewriting it in yours makes it worse.
 - When `hasRun` is false, say no update exists yet and offer to produce one. Do not write one from what you remember of the conversation.
-- When `status` is `queued` or `running`, say it is still reading and give it a few minutes.
+- When `status` is `queued` or `running`, say it is still reading and point to the progress bar. The page will ask for the result automatically when the run finishes; do not tell the user to come back or ask again.
 - `evidence` holds the facts behind the update, each with the real Gmail message IDs it came from. Use it when the user asks where a line came from, or wants more detail on one point.
 
 ## Starting a run
@@ -47,6 +47,7 @@ It reads their mail and spends a couple of dollars of API usage each time, so sa
 - Leave `month` empty for the month that just ended. That is almost always what they mean.
 - Pass `audience` only when they say who it is for: `investor`, `team`, or `community`.
 - If a run for that month is already in flight, it tells you so instead of starting a second one. Pass that on rather than starting again.
+- When the tool returns `queued` or `running`, say the progress bar will update and the finished update will appear in this chat automatically. End the turn. Never ask the user to return later or send another message to retrieve it.
 
 ## Saving the company profile
 

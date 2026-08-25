@@ -2823,7 +2823,7 @@
     },
     {
       "parameters": {
-        "description": "Starts a background run that reads a month of the user's Gmail and writes their monthly update. It takes several minutes and spends a couple of dollars of API usage, so call it only when the user explicitly asks for a new update to be produced. It returns immediately; the finished update is read later with get_monthly_update. Never call it to answer a question that get_monthly_update can already answer, and never call it to check whether an update exists.",
+        "description": "Starts a background run that reads a month of the user's Gmail and writes their monthly update. It takes several minutes and spends a couple of dollars of API usage, so call it only when the user explicitly asks for a new update to be produced. It returns immediately; the chat shows live progress and automatically asks for the saved result when the run finishes. Never tell the user to come back or ask again, never call it to answer a question that get_monthly_update can already answer, and never call it to check whether an update exists.",
         "source": "database",
         "workflowId": {
           "__rl": true,

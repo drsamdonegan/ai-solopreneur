@@ -7,6 +7,7 @@ const run = JSON.parse(await readFile(url("74-run-monthly-update.json"), "utf8")
 const thread = JSON.parse(await readFile(url("75-run-thread-extraction.json"), "utf8"));
 const connection = JSON.parse(await readFile(url("69-tool-check-gmail-connection.json"), "utf8"));
 const start = JSON.parse(await readFile(url("65-tool-start-monthly-update.json"), "utf8"));
+const progress = JSON.parse(await readFile(url("68-internal-monthly-update-progress.json"), "utf8"));
 
 const jsOf = (workflow, name) => workflow.nodes.find((node) => node.name === name).parameters.jsCode;
 
@@ -39,6 +40,63 @@ const PROFILE = {
   domainAliases: ["northwind.io"],
   stage: "seed",
 };
+
+// ---------------------------------------- 68/74: progress and auto-delivery
+const now = new Date().toISOString();
+const runningProgress = runNode(progress, "Shape Progress", {
+  input: [{
+    runId: "mu-live",
+    status: "running",
+    monthLabel: "July 2026",
+    startedAt: new Date(Date.now() - 120_000).toISOString(),
+    errorSummary: JSON.stringify({
+      hb: 1,
+      note: "Choosing what belongs in the update",
+      step: 4,
+      of: 7,
+      at: now,
+    }),
+  }],
+  nodes: {},
+})[0];
+check(runningProgress.running === true, "a live monthly run was not reported as running");
+check(runningProgress.step === 4 && runningProgress.of === 7, "the monthly progress step was lost");
+check(/Choosing what belongs/.test(runningProgress.note), "the monthly progress note was lost");
+
+const finishedProgress = runNode(progress, "Shape Progress", {
+  input: [{
+    runId: "mu-done",
+    status: "completed",
+    monthLabel: "July 2026",
+    startedAt: now,
+    finishedAt: now,
+    errorSummary: "",
+  }],
+  nodes: {},
+})[0];
+check(finishedProgress.running === false, "a finished monthly run still appeared to be running");
+check(finishedProgress.runId === "mu-done" && finishedProgress.finishedAt === now,
+  "the completion signal cannot identify the finished run");
+
+const noteNodes = run.nodes.filter((node) => node.name.startsWith("Note "));
+check(noteNodes.length === 6, `expected 6 monthly progress milestones, got ${noteNodes.length}`);
+const steps = noteNodes.map((node) => Number(/step: (\d+)/.exec(node.parameters.jsCode)?.[1]));
+check(steps.join(",") === "1,2,3,4,5,6", `monthly progress steps were ${steps.join(",")}`);
+check(String(run.nodes.find((node) => node.name === "Mark Running")?.parameters?.columns?.value?.errorSummary)
+  .includes("step: 0"), "the monthly run does not publish its starting heartbeat");
+
+const automaticStart = runNode(start, "Describe Automatic Delivery", {
+  input: [{ response: {
+    ok: true,
+    status: "queued",
+    message: "I am reading July 2026 now. Ask me for it again in a few minutes and I will read it back.",
+  } }],
+  nodes: {},
+})[0].response.message;
+check(/progress bar/.test(automaticStart) && /appear here automatically/.test(automaticStart),
+  "the start result does not promise visible progress and automatic delivery");
+check(!/Ask me for it again/.test(automaticStart),
+  "the start result still makes the user retrieve the update manually");
 
 // ---------------------------------------------- 75: cleaning + compaction
 const REPLY_WITH_QUOTE = [

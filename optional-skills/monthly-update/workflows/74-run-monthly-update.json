@@ -204,7 +204,8 @@
             "monthBucket": "={{ $json.monthBucket }}",
             "windowStart": "={{ $json.windowStart }}",
             "windowEnd": "={{ $json.windowEnd }}",
-            "audience": "={{ $json.audience }}"
+            "audience": "={{ $json.audience }}",
+            "errorSummary": "={{ JSON.stringify({ hb: 1, note: 'Listing ' + $json.monthLabel + ' email', step: 0, of: 7, at: $json.startedAt }) }}"
           },
           "matchingColumns": [],
           "schema": [
@@ -274,6 +275,15 @@
             {
               "id": "audience",
               "displayName": "audience",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "errorSummary",
+              "displayName": "errorSummary",
               "required": false,
               "defaultMatch": false,
               "display": true,
@@ -1669,6 +1679,136 @@
       "name": "Record Slack Failure",
       "alwaysOutputData": true,
       "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const plan = $('Plan Run').first().json;\nreturn [{ json: {\n  runId: plan.runId,\n  errorSummary: JSON.stringify({ hb: 1, note: 'Filtering the month against your company profile', step: 1, of: 7, at: new Date().toISOString() }),\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [640, 320],
+      "id": "95650000-0000-4000-8000-000000000047",
+      "name": "Note Mail Listed"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const plan = $('Plan Run').first().json;\nreturn [{ json: {\n  runId: plan.runId,\n  errorSummary: JSON.stringify({ hb: 1, note: 'Checking which conversations contain company news', step: 2, of: 7, at: new Date().toISOString() }),\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1300, 320],
+      "id": "95650000-0000-4000-8000-000000000048",
+      "name": "Note Classifying"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const plan = $('Plan Run').first().json;\nreturn [{ json: {\n  runId: plan.runId,\n  errorSummary: JSON.stringify({ hb: 1, note: 'Reading the most relevant email threads', step: 3, of: 7, at: new Date().toISOString() }),\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1960, 320],
+      "id": "95650000-0000-4000-8000-000000000049",
+      "name": "Note Reading Threads"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const plan = $('Plan Run').first().json;\nreturn [{ json: {\n  runId: plan.runId,\n  errorSummary: JSON.stringify({ hb: 1, note: 'Choosing what belongs in the update', step: 4, of: 7, at: new Date().toISOString() }),\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2840, 320],
+      "id": "95650000-0000-4000-8000-000000000050",
+      "name": "Note Choosing Facts"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const plan = $('Plan Run').first().json;\nreturn [{ json: {\n  runId: plan.runId,\n  errorSummary: JSON.stringify({ hb: 1, note: 'Writing the monthly update', step: 5, of: 7, at: new Date().toISOString() }),\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3500, 320],
+      "id": "95650000-0000-4000-8000-000000000051",
+      "name": "Note Writing Update"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const plan = $('Plan Run').first().json;\nreturn [{ json: {\n  runId: plan.runId,\n  errorSummary: JSON.stringify({ hb: 1, note: 'Checking every claim against the email', step: 6, of: 7, at: new Date().toISOString() }),\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3940, 320],
+      "id": "95650000-0000-4000-8000-000000000052",
+      "name": "Note Checking Claims"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "value": "update_runs",
+          "mode": "name"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "runId",
+              "condition": "eq",
+              "keyValue": "={{ $json.runId }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "errorSummary": "={{ $json.errorSummary }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "runId",
+              "displayName": "runId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "errorSummary",
+              "displayName": "errorSummary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [4160, 500],
+      "id": "95650000-0000-4000-8000-000000000053",
+      "name": "Save Progress",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
     }
   ],
   "pinData": {},
@@ -1761,6 +1901,11 @@
       "main": [
         [
           {
+            "node": "Note Mail Listed",
+            "type": "main",
+            "index": 0
+          },
+          {
             "node": "Any Messages?",
             "type": "main",
             "index": 0
@@ -1812,6 +1957,11 @@
       "main": [
         [
           {
+            "node": "Note Classifying",
+            "type": "main",
+            "index": 0
+          },
+          {
             "node": "Classify With Claude",
             "type": "main",
             "index": 0
@@ -1852,6 +2002,11 @@
       "main": [
         [
           {
+            "node": "Note Reading Threads",
+            "type": "main",
+            "index": 0
+          },
+          {
             "node": "Extract Thread",
             "type": "main",
             "index": 0
@@ -1880,6 +2035,11 @@
     "Collect Evidence": {
       "main": [
         [
+          {
+            "node": "Note Choosing Facts",
+            "type": "main",
+            "index": 0
+          },
           {
             "node": "Any Evidence?",
             "type": "main",
@@ -1932,6 +2092,11 @@
       "main": [
         [
           {
+            "node": "Note Writing Update",
+            "type": "main",
+            "index": 0
+          },
+          {
             "node": "Draft With Claude",
             "type": "main",
             "index": 0
@@ -1953,6 +2118,11 @@
     "Build Verify Request": {
       "main": [
         [
+          {
+            "node": "Note Checking Claims",
+            "type": "main",
+            "index": 0
+          },
           {
             "node": "Verify With Claude",
             "type": "main",
@@ -2054,6 +2224,24 @@
           }
         ]
       ]
+    },
+    "Note Mail Listed": {
+      "main": [[{ "node": "Save Progress", "type": "main", "index": 0 }]]
+    },
+    "Note Classifying": {
+      "main": [[{ "node": "Save Progress", "type": "main", "index": 0 }]]
+    },
+    "Note Reading Threads": {
+      "main": [[{ "node": "Save Progress", "type": "main", "index": 0 }]]
+    },
+    "Note Choosing Facts": {
+      "main": [[{ "node": "Save Progress", "type": "main", "index": 0 }]]
+    },
+    "Note Writing Update": {
+      "main": [[{ "node": "Save Progress", "type": "main", "index": 0 }]]
+    },
+    "Note Checking Claims": {
+      "main": [[{ "node": "Save Progress", "type": "main", "index": 0 }]]
     }
   },
   "active": false,

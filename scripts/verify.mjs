@@ -112,6 +112,9 @@ run("agent card and settings API", process.execPath, [
 ]);
 run("agent card frontend", process.execPath, ["scripts/test-agent-ui.mjs"]);
 run("article progress frontend", process.execPath, ["scripts/test-article-ui.mjs"]);
+run("monthly update progress frontend", process.execPath, [
+  "scripts/test-monthly-update-ui.mjs",
+]);
 run("agent-scoped skill bundle", process.execPath, [
   "scripts/test-agent-scoped-skills.mjs",
 ]);

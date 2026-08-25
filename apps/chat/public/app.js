@@ -2107,6 +2107,7 @@
       // rather than making the new bar wait for the next scheduled poll.
       if (activeAgentId === FUNDING_AGENT_ID) {
         void refreshScanProgress();
+        void refreshMonthlyUpdateProgress();
       }
       if (activeAgentId === "marketing") {
         void refreshArticlePanel();
@@ -2133,6 +2134,7 @@
   // instruction would sit in the transcript for ever looking like the owner
   // wrote it. How to say it belongs in the skill, not in a string here.
   const SCAN_RESULT_PROMPT = "What did the funding search find?";
+  const MONTHLY_UPDATE_RESULT_PROMPT = "What does the monthly update say?";
   // A scheduled search runs at 11am with nobody watching, so waiting for a tab
   // that saw it running meant the owner still had to ask. Delivery is now
   // decided by what this browser has already read out, kept where it survives
@@ -2146,9 +2148,12 @@
   const DELIVER_WITHIN_MS = 12 * 60 * 60 * 1000;
   const DELIVERED_REMEMBERED = 60;
   let scanPollTimer = null;
+  let monthlyUpdatePollTimer = null;
   let resultsPollTimer = null;
   let scanWasRunning = false;
   let scanDoneUntil = 0;
+  let monthlyUpdateWasRunning = false;
+  let monthlyUpdateDoneUntil = 0;
   let deliveringScan = false;
   // A floor under the whole mechanism. Marking the search as read handles the
   // ordinary case, but it only works while finishedAt holds still; anything
@@ -2156,6 +2161,7 @@
   // conversation into fifty read-outs. One a minute, whatever else is wrong.
   let lastDeliveredAt = 0;
   let scanCard = null;
+  let monthlyUpdateCard = null;
 
   function deliveredList() {
     try {
@@ -2239,6 +2245,24 @@
       return false;
     }
     return !alreadyDelivered(`scan:${finishedAt}`);
+  }
+
+  function monthlyUpdateDeliveryId(update) {
+    const runId = String(update.runId ?? "").trim();
+    const finishedAt = String(update.finishedAt ?? "").trim();
+    return runId ? `monthly:${runId}` : `monthly:${finishedAt}`;
+  }
+
+  function worthDeliveringMonthlyUpdate(update) {
+    const finishedAt = String(update.finishedAt ?? "");
+    if (update.interrupted === true || finishedAt === "") {
+      return false;
+    }
+    const finished = Date.parse(finishedAt);
+    if (Number.isNaN(finished) || Date.now() - finished > DELIVER_WITHIN_MS) {
+      return false;
+    }
+    return !alreadyDelivered(monthlyUpdateDeliveryId(update));
   }
 
   // --- tasks that ran on a schedule ---------------------------------------
@@ -2407,6 +2431,123 @@
     attachScanCard(card);
   }
 
+  function monthlyUpdateProgressCard() {
+    if (monthlyUpdateCard) {
+      return monthlyUpdateCard;
+    }
+    const card = document.createElement("div");
+    card.className = "scan-progress";
+    card.id = "monthly-update-progress";
+    card.setAttribute("role", "status");
+    card.setAttribute("aria-live", "polite");
+    card.hidden = true;
+
+    const spinner = document.createElement("div");
+    spinner.className = "scan-progress__spinner";
+    spinner.setAttribute("aria-hidden", "true");
+
+    const body = document.createElement("div");
+    body.className = "scan-progress__body";
+    const note = document.createElement("p");
+    note.className = "scan-progress__note";
+    const track = document.createElement("div");
+    track.className = "scan-progress__track";
+    track.setAttribute("aria-hidden", "true");
+    const fill = document.createElement("div");
+    fill.className = "scan-progress__fill";
+    track.append(fill);
+    body.append(note, track);
+
+    const meta = document.createElement("p");
+    meta.className = "scan-progress__meta";
+
+    card.append(spinner, body, meta);
+    monthlyUpdateCard = { card, note, fill, meta };
+    return monthlyUpdateCard;
+  }
+
+  function attachMonthlyUpdateCard(card) {
+    if (card.parentElement !== elements.conversation) {
+      elements.conversation.append(card);
+      return;
+    }
+    if (elements.conversation.lastElementChild !== card) {
+      elements.conversation.append(card);
+    }
+  }
+
+  function hideMonthlyUpdateCard() {
+    if (monthlyUpdateCard) {
+      monthlyUpdateCard.card.hidden = true;
+      monthlyUpdateCard.card.remove();
+    }
+  }
+
+  function renderMonthlyUpdateProgress(update) {
+    if (!update || update.available === false || update.hasRun === false) {
+      hideMonthlyUpdateCard();
+      return;
+    }
+    const { card, note, fill, meta } = monthlyUpdateProgressCard();
+
+    if (update.running === true) {
+      const wasHidden = card.hidden;
+      monthlyUpdateWasRunning = true;
+      card.classList.remove("scan-progress--done");
+      const total = Number(update.of) || 7;
+      const step = Number(update.step) || 0;
+      const percent = Math.max(
+        4,
+        Math.min(96, Math.round((step / total) * 100)),
+      );
+      fill.style.width = `${percent}%`;
+      note.textContent = String(update.note ?? "Preparing the monthly update…");
+      const started = Number(update.startedMinutesAgo);
+      const quiet = Number(update.updatedMinutesAgo);
+      let text = Number.isFinite(started) ? `Started ${started} min ago` : "";
+      if (Number.isFinite(quiet) && quiet >= 3) {
+        text += ` · last update ${quiet} min ago`;
+      }
+      meta.textContent = text;
+      card.hidden = false;
+      attachMonthlyUpdateCard(card);
+      if (wasHidden) {
+        scrollConversation();
+      }
+      return;
+    }
+
+    if (monthlyUpdateWasRunning) {
+      monthlyUpdateWasRunning = false;
+      monthlyUpdateDoneUntil = Date.now() + 90_000;
+    }
+    if (worthDeliveringMonthlyUpdate(update)) {
+      monthlyUpdateDoneUntil = Date.now() + 90_000;
+      void deliverViaAgent(
+        monthlyUpdateDeliveryId(update),
+        MONTHLY_UPDATE_RESULT_PROMPT,
+      );
+    }
+    if (Date.now() >= monthlyUpdateDoneUntil) {
+      hideMonthlyUpdateCard();
+      return;
+    }
+
+    card.classList.add("scan-progress--done");
+    fill.style.width = "100%";
+    const month = String(update.monthLabel ?? "").trim();
+    const status = String(update.status ?? "");
+    note.textContent =
+      update.interrupted === true
+        ? "The monthly update stopped without finishing. Ask me to run it again."
+        : status === "failed"
+          ? `${month || "The monthly update"} could not be completed.`
+          : `${month || "The monthly update"} is ready.`;
+    meta.textContent = "";
+    card.hidden = false;
+    attachMonthlyUpdateCard(card);
+  }
+
   // Sending re-polls when it finishes, and an unmarked search would deliver
   // again on that poll, and again on the poll after that one — fifty read-outs
   // in four seconds, each one triggering the next. So the search is marked
@@ -2433,6 +2574,24 @@
     }
   }
 
+  async function refreshMonthlyUpdateProgress() {
+    if (activeAgentId !== FUNDING_AGENT_ID) {
+      return;
+    }
+    try {
+      const response = await fetch("/api/monthly-update-progress", {
+        headers: { Accept: "application/json" },
+      });
+      if (!response.ok) {
+        hideMonthlyUpdateCard();
+        return;
+      }
+      renderMonthlyUpdateProgress(await response.json());
+    } catch {
+      hideMonthlyUpdateCard();
+    }
+  }
+
   function syncScanProgress() {
     // Scheduled work belongs to every agent, not just this one, so its poll
     // runs whoever is on screen. The funding progress bar is Investment's
@@ -2451,6 +2610,12 @@
         }, SCAN_POLL_MS);
       }
       void refreshScanProgress();
+      if (monthlyUpdatePollTimer === null) {
+        monthlyUpdatePollTimer = window.setInterval(() => {
+          void refreshMonthlyUpdateProgress();
+        }, SCAN_POLL_MS);
+      }
+      void refreshMonthlyUpdateProgress();
       return;
     }
     if (scanPollTimer !== null) {
@@ -2460,11 +2625,19 @@
     scanWasRunning = false;
     scanDoneUntil = 0;
     hideScanCard();
+    if (monthlyUpdatePollTimer !== null) {
+      window.clearInterval(monthlyUpdatePollTimer);
+      monthlyUpdatePollTimer = null;
+    }
+    monthlyUpdateWasRunning = false;
+    monthlyUpdateDoneUntil = 0;
+    hideMonthlyUpdateCard();
   }
 
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden) {
       void refreshScanProgress();
+      void refreshMonthlyUpdateProgress();
       void refreshScheduleResults();
       void refreshArticlePanel();
     }

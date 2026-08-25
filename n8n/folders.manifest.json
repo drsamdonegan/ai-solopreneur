@@ -127,6 +127,7 @@
         "66-tool-get-monthly-update.json",
         "69-tool-check-gmail-connection.json",
         "67-tool-set-company-profile.json",
+        "68-internal-monthly-update-progress.json",
         "74-run-monthly-update.json",
         "75-run-thread-extraction.json"
       ]
