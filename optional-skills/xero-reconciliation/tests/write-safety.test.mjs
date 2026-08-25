@@ -69,9 +69,10 @@ const wrongCustomRead = runCode(readCustomOrganisationSrc, {
   input: [{ statusCode: 200, body: { Organisations: [{ OrganisationID: "org-2", Name: "Other" }] } }],
 })[0];
 check("cross-organisation read/write credentials fail closed", wrongCustomRead.readReady === false && wrongCustomRead.readProblem === "organisation-mismatch");
-const catalogueFetches = ["Fetch Current Accounts", "Fetch Current Tax Rates", "Fetch Current Contacts"]
+const catalogueFetches = ["Fetch Current Organisation", "Fetch Current Accounts", "Fetch Current Tax Rates", "Fetch Current Contacts"]
   .map((name) => prepare.nodes.find((entry) => entry.name === name));
 check("catalogue calls omit explicit tenant headers for a Custom Connection", catalogueFetches.every((entry) => String(entry.parameters.sendHeaders).includes("connectionType !== 'custom'")));
+check("the lock-date check reads Organisation with the read-only credential", catalogueFetches[0].parameters.url.endsWith("/Organisation") && catalogueFetches[0].credentials.oAuth2Api.name === "Xero (read-only)");
 
 const select = (rows, ids = ["s1"], scanOver = {}, lineOver = {}) => runCode(selectSrc, {
   nodes: {
@@ -86,6 +87,11 @@ const select = (rows, ids = ["s1"], scanOver = {}, lineOver = {}) => runCode(sel
 const reasonFor = (out, id = "s1") => (out.refusals.find((r) => r.suggestionId === id) ?? {}).reason;
 const catalogue = (selected = clean, over = {}) => runCode(catalogueSrc, { nodes: {
   "Read Write Probe": [{ ...selected, tenantId: "tenant-1" }],
+  "Fetch Current Organisation": [{ statusCode: over.organisationStatus ?? 200, body: { Organisations: over.organisations ?? [{
+    OrganisationID: "tenant-1", Name: "Acme", OrganisationStatus: "ACTIVE",
+    ...(over.periodLockDate === undefined ? {} : { PeriodLockDate: over.periodLockDate }),
+    ...(over.endOfYearLockDate === undefined ? {} : { EndOfYearLockDate: over.endOfYearLockDate }),
+  }] } }],
   "Fetch Current Accounts": [{ statusCode: over.accountStatus ?? 200, body: { Accounts: over.accounts ?? [
     { AccountID: "bank-1", Code: "090", Name: "Business Account", Type: "BANK", Status: "ACTIVE" },
     { AccountID: "expense-429", Code: "429", Name: "Travel - National", Type: "EXPENSE", Status: "ACTIVE" },
@@ -178,6 +184,13 @@ check("archived bank account refuses the item", reasonFor(catalogue(clean, { acc
   { AccountID: "expense-429", Code: "429", Name: "Travel - National", Type: "EXPENSE", Status: "ACTIVE" },
 ] })) === "BANK_ACCOUNT_CHANGED");
 check("unavailable current catalogue refuses closed", reasonFor(catalogue(clean, { accountStatus: 503 })) === "CURRENT_CATALOGUE_UNAVAILABLE");
+check("unavailable organisation details refuse closed", reasonFor(catalogue(clean, { organisationStatus: 503 })) === "CURRENT_CATALOGUE_UNAVAILABLE");
+check("an inactive organisation refuses the item", reasonFor(catalogue(clean, { organisations: [{ OrganisationID: "tenant-1", OrganisationStatus: "SUSPENDED" }] })) === "ORGANISATION_UNAVAILABLE");
+check("a transaction on the period lock date is refused", reasonFor(catalogue(clean, { periodLockDate: "/Date(1784073600000+0000)/" })) === "LOCKED_PERIOD");
+check("a transaction before the period lock date is refused", reasonFor(catalogue(clean, { periodLockDate: "2026-07-31" })) === "LOCKED_PERIOD");
+check("the later end-of-year lock date also blocks", reasonFor(catalogue(clean, { periodLockDate: "2026-06-30", endOfYearLockDate: "2026-07-31" })) === "LOCKED_PERIOD");
+check("a transaction after every lock date remains eligible", catalogue(clean, { periodLockDate: "2026-06-30", endOfYearLockDate: "2026-05-31" }).toCreate.length === 1);
+check("an unreadable lock date fails closed", reasonFor(catalogue(clean, { periodLockDate: "not-a-date" })) === "LOCK_DATE_UNREADABLE");
 
 // 8 — a reference already in Xero is adopted, never posted again.
 const collected = runCode(collectSrc, {

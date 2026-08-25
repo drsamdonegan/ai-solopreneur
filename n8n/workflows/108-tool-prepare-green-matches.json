@@ -3,7 +3,7 @@
   "nodes": [
     {
       "parameters": {
-        "content": "## Prepare transactions in Xero\n\nThe only thing in this skill that writes to Xero, and all it ever does is\ncreate new unreconciled transactions so the user can tick them off. It\nnever marks anything reconciled, never edits an existing record, and never\ndeletes one.\n\nEvery row is checked again here: accepted by name, from the latest review,\nnot already created, not flagged for a person, and hashing to exactly what\nthe user saw when they accepted it. Anything else is refused and reported\nrather than quietly skipped.\n\nIf Xero does not answer, nothing is retried blind. The next run looks the\nreferences up first.",
+        "content": "## Prepare transactions in Xero\n\nThe only thing in this skill that writes to Xero, and all it ever does is\ncreate new unreconciled transactions so the user can tick them off. It\nnever marks anything reconciled, never edits an existing record, and never\ndeletes one.\n\nEvery row is checked again here: accepted by name, from the latest review,\nnot already created, not flagged for a person, outside every Xero lock date,\nand hashing to exactly what the user saw when they accepted it. Anything\nelse is refused and reported rather than quietly skipped.\n\nIf Xero does not answer, nothing is retried blind. The next run looks the\nreferences up first.",
         "height": 440,
         "width": 460,
         "color": 3
@@ -833,6 +833,51 @@
     },
     {
       "parameters": {
+        "url": "https://api.xero.com/api.xro/2.0/Organisation",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "sendHeaders": "={{ $('Effective Read Connection').first().json.connectionType !== 'custom' }}",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Xero-tenant-id",
+              "value": "={{ $('Effective Read Connection').first().json.readTenantId }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        960,
+        -60
+      ],
+      "id": "97900108-0000-4000-8000-000000000150",
+      "name": "Fetch Current Organisation",
+      "credentials": {
+        "oAuth2Api": {
+          "id": "phase19XeroReadonly",
+          "name": "Xero (read-only)"
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
         "url": "https://api.xero.com/api.xro/2.0/Accounts",
         "authentication": "genericCredentialType",
         "genericAuthType": "oAuth2Api",
@@ -968,7 +1013,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const selected=$('Read Write Probe').first().json;\nconst response=(name)=>{try{return $(name).first().json??{};}catch{return{};}};\nconst accountsRaw=response('Fetch Current Accounts'),taxRaw=response('Fetch Current Tax Rates'),contactsRaw=response('Fetch Current Contacts');\nconst statuses=[accountsRaw,taxRaw,contactsRaw].map((row)=>Number(row.statusCode??0));\nconst refused=[...(selected.refusals??[])],toCreate=[];\nconst refuse=(entry,reason,message)=>refused.push({suggestionId:entry.suggestionId,reason,message});\nif(statuses.some((status)=>status!==200)){\n for(const entry of selected.toCreate??[])refuse(entry,'CURRENT_CATALOGUE_UNAVAILABLE','The current Xero accounts, tax rates, or contacts could not be rechecked, so nothing was created.');\n}else{\n const accounts=accountsRaw.body?.Accounts??[],taxRates=taxRaw.body?.TaxRates??[],contacts=contactsRaw.body?.Contacts??[];\n const coding=new Map(accounts.filter((account)=>String(account.Status)==='ACTIVE'&&String(account.Type)!=='BANK').map((account)=>[String(account.Code),String(account.Name)]));\n const banks=new Set(accounts.filter((account)=>String(account.Status)==='ACTIVE'&&String(account.Type)==='BANK').map((account)=>String(account.AccountID)));\n const taxes=new Set(taxRates.filter((rate)=>String(rate.Status??'ACTIVE')==='ACTIVE').map((rate)=>String(rate.TaxType)));\n const contactIds=new Set(contacts.filter((contact)=>String(contact.ContactStatus??'ACTIVE')==='ACTIVE').map((contact)=>String(contact.ContactID)));\n for(const entry of selected.toCreate??[]){const payload=entry.payload??{},line=payload.LineItems?.[0]??{};\n  if(!banks.has(String(payload.BankAccount?.AccountID??''))){refuse(entry,'BANK_ACCOUNT_CHANGED','The captured bank account is no longer an active Xero bank account.');continue;}\n  if(coding.get(String(line.AccountCode??''))!==String(entry.approvedAccountName??'')){refuse(entry,'ACCOUNT_CHANGED','The approved account code and name are no longer an exact active Xero catalogue pair.');continue;}\n  if(!taxes.has(String(line.TaxType??''))){refuse(entry,'TAX_CHANGED','The approved tax type is no longer an active Xero tax value.');continue;}\n  if(!contactIds.has(String(payload.Contact?.ContactID??''))){refuse(entry,'CONTACT_CHANGED','The approved existing Xero contact could not be revalidated.');continue;}\n  toCreate.push(entry);\n }\n}\nconst chunks=[];for(let i=0;i<toCreate.length;i+=8)chunks.push(toCreate.slice(i,i+8).map((entry)=>entry.reference));\nreturn [{json:{...selected,toCreate,refusals:refused,anythingToCreate:toCreate.length>0,referenceChunks:chunks.map((chunk)=>chunk.map((ref)=>`Reference==\"${ref}\"`).join(' OR '))}}];"
+        "jsCode": "const selected=$('Read Write Probe').first().json;\nconst response=(name)=>{try{return $(name).first().json??{};}catch{return{};}};\nconst organisationRaw=response('Fetch Current Organisation'),accountsRaw=response('Fetch Current Accounts'),taxRaw=response('Fetch Current Tax Rates'),contactsRaw=response('Fetch Current Contacts');\nconst statuses=[organisationRaw,accountsRaw,taxRaw,contactsRaw].map((row)=>Number(row.statusCode??0));\nconst refused=[...(selected.refusals??[])],toCreate=[];\nconst refuse=(entry,reason,message)=>refused.push({suggestionId:entry.suggestionId,reason,message});\nconst parseXeroDate=(value)=>{const raw=String(value??'').trim();if(!raw)return null;const match=raw.match(/\\/Date\\((-?\\d+)/);if(match){const parsed=Number(match[1]);return Number.isFinite(parsed)?parsed:NaN;}const parsed=Date.parse(raw);return Number.isFinite(parsed)?parsed:NaN;};\nif(statuses.some((status)=>status!==200)){\n for(const entry of selected.toCreate??[])refuse(entry,'CURRENT_CATALOGUE_UNAVAILABLE','The current Xero organisation, accounts, tax rates, or contacts could not be rechecked, so nothing was created.');\n}else{\n const organisation=organisationRaw.body?.Organisations?.[0]??null,accounts=accountsRaw.body?.Accounts??[],taxRates=taxRaw.body?.TaxRates??[],contacts=contactsRaw.body?.Contacts??[];\n const rawLockDates=[organisation?.PeriodLockDate,organisation?.EndOfYearLockDate].filter((value)=>String(value??'').trim());\n const parsedLockDates=rawLockDates.map(parseXeroDate),lockDateUnreadable=parsedLockDates.some((value)=>!Number.isFinite(value));\n const effectiveLockDate=parsedLockDates.filter(Number.isFinite).reduce((latest,value)=>Math.max(latest,value),0);\n const coding=new Map(accounts.filter((account)=>String(account.Status)==='ACTIVE'&&String(account.Type)!=='BANK').map((account)=>[String(account.Code),String(account.Name)]));\n const banks=new Set(accounts.filter((account)=>String(account.Status)==='ACTIVE'&&String(account.Type)==='BANK').map((account)=>String(account.AccountID)));\n const taxes=new Set(taxRates.filter((rate)=>String(rate.Status??'ACTIVE')==='ACTIVE').map((rate)=>String(rate.TaxType)));\n const contactIds=new Set(contacts.filter((contact)=>String(contact.ContactStatus??'ACTIVE')==='ACTIVE').map((contact)=>String(contact.ContactID)));\n for(const entry of selected.toCreate??[]){const payload=entry.payload??{},line=payload.LineItems?.[0]??{};\n  if(!organisation||String(organisation.OrganisationStatus??'ACTIVE')!=='ACTIVE'){refuse(entry,'ORGANISATION_UNAVAILABLE','The Xero organisation is not currently active and could not be revalidated.');continue;}\n  if(lockDateUnreadable){refuse(entry,'LOCK_DATE_UNREADABLE','Xero returned a lock date that could not be verified, so the transaction was left for a person.');continue;}\n  const transactionDate=Date.parse(String(payload.Date??'').slice(0,10)+'T00:00:00.000Z');\n  if(!Number.isFinite(transactionDate)){refuse(entry,'TRANSACTION_DATE_INVALID','The approved transaction date could not be verified.');continue;}\n  if(effectiveLockDate&&transactionDate<=effectiveLockDate){refuse(entry,'LOCKED_PERIOD','The transaction is on or before the current Xero lock date, so it must be handled by the bookkeeper or accountant.');continue;}\n  if(!banks.has(String(payload.BankAccount?.AccountID??''))){refuse(entry,'BANK_ACCOUNT_CHANGED','The captured bank account is no longer an active Xero bank account.');continue;}\n  if(coding.get(String(line.AccountCode??''))!==String(entry.approvedAccountName??'')){refuse(entry,'ACCOUNT_CHANGED','The approved account code and name are no longer an exact active Xero catalogue pair.');continue;}\n  if(!taxes.has(String(line.TaxType??''))){refuse(entry,'TAX_CHANGED','The approved tax type is no longer an active Xero tax value.');continue;}\n  if(!contactIds.has(String(payload.Contact?.ContactID??''))){refuse(entry,'CONTACT_CHANGED','The approved existing Xero contact could not be revalidated.');continue;}\n  toCreate.push(entry);\n }\n}\nconst chunks=[];for(let i=0;i<toCreate.length;i+=8)chunks.push(toCreate.slice(i,i+8).map((entry)=>entry.reference));\nreturn [{json:{...selected,toCreate,refusals:refused,anythingToCreate:toCreate.length>0,referenceChunks:chunks.map((chunk)=>chunk.map((ref)=>`Reference==\"${ref}\"`).join(' OR '))}}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -1646,7 +1691,7 @@
       "main": [
         [
           {
-            "node": "Fetch Current Accounts",
+            "node": "Fetch Current Organisation",
             "type": "main",
             "index": 0
           }
@@ -1654,6 +1699,17 @@
         [
           {
             "node": "Shape Read Context Needed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Current Organisation": {
+      "main": [
+        [
+          {
+            "node": "Fetch Current Accounts",
             "type": "main",
             "index": 0
           }
@@ -1689,7 +1745,7 @@
     "toolRisk": "bounded_external_write",
     "authorization": "explicit-accepted-suggestions-and-per-batch-user-approval",
     "externalWrite": "xero-banktransactions-create-only",
-    "externalRead": "xero-connections-and-reference-lookup",
+    "externalRead": "xero-connections-organisation-catalogue-and-reference-lookup",
     "maximumCreatesPerRun": 20,
     "dataSource": "approved-suggestions-plus-fresh-browser-capture"
   },

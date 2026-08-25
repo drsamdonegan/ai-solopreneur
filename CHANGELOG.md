@@ -24,8 +24,9 @@ versioning for local workshop releases.
   credential the learner consents to on its own: it creates accepted suggestions
   as new unreconciled Xero transactions. It never reconciles, edits or deletes
   anything, and it refuses any row that changed after the learner accepted it.
-- Freshness, source-hash, existing-ContactID, exact catalogue, duplicate-reference,
-  structural-case, and confidence gates that fail closed before any Xero create.
+- Freshness, source-hash, live period and end-of-year lock-date, existing-ContactID,
+  exact catalogue, duplicate-reference, structural-case, and confidence gates
+  that fail closed before any Xero create.
 - Receipt evidence from the learner's own mailbox when the Monthly Update
   skill's `Gmail (read-only)` credential happens to be connected. Reviews work
   unchanged without it.

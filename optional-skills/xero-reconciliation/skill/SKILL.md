@@ -51,7 +51,7 @@ The most useful thing to have saved is their own coding rules in their own words
 
 ## Preparing transactions in Xero
 
-`prepare_green_matches` is the only thing here that writes to Xero, and all it ever does is create new unreconciled transactions for high-certainty suggestions the user accepted in this conversation. It rechecks the latest capture, line source hash, Xero screen state, confidence floors, approval hash, and duplicate reference. It also re-reads Xero immediately before creation and refuses an archived or changed bank account, ContactID, account code/name pair, or tax type. Each created item is coded and ready for Match or Find & Match on the captured statement line. Do not promise which Xero tab will display it.
+`prepare_green_matches` is the only thing here that writes to Xero, and all it ever does is create new unreconciled transactions for high-certainty suggestions the user accepted in this conversation. It rechecks the latest capture, line source hash, Xero screen state, confidence floors, approval hash, duplicate reference, and the live period and end-of-year lock dates. It also re-reads Xero immediately before creation and refuses an archived or changed bank account, ContactID, account code/name pair, or tax type. A transaction on or before either lock date remains for the user's bookkeeper or accountant. Each created item is coded and ready for Match or Find & Match on the captured statement line. Do not promise which Xero tab will display it.
 
 It needs the second credential named exactly `Xero (read-write)`. If the tool says it is not connected, include `http://localhost:5678/home/credentials` again and tell them this permission screen says view **and update**, unlike the first one. That difference is deliberate.
 

@@ -126,6 +126,7 @@ Show the exact `ready_to_prepare` items in chat and explicitly approve the batch
 - the item is from the latest finished review and was accepted;
 - the newest complete scan for that bank account is no more than 30 minutes old;
 - the statement line is still active and its SHA-256 source hash is unchanged;
+- the transaction date is after both the current Xero period lock date and end-of-year lock date;
 - Xero still shows a Create state, not a match or unclear state;
 - all three confidence thresholds still pass;
 - the read-only credential can re-read the same tenant, and the bank account,
@@ -161,5 +162,7 @@ Workflow 107 ships disabled. A scheduled review still needs a fresh complete cap
 **Write credential missing:** everything except preparation still works. Add `Xero (read-write)` only when you want the creation lane.
 
 **Source changed or line disappeared:** recapture, rerun the review, and approve the new result. The old approval is intentionally invalid.
+
+**Locked period:** the agent will not create a transaction dated on or before Xero's live period or end-of-year lock date. The bookkeeper or accountant must handle that item in Xero or deliberately change the lock date themselves.
 
 **Everything needs you:** add company context and explicit bookkeeping rules, then check that matching Xero contacts exist. The agent will not create contacts or promote a name-only guess.
