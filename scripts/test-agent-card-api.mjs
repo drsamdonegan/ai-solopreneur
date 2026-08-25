@@ -92,7 +92,7 @@ try {
   assert.equal(result.body.agents[0].syncRequired, false);
   assert.deepEqual(
     result.body.agents.map((agent) => agent.skills.length),
-    [1, 2, 2, 1, 0],
+    [1, 2, 2, 2, 0],
   );
   assert.equal(result.body.agents[0].skills[0].id, "meeting-to-actions");
   assert.equal(result.body.agents[0].skills[0].installed, true);
@@ -112,7 +112,7 @@ try {
   );
   result = await jsonRequest("/api/agents");
   assert.equal(result.body.agents[0].syncRequired, true);
-  assert.equal(result.body.agents.flatMap((agent) => agent.skills).length, 6);
+  assert.equal(result.body.agents.flatMap((agent) => agent.skills).length, 7);
   assert(warnings.length >= 2 && warnings.length <= 3);
 
   result = await jsonRequest("/api/agent-settings");
@@ -171,7 +171,7 @@ try {
     undefined,
     skillPacksDirectory,
   );
-  assert.deepEqual(emptyCards.map((agent) => agent.skills.length), [1, 2, 2, 1, 0]);
+  assert.deepEqual(emptyCards.map((agent) => agent.skills.length), [1, 2, 2, 2, 0]);
   assert(emptyCards.flatMap((agent) => agent.skills).every((pack) => !pack.installed));
   assert(emptyCards.every((agent) => agent.syncRequired));
 

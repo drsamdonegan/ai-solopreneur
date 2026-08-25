@@ -20,6 +20,7 @@ const ICONS = new Set([
   "globe",
   "grant",
   "ledger",
+  "mailUpdate",
   "profile",
   "search",
 ]);

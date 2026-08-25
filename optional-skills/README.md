@@ -20,7 +20,8 @@ edits together and is safe to run twice.
 | Sales | `linkedin-prospect-search` | Role/sector/location/company-size prospect search | Crustdata |
 | Marketing | `domain-research` | Free website research; paid search evidence is an optional extension | Anthropic; DataForSEO only for the extension |
 | Marketing | `seo-aeo-article-writer` | Grounded SEO/AEO article writing; installs Domain Research first | Anthropic |
-| Investment | `funding-and-investor-updates` | Funding Radar; Monthly Update is an optional extension | Anthropic; read-only Gmail for the extension |
+| Investment | `funding-and-investor-updates` | Funding Radar | Anthropic |
+| Investment | `monthly-update` | Reads a month of email and writes the company update from it | Anthropic; read-only Gmail |
 
 Bookkeeping intentionally has no packaged skill yet. It remains a real,
 separately scoped agent and must say that no accounting connector is installed.
@@ -36,7 +37,7 @@ one agent card. Nothing has been deleted: the underlying module catalogue is:
 | [`linkedin-profile-lookup`](linkedin-profile-lookup/) | LinkedIn Profile Lookup core |
 | [`linkedin-prospect-search`](linkedin-prospect-search/) | LinkedIn Prospect Search core |
 | [`funding-radar`](funding-radar/) | Funding & Investor Updates core |
-| [`monthly-update`](monthly-update/) | Funding & Investor Updates optional extension |
+| [`monthly-update`](monthly-update/) | Monthly Update core |
 | [`scheduler`](scheduler/) | Global add-on |
 | [`telegram-trigger`](telegram-trigger/) | Cloud delivery add-on |
 
@@ -66,7 +67,7 @@ The package command installs core capability only. Add its named optional
 extensions when you want them:
 
 ```bash
-npm run add-skill -- funding-and-investor-updates --with-extensions
+npm run add-skill -- domain-research --with-extensions
 ```
 
 Existing module IDs such as `funding-radar` still work, so old learner notes
