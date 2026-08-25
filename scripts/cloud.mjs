@@ -16,7 +16,6 @@
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
 import {
-  cpSync,
   existsSync,
   mkdirSync,
   readFileSync,
@@ -29,6 +28,7 @@ import { randomBytes } from "node:crypto";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runConfigHelp, runSetup, setupIsNeeded } from "./cloud-setup.mjs";
+import { seedCloudSkills } from "./cloud-skills.mjs";
 import { primeAgent, syncWorkflows } from "./cloud-workflows.mjs";
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -521,30 +521,6 @@ function ensureDataDirs() {
 }
 
 /**
- * Skills ship in the image but are edited by the learner, so the working copy
- * has to live on the volume. Seeding only fills gaps: an existing folder is
- * the learner's and is never overwritten by a deploy.
- */
-function seedSkills() {
-  if (!existsSync(paths.repoSkillsDir)) {
-    return [];
-  }
-  const seeded = [];
-  for (const entry of readdirSync(paths.repoSkillsDir, { withFileTypes: true })) {
-    if (!entry.isDirectory()) {
-      continue;
-    }
-    const target = join(paths.skillsDir, entry.name);
-    if (existsSync(target)) {
-      continue;
-    }
-    cpSync(join(paths.repoSkillsDir, entry.name), target, { recursive: true });
-    seeded.push(entry.name);
-  }
-  return seeded;
-}
-
-/**
  * Fills in metadata keys that a volume's skills predate.
  *
  * Seeding above deliberately never overwrites a learner's skill folder. That is
@@ -825,15 +801,6 @@ async function main() {
   }
 
   ensureDataDirs();
-  const seeded = seedSkills();
-  if (seeded.length > 0) {
-    print(`  Installed skills for the first time: ${seeded.join(", ")}`);
-  }
-  const migrated = migrateSkillMetadata();
-  if (migrated.length > 0) {
-    print(`  Updated saved skills to the current format: ${migrated.join(", ")}`);
-  }
-
   const cfg = config();
   print(`  Storage:  ${paths.dataDir}`);
   print(`  Workshop: ${cfg.n8nPublicUrl}  (from ${cfg.n8nPublicUrlSource})`);
@@ -867,6 +834,26 @@ async function main() {
         : "  Starting a new, empty agent.",
     );
     print("");
+  }
+
+  // Setup can restore an older enabled.txt after the image was built. Seed
+  // afterwards so installed source packages become live on the first cloud
+  // start as well as on later deploys.
+  const seeded = seedCloudSkills({
+    repoSkillsDir: paths.repoSkillsDir,
+    skillsDir: paths.skillsDir,
+  });
+  if (seeded.directories.length > 0) {
+    print(
+      `  Installed skills for the first time: ${seeded.directories.join(", ")}`,
+    );
+  }
+  if (seeded.enabled.length > 0) {
+    print(`  Enabled skills installed by this deploy: ${seeded.enabled.join(", ")}`);
+  }
+  const migrated = migrateSkillMetadata();
+  if (migrated.length > 0) {
+    print(`  Updated saved skills to the current format: ${migrated.join(", ")}`);
   }
 
   // From here until the chat app is listening, n8n has to start and publish
