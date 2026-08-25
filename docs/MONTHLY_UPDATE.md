@@ -50,7 +50,7 @@ n8n ships a Gmail node with its own credential. It is one step easier, and it as
 ### In n8n
 
 8. Open **Credentials → Create credential**, and choose **Google OAuth2 API**. Not "Gmail OAuth2 API" — the generic Google one, which is the one with an editable scope.
-9. Name it exactly **`Gmail (read-only)`**. The workflows look it up by that name.
+9. Name it exactly **`Gmail (read-only)`**. Step 15 is what links it to the workflows, and it matches on that name, so a typo here is the one thing that stops it.
 10. Copy the **OAuth Redirect URL** that n8n shows you, paste it into your Google OAuth client's **Authorised redirect URIs**, and save in Google.
 11. Paste the **Client ID** and **Client Secret** from Google into n8n.
 12. In the **Scope** field, put exactly this and nothing else:
@@ -62,6 +62,25 @@ n8n ships a Gmail node with its own credential. It is one step easier, and it as
 13. Select **Connect my account**, sign in, click through the unverified-app warning, and grant access. Google's consent screen will say the app wants to *view* your email. If it says anything about sending or deleting, the scope field is wrong — go back to step 12.
 14. Save.
 
+### Then link it to the workflows
+
+15. Run the import helper once: double-click `import-workflows.command` on macOS, or
+    `import-workflows-windows.cmd` on Windows.
+
+That one step is not optional, and skipping it looks exactly like a Google problem.
+The workflows ship with a placeholder where the credential goes, because the skill is
+built before your credential exists. n8n fills that placeholder in by name, and it only
+does so while importing. Until the import runs, the workflows are still pointing at the
+placeholder, so your agent keeps saying your email is not connected no matter how many
+times you reconnect it.
+
+Importing leaves the main agent unpublished, so finish the job the same way you set it up:
+open **00 - START HERE - Project Partner** in n8n and select **Publish**. See
+[N8N_AGENT_SETUP.md](N8N_AGENT_SETUP.md).
+
+You only do this the first time. Reconnecting later reuses the same credential, so the
+link holds and your agent picks it straight back up.
+
 ### Checking it worked
 
 Ask your agent:
@@ -72,7 +91,13 @@ Is my email connected?
 
 It checks and tells you which mailbox it is connected to. It will also refuse to start an update run while the connection is missing, rather than spending several minutes and a couple of dollars failing.
 
-Your agent cannot connect Gmail for you, and cannot make Google's sign-in window appear — that window is opened by n8n's credential screen, in a different tab. What it can do is talk you through the clicks above, one at a time. It will never ask you for a Google password or a verification code; if anything ever does, something is wrong.
+### Reconnecting later, without hunting for the screen
+
+When the connection is missing or has lapsed, your agent gives you a **Connect Gmail** button that opens n8n on the right credential. Select **Connect my account** and grant access. You do not need to come back and say so — the chat watches for Gmail to start answering and carries on by itself.
+
+The button goes through the chat rather than to a fixed n8n address, so it is correct whether you run this on your own computer or against a hosted n8n.
+
+Your agent cannot connect Gmail for you and cannot make Google's sign-in window appear. The Google client secret lives in n8n's encrypted credential store, and nothing can read it back out, so n8n is the only thing that can run the sign-in. That is also why the secret is not in a `.env` file. Your agent will never ask you for a Google password or a verification code; if anything ever does, something is wrong.
 
 ## Step 3 — tell your agent about your company
 
@@ -176,7 +201,14 @@ Turning both down gives you a shorter update built on less. Turning `maxThreads`
 
 **"No company profile is saved yet."** Step 3. Describe your company in the chat.
 
-**"Gmail refused the request."** The credential needs reconnecting. Ask your agent "is my email connected?" for the specific diagnosis, or open **Gmail (read-only)** in n8n and select **Connect my account** again. If this happens about a week after setup, the Google consent screen is still in Testing — go back to step 2 and publish the app.
+**"Your Gmail is not connected" straight after you connected it.** The workflows are still
+on the placeholder. Run step 15 — `import-workflows.command`, or `import-workflows-windows.cmd`
+on Windows — then publish the main agent again and ask once more. Reconnecting in Google a
+second time will not help, because Google is not the thing that is refusing.
+
+**"Gmail refused the request."** Ask your agent "is my email connected?" — it separates the three causes, which need three different fixes. If it says the connection has lapsed, reconnect; about a week after setup that means the consent screen is still in Testing, so go back to step 2 and publish the app. If it says the permission was granted without read access, the Scope field is wrong: fix it and connect the account again.
+
+**"The Gmail API is switched off for this project."** Signing in again cannot fix this one, and the agent will say so rather than send you round in a circle. It means step 2's *enable the Gmail API* was missed, or was done on a different Google Cloud project. Your agent gives you the exact address to open; select **Enable** there, wait a minute for Google to catch up, and ask again. A newly enabled API takes a few minutes to start working, so one more refusal straight afterwards is normal.
 
 **"Nothing looked like company news."** Almost always a thin profile. If the scan does not know your customers, investors, or product names, it cannot tell their email apart from everything else. Add more and run it again.
 

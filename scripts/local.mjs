@@ -259,6 +259,9 @@ function chatEnv(cfg) {
     SKILLS_DIRECTORY: join(projectRoot, "skills"),
     DOCUMENT_WORKER_URL: `http://127.0.0.1:${cfg.documentWorkerPort}`,
     N8N_CHAT_WEBHOOK_URL: `http://127.0.0.1:${cfg.n8nPort}/webhook/chat`,
+    // Where the learner's browser finds n8n, as opposed to where the chat
+    // reaches it. On this machine they differ only by hostname.
+    N8N_PUBLIC_URL: `http://localhost:${cfg.n8nPort}`,
   };
 }
 

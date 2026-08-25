@@ -85,7 +85,7 @@ That is not a promise in a prompt. It is what Google will let this credential do
 
 n8n ships its own Gmail node, which is one step easier to set up and asks Google for full mailbox access including send and delete. This skill deliberately does not use it.
 
-Your agent can tell you whether the connection is working, and will refuse to start a run without it. It cannot connect it for you: Google's sign-in window is opened by n8n's credential screen, and nothing in the chat can reach that. Your agent will talk you through the clicks.
+Your agent can tell you whether the connection is working, and will refuse to start a run without it. It cannot connect it for you — the Google client secret lives in n8n's encrypted credential store, so n8n is what runs the sign-in — but it will hand you a button straight to the right screen, and pick the update back up on its own when you return to the chat.
 
 ## What it costs
 

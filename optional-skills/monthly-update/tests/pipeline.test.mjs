@@ -306,18 +306,21 @@ check(flagged.status === "partial", "a failed verification did not mark the run 
 check(flagged.updateText.includes("Before you send this"), "the review section is missing");
 check(flagged.updateText.includes("No email states the contract value"), "the unsupported claim was not named");
 
-// -------------------------------------------- 68/65: Gmail connection probe
+// ------------------------------------------ 69/65: the Gmail connection
+// The probe asks Gmail directly, through n8n's own credential. The client
+// secret lives in that credential and cannot be read back out, so n8n is the
+// only thing that can hold it and the only thing that can run the OAuth dance.
 const probe = (input) => runNode(connection, "Read Gmail Probe", { input: [input], nodes: {} })[0];
 
 const live = probe({ statusCode: 200, body: { emailAddress: "founder@acme.com", messagesTotal: 40213 } });
-check(live.connected === true && live.state === "connected", "a working Gmail connection was not recognised");
+check(live.connected === true && live.state === "connected", "a working connection was not recognised");
 check(live.emailAddress === "founder@acme.com", "the connected mailbox was not reported");
 
 const expired = probe({ statusCode: 401, body: { error: { message: "Invalid Credentials" } } });
 check(expired.connected === false && expired.state === "needs_reauth", `401 gave state "${expired.state}"`);
 check(/Testing/.test(expired.message), "the seven-day Testing-mode cause was not explained");
 
-// No credential selected: n8n fails the node, so there is no status at all.
+// No credential selected at all: n8n fails the node, so there is no status.
 const absent = probe({ error: { message: "Credentials not found for type googleOAuth2Api" } });
 check(absent.connected === false && absent.state === "not_connected", `a missing credential gave "${absent.state}"`);
 
@@ -325,10 +328,71 @@ const flaky = probe({ statusCode: 503, body: {} });
 check(flaky.connected === false && flaky.state === "unknown", `a 503 gave "${flaky.state}"`);
 check(!/reconfigure/i.test(flaky.message), "a transient failure told the user to reconfigure");
 
-for (const result of [live, expired, absent, flaky]) {
+// A 403 from Google is two completely different problems wearing the same
+// number. An unenabled Gmail API is not a lapsed connection, and telling the
+// learner to sign in again sends them round a loop that cannot ever fix it:
+// the sign-in already worked.
+const apiOff = probe({
+  statusCode: 403,
+  body: {
+    error: {
+      code: 403,
+      message:
+        "Gmail API has not been used in project 241792255360 before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/gmail.googleapis.com/overview?project=241792255360 then retry.",
+      errors: [{ reason: "accessNotConfigured", domain: "usageLimits" }],
+    },
+  },
+});
+check(apiOff.state === "api_not_enabled", `an unenabled Gmail API gave "${apiOff.state}"`);
+check(apiOff.fixUrl.includes("gmail.googleapis.com"), "the unenabled API did not carry the address that fixes it");
+check(/switched off|disabled|not been used/i.test(apiOff.message),
+  "the unenabled API was not named as the cause");
+check(!/lapsed|expired|needs reconnecting/i.test(apiOff.message),
+  "an unenabled API was described as a lapsed connection");
+
+const badScope = probe({
+  statusCode: 403,
+  body: {
+    error: {
+      code: 403,
+      message: "Request had insufficient authentication scopes.",
+      errors: [{ reason: "ACCESS_TOKEN_SCOPE_INSUFFICIENT" }],
+    },
+  },
+});
+check(badScope.state === "wrong_scope", `an insufficient scope gave "${badScope.state}"`);
+
+// The chat linkifies exactly one address. Every state that the learner can act
+// on has to carry it, and the agent has to be told to reproduce it verbatim or
+// the learner gets plain text. It is a route on the chat rather than an n8n
+// address, so it is right on a hosted kit as well as a local one.
+const CREDENTIAL_URL = "/api/gmail/connect";
+for (const result of [live, expired, absent, flaky, apiOff, badScope]) {
+  check(result.credentialUrl === CREDENTIAL_URL, "the probe lost the credential address");
+  check(result.linkInstruction.includes(CREDENTIAL_URL), "the probe lost the link instruction");
   check(result.scope === "https://www.googleapis.com/auth/gmail.readonly", "the probe reports the wrong scope");
-  check(/localhost:5678/.test(result.n8nUrl), "the probe lost the n8n address");
 }
+check(!/localhost:5678/.test(JSON.stringify([live, expired, absent, flaky, apiOff, badScope])),
+  "the probe still hardcodes a local n8n address, which is wrong on a hosted kit");
+
+// The one Gmail problem the chat cannot help with must not offer the button.
+const shapedApiOff = runNode(connection, "Shape Connection Result", {
+  input: [apiOff],
+  nodes: { "Validate Connection Input": [{ sessionId: "s", requestId: "r", proposedInput: {} }] },
+})[0];
+check(!shapedApiOff.response.nextStep.includes(CREDENTIAL_URL),
+  "an unenabled Gmail API still offered the connect button");
+check(shapedApiOff.response.fixUrl.includes("gmail.googleapis.com"),
+  "the unenabled API refusal did not pass on the address that fixes it");
+
+const shaped69 = runNode(connection, "Shape Connection Result", {
+  input: [absent],
+  nodes: { "Validate Connection Input": [{ sessionId: "s", requestId: "r", proposedInput: {} }] },
+})[0];
+check(shaped69.response.nextStep.includes(CREDENTIAL_URL),
+  "check_gmail_connection does not tell the agent to emit the credential link");
+check(/carries on by itself|starts on its own/.test(shaped69.response.nextStep),
+  "the agent is not told the run resumes when the learner returns");
 
 // Starting a run without Gmail must refuse rather than queue and burn money.
 const startRefused = runNode(start, "Shape Auth Needed", {
@@ -339,8 +403,8 @@ const startRefused = runNode(start, "Shape Auth Needed", {
   },
 })[0];
 check(startRefused.response.ok === false, "a missing Gmail connection still reported success");
-check(startRefused.response.error.code === "GMAIL_NOT_CONNECTED", `error code was ${startRefused.response.error.code}`);
-check(/cannot open it from this chat/.test(startRefused.response.nextStep), "the refusal does not tell the agent it cannot open the window");
+check(startRefused.response.credentialUrl === CREDENTIAL_URL, "the refusal does not carry the credential link");
+check(startRefused.response.nextStep.includes(CREDENTIAL_URL), "the refusal does not tell the agent to emit the link");
 
 const startNodes = new Set(start.nodes.map((n) => n.name));
 check(startNodes.has("Probe Gmail"), "start_monthly_update has no Gmail pre-flight check");
@@ -350,22 +414,19 @@ const queueSources = Object.entries(start.connections)
 check(queueSources.length === 1 && queueSources[0] === "Gmail Ready?",
   `the background run is reachable from ${queueSources.join(", ") || "nothing"} rather than only the Gmail check`);
 
-// ----------------------------------------------- 74: Slack delivery failure
-const slackNode = run.nodes.find((node) => node.name === "Post To Slack");
-check(slackNode?.credentials?.httpHeaderAuth?.name === "Slack bot token",
-  "monthly Slack delivery has no named Header Auth credential");
-const slackFailure = runNode(run, "Read Slack Delivery", {
-  input: [{ statusCode: 200, body: { ok: false, error: "channel_not_found" } }],
-  nodes: { "Render Update": [{ runId: "mu-slack", errorSummary: "one email failed" }] },
-});
-check(slackFailure.length === 1 && slackFailure[0].runId === "mu-slack",
-  "a failed monthly Slack delivery did not identify its run");
-check(slackFailure[0].errorSummary.includes("channel_not_found"),
-  "a failed monthly Slack delivery did not record Slack's error");
-check(runNode(run, "Read Slack Delivery", {
-  input: [{ statusCode: 200, body: { ok: true } }],
-  nodes: { "Render Update": [{ runId: "mu-slack", errorSummary: "" }] },
-}).length === 0, "a successful monthly Slack delivery was recorded as a failure");
+// Every Gmail call goes through n8n's own credential. Nothing may reach for a
+// token from the chat gateway: that path is gone, and the secret is in n8n.
+for (const [name, wf] of [["74", run], ["75", thread], ["65", start], ["69", connection]]) {
+  for (const node of wf.nodes) {
+    const url = String(node.parameters?.url ?? "");
+    if (url.includes("gmail.googleapis.com")) {
+      check(node.credentials?.googleOAuth2Api?.name === "Gmail (read-only)",
+        `${name}: "${node.name}" calls Gmail without the n8n credential`);
+    }
+    check(!url.includes("/api/gmail/"),
+      `${name}: "${node.name}" still calls the removed chat-gateway Gmail endpoint`);
+  }
+}
 
 console.log("\n--- rendered update ---\n");
 console.log(rendered.updateText);

@@ -1,0 +1,120 @@
+{
+  "name": "62 - INTERNAL - Gmail Status",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Answers \"is Gmail connected yet?\"\n\nThe chat polls this while the learner is away in Google's sign-in window, so\nit knows the moment to carry on by itself. It reads the mailbox address and\nnothing else: no message bodies, no model call, no writes.\n\nIt deliberately writes no tool_audit row. The chat asks every couple of\nseconds while a connection is in progress, and auditing that would bury the\nreal tool calls under hundreds of polls.\n\nThe agent's own check is `69 - TOOL - check_gmail_connection`, which is where\nthe explaining lives. This one only ever answers yes or no.",
+        "height": 340,
+        "width": 520,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-900, -280],
+      "id": "95620000-0000-4000-8000-000000000001",
+      "name": "Read this first"
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "gmail-status",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [-660, -60],
+      "id": "95620000-0000-4000-8000-000000000010",
+      "name": "Status Asked For",
+      "webhookId": "95620000-0000-4000-8000-0000000000ff"
+    },
+    {
+      "parameters": {
+        "url": "https://gmail.googleapis.com/gmail/v1/users/me/profile",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleOAuth2Api",
+        "options": {
+          "timeout": 15000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [-420, -60],
+      "id": "95620000-0000-4000-8000-000000000011",
+      "name": "Probe Gmail",
+      "credentials": {
+        "googleOAuth2Api": {
+          "id": "phase16GmailReadonly",
+          "name": "Gmail (read-only)"
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const raw = $input.first().json ?? {};\nconst status = Number(raw.statusCode ?? 0);\nconst body = raw.body ?? {};\n\n// Connected means one thing only: Google answered with a mailbox. Every other\n// outcome is 'not yet', because the chat is only waiting to learn when it can\n// carry on. Why it is not connected is the agent's job to explain, in 69,\n// where there is room to say something the learner can act on.\nconst connected = status === 200 && Boolean(body.emailAddress);\n\nreturn [{ json: {\n  schemaVersion: 1,\n  connected,\n  emailAddress: connected ? String(body.emailAddress) : '',\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-180, -60],
+      "id": "95620000-0000-4000-8000-000000000012",
+      "name": "Shape Status"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [60, -60],
+      "id": "95620000-0000-4000-8000-000000000013",
+      "name": "Respond With Status"
+    }
+  ],
+  "connections": {
+    "Status Asked For": {
+      "main": [[{ "node": "Probe Gmail", "type": "main", "index": 0 }]]
+    },
+    "Probe Gmail": {
+      "main": [[{ "node": "Shape Status", "type": "main", "index": 0 }]]
+    },
+    "Shape Status": {
+      "main": [[{ "node": "Respond With Status", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none",
+    "saveExecutionProgress": false,
+    "saveManualExecutions": true,
+    "executionTimeout": 30
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "versionId": "95620000-0000-4000-8000-0000000000aa",
+  "id": "phase16GmailStatusWebhook",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "phase": 16,
+    "testedWithN8n": "2.30.5",
+    "toolRisk": "read",
+    "authorization": "automatic-current-context-read",
+    "externalWrite": "none",
+    "externalRead": "gmail-readonly-profile-only"
+  }
+}
