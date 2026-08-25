@@ -12,21 +12,29 @@ const UUID_A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const UUID_B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const NOW = Date.now();
 const daysAgo = (n) => new Date(NOW - n * 86400000).toISOString();
+const minsAgo = (n) => new Date(NOW - n * 60000).toISOString();
+const SOURCE_HASH = "a".repeat(64);
 
 const validateSrc = codeOf(prepare, "Validate Prepare Input");
 const selectSrc = codeOf(prepare, "Select Executable Rows");
+const catalogueSrc = codeOf(prepare, "Recheck Current Catalogue");
 const collectSrc = codeOf(prepare, "Collect Existing");
 const readCreateSrc = codeOf(prepare, "Read Create Result");
 const evaluateSrc = codeOf(decide, "Evaluate Decisions");
+const readReadProbeSrc = codeOf(prepare, "Read Read Probe");
+const readCustomOrganisationSrc = codeOf(prepare, "Read Custom Organisation");
 
 // A row that passes every gate, so each test can spoil exactly one thing.
 const goodRow = (over = {}) => ({
   suggestionId: "s1", runId: "run-1", sourceType: "statement-line", sourceId: "sl-1",
+  statementLineId: "sl-1", scanId: "scan-1", statementSourceHash: SOURCE_HASH,
   bankAccountId: "bank-1", occurredAt: "2026-07-15", amount: -42.35, direction: "outflow",
   currency: "AUD", contactName: "UBER *TRIP", description: "UBER *TRIP HELP.UBER.COM",
-  suggestedContact: "Uber", suggestedContactId: "", suggestedAccountCode: "429",
+  suggestedContact: "Uber", suggestedContactId: "contact-uber", suggestedAccountCode: "429",
   suggestedAccountName: "Travel - National", suggestedTaxType: "INPUT",
-  matchedInvoiceId: "", needsHuman: "no", userDecision: "accepted",
+  matchedInvoiceId: "", basis: "model-only", needsHuman: "no", resultLane: "ready_to_prepare",
+  identityConfidence: 0.97, accountingConfidence: 0.96, confidence: 0.96,
+  likelyDescription: "Local business travel", userDecision: "accepted",
   decidedAt: daysAgo(1), executionStatus: "", xeroBankTransactionId: "",
   acceptedHash: "", ...over,
 });
@@ -44,12 +52,51 @@ const selfHashed = (over = {}) => {
   return { ...row, acceptedHash: stamped.acceptedHash ?? "" };
 };
 
-const select = (rows, ids = ["s1"]) => runCode(selectSrc, {
-  nodes: { "Pick Latest Run": [{ ids, runId: "run-1", hasRun: true, greenMatchesCreated: 0 }] },
-  input: rows,
+// The catalogue recheck supports a read-only Custom Connection but still
+// proves that it is the same organisation as the separate write credential.
+const standardRead = runCode(readReadProbeSrc, {
+  nodes: { "Read Write Probe": [{ tenantId: "org-1", toCreate: [] }] },
+  input: [{ statusCode: 200, body: [{ tenantId: "org-1", tenantName: "Acme" }] }],
+})[0];
+check("standard read context must match the write organisation", standardRead.readReady === true && standardRead.connectionType === "standard");
+const customRead = runCode(readCustomOrganisationSrc, {
+  nodes: { "Read Write Probe": [{ tenantId: "org-1", toCreate: [] }] },
+  input: [{ statusCode: 200, body: { Organisations: [{ OrganisationID: "org-1", Name: "Acme" }] } }],
+})[0];
+check("Custom Connection catalogue recheck can target the same organisation", customRead.readReady === true && customRead.connectionType === "custom");
+const wrongCustomRead = runCode(readCustomOrganisationSrc, {
+  nodes: { "Read Write Probe": [{ tenantId: "org-1", toCreate: [] }] },
+  input: [{ statusCode: 200, body: { Organisations: [{ OrganisationID: "org-2", Name: "Other" }] } }],
+})[0];
+check("cross-organisation read/write credentials fail closed", wrongCustomRead.readReady === false && wrongCustomRead.readProblem === "organisation-mismatch");
+const catalogueFetches = ["Fetch Current Accounts", "Fetch Current Tax Rates", "Fetch Current Contacts"]
+  .map((name) => prepare.nodes.find((entry) => entry.name === name));
+check("catalogue calls omit explicit tenant headers for a Custom Connection", catalogueFetches.every((entry) => String(entry.parameters.sendHeaders).includes("connectionType !== 'custom'")));
+
+const select = (rows, ids = ["s1"], scanOver = {}, lineOver = {}) => runCode(selectSrc, {
+  nodes: {
+    "Pick Latest Run": [{ ids, runId: "run-1", hasRun: true, greenMatchesCreated: 0 }],
+    "Read Accepted Suggestions": rows,
+    "Read Current Scans": [{ scanId: "scan-current", bankAccountId: "bank-1", completedAt: minsAgo(2), complete: "yes", blockingReasonsJson: "[]", captureSourceHash: "c".repeat(64), ...scanOver }],
+  },
+  input: rows.map((row) => ({ statementLineId: row.statementLineId, bankAccountId: row.bankAccountId,
+    active: "yes", sourceHash: row.statementSourceHash, uiMode: "blank_create", matchedXeroTransactionId: "", ...lineOver })),
 })[0];
 
 const reasonFor = (out, id = "s1") => (out.refusals.find((r) => r.suggestionId === id) ?? {}).reason;
+const catalogue = (selected = clean, over = {}) => runCode(catalogueSrc, { nodes: {
+  "Read Write Probe": [{ ...selected, tenantId: "tenant-1" }],
+  "Fetch Current Accounts": [{ statusCode: over.accountStatus ?? 200, body: { Accounts: over.accounts ?? [
+    { AccountID: "bank-1", Code: "090", Name: "Business Account", Type: "BANK", Status: "ACTIVE" },
+    { AccountID: "expense-429", Code: "429", Name: "Travel - National", Type: "EXPENSE", Status: "ACTIVE" },
+  ] } }],
+  "Fetch Current Tax Rates": [{ statusCode: over.taxStatus ?? 200, body: { TaxRates: over.taxRates ?? [
+    { TaxType: "INPUT", Status: "ACTIVE" },
+  ] } }],
+  "Fetch Current Contacts": [{ statusCode: over.contactStatus ?? 200, body: { Contacts: over.contacts ?? [
+    { ContactID: "contact-uber", Name: "Uber", ContactStatus: "ACTIVE" },
+  ] } }],
+}, input: [{}] })[0];
 
 // 1 — approval is required, and only a real boolean-ish true counts.
 for (const [label, value] of [["missing", undefined], ["false", false], ["empty", ""], ["zero", 0]]) {
@@ -79,6 +126,8 @@ const tamperedAmount = select([{ ...consistent, amount: -99.99 }]);
 check("changing the amount after acceptance is refused", reasonFor(tamperedAmount) === "CHANGED_SINCE_ACCEPTED");
 const tamperedTax = select([{ ...consistent, suggestedTaxType: "NONE" }]);
 check("changing the tax type after acceptance is refused", reasonFor(tamperedTax) === "CHANGED_SINCE_ACCEPTED");
+const tamperedDescription = select([{ ...consistent, likelyDescription: "A different description" }]);
+check("changing the Xero line description after acceptance is refused", reasonFor(tamperedDescription) === "CHANGED_SINCE_ACCEPTED");
 const again = select([consistent]);
 check("the hash is deterministic across runs", JSON.stringify(again.toCreate) === JSON.stringify(clean.toCreate));
 
@@ -93,36 +142,59 @@ check("an id absent from the latest run is refused", reasonFor(select([selfHashe
 
 // 6 — classes that must never be auto-created.
 check("an invoice match is refused", reasonFor(select([selfHashed({ matchedInvoiceId: "inv-9" })])) === "MATCH_IN_XERO");
-check("an existing bank transaction is refused", reasonFor(select([selfHashed({ sourceType: "bank-transaction" })])) === "ALREADY_IN_XERO");
-check("a needs-a-person row is refused", reasonFor(select([selfHashed({ needsHuman: "yes" })])) === "NEEDS_A_PERSON");
-check("a row with no account code is refused", reasonFor(select([selfHashed({ suggestedAccountCode: "" })])) === "INCOMPLETE");
+check("an existing bank transaction is refused", reasonFor(select([selfHashed({ sourceType: "bank-transaction" })])) === "MATCH_IN_XERO");
+check("a needs-a-person row is refused", reasonFor(select([selfHashed({ needsHuman: "yes", resultLane: "likely" })])) === "NOT_HIGH_CERTAINTY");
+check("a row with no account code is refused", reasonFor(select([selfHashed({ suggestedAccountCode: "" })])) === "CATALOGUE_REQUIRED");
+check("a row with no existing ContactID is refused", reasonFor(select([selfHashed({ suggestedContactId: "" })])) === "CONTACT_ID_REQUIRED");
+check("a stale capture is refused", reasonFor(select([selfHashed()], ["s1"], { completedAt: minsAgo(31) })) === "CAPTURE_NOT_FRESH");
+check("an incomplete capture is refused", reasonFor(select([selfHashed()], ["s1"], { complete: "no" })) === "CAPTURE_NOT_FRESH");
+check("a malformed aggregate capture hash is refused", reasonFor(select([selfHashed()], ["s1"], { captureSourceHash: "bad" })) === "CAPTURE_HASH_MISSING");
+check("a changed statement hash is refused", reasonFor(select([selfHashed()], ["s1"], {}, { sourceHash: "b".repeat(64) })) === "SOURCE_CHANGED");
+check("a new Xero match state is refused", reasonFor(select([selfHashed()], ["s1"], {}, { uiMode: "green_match", matchedXeroTransactionId: "bt-1" })) === "XERO_STATE_CHANGED");
 
 // 7 — payload construction.
 const payload = clean.toCreate[0].payload;
 check("outflow becomes SPEND", payload.Type === "SPEND");
 check("amount is absolute, to the cent", payload.LineItems[0].UnitAmount === 42.35);
 check("bank amounts are GST inclusive", payload.LineAmountTypes === "Inclusive");
-check("reference is derived from the source id", payload.Reference === "AI-sl-1");
-check("an unmatched contact goes by name", payload.Contact.Name === "Uber" && !payload.Contact.ContactID);
+check("reference is derived from the source hash", payload.Reference === `AI-${SOURCE_HASH.slice(0, 24)}`);
+check("contact always goes by existing ContactID", payload.Contact.ContactID === "contact-uber" && !payload.Contact.Name);
 const withId = select([selfHashed({ suggestedContactId: "c-1" })]);
-check("a matched contact goes by id", withId.toCreate[0].payload.Contact.ContactID === "c-1" && !withId.toCreate[0].payload.Contact.Name);
+check("another existing contact goes by id", withId.toCreate[0].payload.Contact.ContactID === "c-1" && !withId.toCreate[0].payload.Contact.Name);
 const inflow = select([selfHashed({ direction: "inflow", amount: 120 })]);
 check("inflow becomes RECEIVE", inflow.toCreate[0].payload.Type === "RECEIVE");
 
+// The exact Xero catalogue and existing contact are re-read after approval and before create.
+const currentCatalogue = catalogue();
+check("current catalogue recheck preserves an unchanged item", currentCatalogue.anythingToCreate === true && currentCatalogue.toCreate.length === 1);
+check("current account name change refuses the item", reasonFor(catalogue(clean, { accounts: [
+  { AccountID: "bank-1", Code: "090", Name: "Business Account", Type: "BANK", Status: "ACTIVE" },
+  { AccountID: "expense-429", Code: "429", Name: "Renamed Travel", Type: "EXPENSE", Status: "ACTIVE" },
+] })) === "ACCOUNT_CHANGED");
+check("archived tax type refuses the item", reasonFor(catalogue(clean, { taxRates: [{ TaxType: "INPUT", Status: "DELETED" }] })) === "TAX_CHANGED");
+check("missing current ContactID refuses the item", reasonFor(catalogue(clean, { contacts: [] })) === "CONTACT_CHANGED");
+check("archived bank account refuses the item", reasonFor(catalogue(clean, { accounts: [
+  { AccountID: "bank-1", Code: "090", Name: "Business Account", Type: "BANK", Status: "ARCHIVED" },
+  { AccountID: "expense-429", Code: "429", Name: "Travel - National", Type: "EXPENSE", Status: "ACTIVE" },
+] })) === "BANK_ACCOUNT_CHANGED");
+check("unavailable current catalogue refuses closed", reasonFor(catalogue(clean, { accountStatus: 503 })) === "CURRENT_CATALOGUE_UNAVAILABLE");
+
 // 8 — a reference already in Xero is adopted, never posted again.
 const collected = runCode(collectSrc, {
-  nodes: { "Read Write Probe": [{ ...clean, toCreate: clean.toCreate, tenantId: "t-1" }] },
-  input: [{ statusCode: 200, body: { BankTransactions: [{ Reference: "AI-sl-1", BankTransactionID: "existing-1" }] } }],
+  nodes: { "Recheck Current Catalogue": [{ ...clean, toCreate: clean.toCreate, tenantId: "t-1" }] },
+  input: [{ statusCode: 200, body: { BankTransactions: [{ Reference: payload.Reference, BankTransactionID: "existing-1" }] } }],
 })[0];
 check("a duplicate reference is skipped", collected.skippedDuplicates.length === 1 && collected.stillToCreate.length === 0);
 check("the existing Xero id is adopted", collected.skippedDuplicates[0].xeroBankTransactionId === "existing-1");
-check("a skipped row is excluded from the create body", !collected.createBody.includes("AI-sl-1"));
+check("a skipped row is excluded from the create body", !collected.createBody.includes(payload.Reference));
 
 // 9 — partial failure, and the rule that a non-answer is never treated as a failure.
-const twoRows = select([selfHashed(), selfHashed({ suggestionId: "s2", sourceId: "sl-2" })], ["s1", "s2"]);
+const secondSourceHash = "b".repeat(64);
+const twoRows = select([selfHashed(), selfHashed({ suggestionId: "s2", sourceId: "sl-2", statementLineId: "sl-2", statementSourceHash: secondSourceHash })], ["s1", "s2"]);
 check("two eligible rows both queue", twoRows.toCreate.length === 2);
+check("different source hashes always produce different deterministic references", new Set(twoRows.toCreate.map((entry) => entry.reference)).size === 2);
 const fresh = runCode(collectSrc, {
-  nodes: { "Read Write Probe": [{ ...twoRows, tenantId: "t-1" }] },
+  nodes: { "Recheck Current Catalogue": [{ ...twoRows, tenantId: "t-1" }] },
   input: [{ statusCode: 200, body: { BankTransactions: [] } }],
 })[0];
 const partial = runCode(readCreateSrc, {
@@ -145,7 +217,7 @@ for (const status of [429, 500, 0]) {
 // 10 — 104 refuses to "accept" a row that has nothing to accept.
 const blank = runCode(evaluateSrc, {
   nodes: { "Pick Latest Run": [{ ids: ["s1"], decision: "accepted", hasRun: true, runId: "run-1" }] },
-  input: [goodRow({ suggestedAccountCode: "", needsHuman: "yes" })],
+  input: [goodRow({ suggestedAccountCode: "", needsHuman: "yes", resultLane: "likely" })],
 })[0];
 check("accepting a needs-a-person row is refused", (blank.refused ?? []).some((r) => r.reason === "NOTHING_TO_ACCEPT"));
 

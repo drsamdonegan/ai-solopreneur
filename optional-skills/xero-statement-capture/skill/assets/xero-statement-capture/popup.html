@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Xero Statement Capture</title>
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body>
+    <main>
+      <h1>Xero queue capture</h1>
+      <p class="safety">Read-only. This extension cannot press Match, Find &amp; Match, Create, or OK.</p>
+      <label for="endpoint">Loopback receiver</label>
+      <input id="endpoint" value="http://127.0.0.1:8461/capture" readonly>
+      <label for="token">One-use token</label>
+      <input id="token" type="password" autocomplete="off" spellcheck="false">
+      <button id="capture-submit" class="primary">Capture and submit</button>
+      <button id="annotations">Refresh descriptions</button>
+      <hr>
+      <p id="status" aria-live="polite">No pages captured.</p>
+      <p class="hint">For a paginated queue, use these controls on every page before submitting.</p>
+      <button id="capture-page">Capture visible page</button>
+      <div class="actions">
+        <button id="reset">Reset pages</button>
+        <button id="submit" class="primary">Submit pages</button>
+      </div>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>

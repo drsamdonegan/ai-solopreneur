@@ -37,6 +37,10 @@
             {
               "name": "force",
               "type": "string"
+            },
+            {
+              "name": "mode",
+              "type": "string"
             }
           ]
         }
@@ -52,7 +56,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const sessionId = typeof $json.sessionId === 'string' ? $json.sessionId.trim() : '';\nconst requestId = typeof $json.requestId === 'string' ? $json.requestId.trim() : '';\nconst uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;\nconst rawPeriod = typeof $json.period === 'string' ? $json.period.trim() : '';\nconst force = $json.force === true || String($json.force ?? '').trim().toLowerCase() === 'true';\n\nlet error = null;\nif (!uuidPattern.test(sessionId) || !uuidPattern.test(requestId)) {\n  error = { code: 'INVALID_SESSION', message: 'Starting a review needs a valid conversation and request ID.' };\n}\n\n// '' means the default window, 2026-07 means that calendar month, 90d means\n// the last ninety days. Anything past 180 days is refused rather than\n// silently trimmed: a review of two years of transactions is not what\n// somebody meant to ask for, and it would cost accordingly.\nlet period = '';\nif (!error && rawPeriod !== '') {\n  if (/^\\d{4}-(0[1-9]|1[0-2])$/.test(rawPeriod)) {\n    period = rawPeriod;\n  } else if (/^\\d{1,3}d$/i.test(rawPeriod)) {\n    const days = Number(rawPeriod.slice(0, -1));\n    if (days < 1 || days > 180) {\n      error = { code: 'INVALID_PERIOD', message: 'Ask for up to 180 days at a time, like 90d, or a single month like 2026-07.' };\n    } else { period = `${days}d`; }\n  } else {\n    error = { code: 'INVALID_PERIOD', message: 'A period is either a month like 2026-07 or a number of days like 90d.' };\n  }\n}\n\nconst runId = `run-${Date.now()}-${requestId.slice(0, 8)}`;\nreturn [{ json: {\n  valid: error === null, sessionId, requestId, period, force, runId,\n  proposedInput: { sessionId, requestId, period, force },\n  ...(error ? { response: { ok: false, error } } : {}),\n} }];"
+        "jsCode": "const sessionId = typeof $json.sessionId === 'string' ? $json.sessionId.trim() : '';\nconst requestId = typeof $json.requestId === 'string' ? $json.requestId.trim() : '';\nconst uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;\nconst rawPeriod = typeof $json.period === 'string' ? $json.period.trim() : '';\nconst rawMode = typeof $json.mode === 'string' ? $json.mode.trim().toLowerCase() : '';\nconst mode = rawMode || 'reconciliation-queue';\nconst force = $json.force === true || String($json.force ?? '').trim().toLowerCase() === 'true';\n\nlet error = null;\nif (!uuidPattern.test(sessionId) || !uuidPattern.test(requestId)) {\n  error = { code: 'INVALID_SESSION', message: 'Starting a review needs a valid conversation and request ID.' };\n} else if (!['reconciliation-queue', 'coding-review'].includes(mode)) {\n  error = { code: 'INVALID_MODE', message: 'Review mode must be reconciliation-queue or coding-review.' };\n}\n\n// '' means the default window, 2026-07 means that calendar month, 90d means\n// the last ninety days. Anything past 180 days is refused rather than\n// silently trimmed: a review of two years of transactions is not what\n// somebody meant to ask for, and it would cost accordingly.\nlet period = '';\nif (!error && rawPeriod !== '') {\n  if (/^\\d{4}-(0[1-9]|1[0-2])$/.test(rawPeriod)) {\n    period = rawPeriod;\n  } else if (/^\\d{1,3}d$/i.test(rawPeriod)) {\n    const days = Number(rawPeriod.slice(0, -1));\n    if (days < 1 || days > 180) {\n      error = { code: 'INVALID_PERIOD', message: 'Ask for up to 180 days at a time, like 90d, or a single month like 2026-07.' };\n    } else { period = String(days) + 'd'; }\n  } else {\n    error = { code: 'INVALID_PERIOD', message: 'A period is either a month like 2026-07 or a number of days like 90d.' };\n  }\n}\n\nconst runId = 'run-' + Date.now() + '-' + requestId.slice(0, 8);\nreturn [{ json: {\n  valid: error === null, sessionId, requestId, period, mode, force, runId,\n  proposedInput: { sessionId, requestId, period, mode, force },\n  ...(error ? { response: { ok: false, error } } : {}),\n} }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -219,7 +223,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const raw = $input.first().json ?? {};\nconst status = Number(raw.statusCode ?? 0);\nconst body = raw.body ?? {};\nconst nodeError = String(raw.error?.message ?? raw.error ?? '');\nconst orgs = Array.isArray(body) ? body : [];\nconst connected = status === 200 && orgs.length > 0;\nreturn [{ json: { ...$('Check Profile Exists').first().json, xeroConnected: connected,\n  xeroProblem: connected ? '' : (status === 401 || status === 403 ? 'needs_reauth'\n    : (!status || /credential/i.test(nodeError) ? 'not_connected' : 'unknown')) } }];"
+        "jsCode": "const raw = $input.first().json ?? {};\nconst status = Number(raw.statusCode ?? 0);\nconst body = raw.body ?? {};\nconst nodeError = String(raw.error?.message ?? raw.error ?? '');\nconst orgs = Array.isArray(body) ? body : [];\nconst connected = status === 200 && orgs.length > 0;\nreturn [{ json: { ...$('Check Profile Exists').first().json, xeroConnected: connected, connectionType: connected ? 'standard' : '', organisationName: connected ? String(orgs[0].tenantName ?? '') : '', tenantId: connected ? String(orgs[0].tenantId ?? '') : '', xeroProblem: connected ? '' : (status === 401 || status === 403 ? 'needs_reauth' : (!status || /credential/i.test(nodeError) ? 'not_connected' : 'unknown')) } }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -266,7 +270,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const input = $('Read Start Probe').first().json;\nconst CONNECT_STEPS = \"Open n8n at http://localhost:5678 | Go to Credentials and open the one named \\\"Xero (read-only)\\\". If it is not there yet it has to be created once, and it needs a Xero developer app first: docs/XERO_RECONCILIATION.md has every click. | Select Connect my account, then grant access. The permission screen should say view, never create or delete.\";\nconst why = {\n  not_connected: 'Xero is not connected yet, so there is nothing to review.',\n  needs_reauth: 'Xero is set up but is refusing the connection. A Xero refresh token stops working after 60 days without use, so this is usually just a reconnect.',\n  unknown: 'Xero did not answer when I checked just now.',\n};\nreturn [{ json: { ...input, response: { ok: false,\n  error: { code: 'XERO_NOT_CONNECTED', message: why[input.xeroProblem] ?? why.unknown },\n  connectSteps: CONNECT_STEPS,\n  credentialUrl: 'http://localhost:5678/home/credentials',\n  nextStep: 'Do not start a review. Include the exact text http://localhost:5678/home/credentials in your reply: the chat turns that one address into a button to the credential screen, which is where the Xero sign-in window comes from. Read the steps out one at a time. Never ask the user for a Xero password, a verification code, or a client secret.' } } }];"
+        "jsCode": "const fromNode = (name) => { try { return $(name).first().json; } catch { return null; } };\nconst input = fromNode('Read Custom Start Probe') ?? fromNode('Read Start Probe') ?? {};\nconst CONNECT_STEPS = \"Open n8n at http://localhost:5678 | Open Xero (read-only) and follow the standard Web app or Custom Connection fields in docs/XERO_RECONCILIATION.md. | Never put a client secret, password, or verification code in chat.\";\nconst why = { not_connected: 'Xero is not connected yet, so there is nothing to review.', needs_reauth: 'Xero is set up but is refusing the read-only connection.', unknown: 'Xero did not answer when I checked just now.' };\nreturn [{ json: { ...input, response: { ok: false, error: { code: 'XERO_NOT_CONNECTED', message: why[input.xeroProblem] ?? why.unknown }, connectSteps: CONNECT_STEPS, credentialUrl: 'http://localhost:5678/home/credentials', nextStep: 'Do not start a review. Include http://localhost:5678/home/credentials. Never ask the user for a Xero password, verification code, or client secret.' } } }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -289,7 +293,8 @@
           "mappingMode": "defineBelow",
           "value": {
             "runId": "={{ $json.runId }}",
-            "period": "={{ $json.period }}"
+            "period": "={{ $json.period }}",
+            "mode": "={{ $json.mode }}"
           },
           "matchingColumns": [],
           "schema": [
@@ -305,6 +310,15 @@
             {
               "id": "period",
               "displayName": "period",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "mode",
+              "displayName": "mode",
               "required": false,
               "defaultMatch": false,
               "display": true,
@@ -331,7 +345,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const input = $('Read Start Probe').first().json;\nconst lines = [];\n\nif (input.replacing && input.replacing.reason === 'interrupted') {\n  lines.push(`The review before this one stopped ${input.replacing.age} minutes ago without finishing, which usually means the agent restarted while it was working. Nothing was saved from it, so I have started again.`);\n} else if (input.replacing) {\n  lines.push('Starting a fresh review now, as you asked.');\n}\n\nlines.push('I am going through your Xero transactions now. It takes a few minutes: I read what is still unreconciled, your chart of accounts and how you have coded things before, and work out what each one probably is.');\nlines.push('Ask me for it again in a few minutes and I will read it back.');\n\nreturn [{ json: { ...input, response: {\n  ok: true,\n  status: 'started',\n  runId: input.runId,\n  period: input.period || 'the last 90 days',\n  restarted: input.replacing ? input.replacing.reason : null,\n  message: lines.join(' ')\n} } }];"
+        "jsCode": "const input = $('Read Start Probe').first().json;\nconst lines = [];\n\nif (input.replacing && input.replacing.reason === 'interrupted') {\n  lines.push('The review before this one stopped ' + input.replacing.age + ' minutes ago without finishing, which usually means the agent restarted while it was working. Nothing was saved from it, so I have started again.');\n} else if (input.replacing) {\n  lines.push('Starting a fresh review now, as you asked.');\n}\n\nif (input.mode === 'coding-review') {\n  lines.push(\"I am reviewing already-entered unreconciled BankTransactions from Xero's Accounting API. This is a coding review only: it is not the bank-feed queue, and nothing from it can be prepared or reconciled by this review.\");\n} else {\n  lines.push('I am going through the fresh browser-captured Xero reconciliation queue now. I will combine each visible statement line with the chart of accounts, contacts, invoices, coding history, company context, and available receipts.');\n}\nlines.push('Ask me for it again in a few minutes and I will read it back.');\n\nreturn [{ json: { ...input, response: {\n  ok: true,\n  status: 'started',\n  runId: input.runId,\n  period: input.period || 'the last 90 days',\n  mode: input.mode,\n  restarted: input.replacing ? input.replacing.reason : null,\n  message: lines.join(' ')\n} } }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -468,6 +482,85 @@
       ],
       "id": "97900102-0000-4000-8000-000000000092",
       "name": "Return Tool Result"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "97900102-0000-4000-8000-000000000025-c1",
+              "leftValue": "={{ $json.xeroConnected }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        880,
+        -200
+      ],
+      "id": "97900102-0000-4000-8000-000000000025",
+      "name": "Standard Read Ready?"
+    },
+    {
+      "parameters": {
+        "url": "https://api.xero.com/api.xro/2.0/Organisation",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "options": {
+          "timeout": 15000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        880,
+        40
+      ],
+      "id": "97900102-0000-4000-8000-000000000026",
+      "name": "Probe Custom Organisation",
+      "credentials": {
+        "oAuth2Api": {
+          "id": "phase19XeroReadonly",
+          "name": "Xero (read-only)"
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const standard = $('Read Start Probe').first().json;\nconst raw = $input.first().json ?? {};\nconst organisations = Number(raw.statusCode ?? 0) === 200 && Array.isArray(raw.body?.Organisations) ? raw.body.Organisations : [];\nif (!organisations.length) return [{ json: standard }];\nconst organisation = organisations[0];\nreturn [{ json: { ...standard, xeroConnected: true, xeroProblem: '', connectionType: 'custom', organisationName: String(organisation.Name ?? organisation.LegalName ?? ''), tenantId: String(organisation.OrganisationID ?? '') } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        40
+      ],
+      "id": "97900102-0000-4000-8000-000000000027",
+      "name": "Read Custom Start Probe"
     }
   ],
   "pinData": {},
@@ -571,7 +664,7 @@
       "main": [
         [
           {
-            "node": "Xero Ready?",
+            "node": "Standard Read Ready?",
             "type": "main",
             "index": 0
           }
@@ -645,6 +738,46 @@
         [
           {
             "node": "Return Tool Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Standard Read Ready?": {
+      "main": [
+        [
+          {
+            "node": "Xero Ready?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Probe Custom Organisation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Probe Custom Organisation": {
+      "main": [
+        [
+          {
+            "node": "Read Custom Start Probe",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Custom Start Probe": {
+      "main": [
+        [
+          {
+            "node": "Xero Ready?",
             "type": "main",
             "index": 0
           }

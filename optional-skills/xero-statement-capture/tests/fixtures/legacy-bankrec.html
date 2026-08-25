@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en" data-currency="AUD">
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font: 14px sans-serif; }
+    .line, .info, input, button, a, span { display: block; min-height: 12px; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body data-bank-account-id="bank-legacy-redacted">
+  <div id="ItemsToReconcile">
+    <script>window._TotalCount = 4;</script>
+    <div id="statementLines">
+      <div class="line" data-statementlineid="legacy-blank" data-statement-date="14 Jul 2026" data-currency="AUD">
+        <span class="statement-narration">REDACTED LEGACY SUPPLIER</span><span class="statement-reference">LEG-001</span><span class="amount-spent">Spent 10.25</span>
+        <div class="statement create"><div class="info c2"><input id="paidTolegacyblank_value" value=""><input id="paidAccountlegacyblank_value" value=""><input id="paidDesclegacyblank" value=""></div></div>
+      </div>
+      <div class="line" data-statementlineid="legacy-prefilled" data-statement-date="15 Jul 2026" data-currency="AUD">
+        <span class="statement-narration">REDACTED LEGACY TRAVEL</span><span class="statement-reference">LEG-002</span><span class="amount-spent">Spent 42.35</span>
+        <div class="statement create"><div class="info c2"><input id="paidTolegacyprefilled_value" value="Legacy Travel"><input id="paidAccountlegacyprefilled_value" value="Travel - National"><input id="paidDesclegacyprefilled" value="Client travel"><div class="tracking"><input type="text" value="Event A"><input type="text" value="Project A"><input type="text" value="GST on Expenses"></div></div></div>
+      </div>
+      <div class="line" data-statementlineid="legacy-discuss" data-statement-date="16 Jul 2026" data-currency="AUD">
+        <span class="statement-narration">REDACTED LEGACY QUESTION</span><span class="statement-reference">LEG-003</span><span class="amount-spent">Spent 19.00</span>
+        <div class="statement comments"><div class="info c2 hidden"><input id="paidTolegacydiscuss_value" value="Hidden stale contact"></div><div class="info c5">Discuss</div></div>
+      </div>
+      <div class="line" data-statementlineid="legacy-match" data-statement-date="17 Jul 2026" data-currency="AUD">
+        <span class="statement-narration">REDACTED LEGACY RECEIPT</span><span class="statement-reference">LEG-004</span><span class="amount-received">Received 250.00</span>
+        <div class="statement match"><div class="info c0"><a href="https://go.xero.com/Bank/ViewTransaction/txn-legacy-redacted">Existing transaction</a><button>OK</button></div></div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

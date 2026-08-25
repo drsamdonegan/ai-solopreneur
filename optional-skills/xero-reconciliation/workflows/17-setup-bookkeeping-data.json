@@ -242,6 +242,42 @@
               "type": "string"
             },
             {
+              "name": "scanId",
+              "type": "string"
+            },
+            {
+              "name": "statementLineId",
+              "type": "string"
+            },
+            {
+              "name": "statementSourceHash",
+              "type": "string"
+            },
+            {
+              "name": "likelyDescription",
+              "type": "string"
+            },
+            {
+              "name": "evidenceSummary",
+              "type": "string"
+            },
+            {
+              "name": "reviewQuestion",
+              "type": "string"
+            },
+            {
+              "name": "resultLane",
+              "type": "string"
+            },
+            {
+              "name": "readyInXero",
+              "type": "string"
+            },
+            {
+              "name": "reviewedAt",
+              "type": "date"
+            },
+            {
               "name": "receiptJson",
               "type": "string"
             },

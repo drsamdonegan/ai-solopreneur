@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "id": "xero-bookkeeping",
+  "agent": "bookkeeping",
+  "name": "Xero Bookkeeping",
+  "description": "Captures the live Xero bank-reconciliation queue, explains uncertain lines, and prepares only explicitly approved high-certainty matches.",
+  "icon": "ledger",
+  "installable": true,
+  "requires": [],
+  "modules": [
+    { "id": "xero-statement-capture", "name": "Xero statement capture", "role": "core", "source": "optional" },
+    { "id": "xero-reconciliation", "name": "Xero coding review", "role": "core", "source": "optional" }
+  ]
+}

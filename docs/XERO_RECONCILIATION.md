@@ -1,219 +1,165 @@
-# Xero Coding Review — working out what your transactions were
+# Xero Bookkeeping — capture, review, prepare, then match
 
-Your agent goes through the transactions sitting unreconciled in Xero and works out what each one probably is, so you are ticking off suggestions instead of typing account codes.
+The Bookkeeping agent reads the live queue shown on Xero's bank-reconciliation page, combines it with your company context and Xero accounting catalogue, prepares only explicitly approved high-certainty items, and gives every uncertain line a likely description plus one question.
 
-This walks through the four steps to switch it on, then the optional fifth that lets it prepare transactions for you. Step 2 is the only long one — it is a one-off, and it is what keeps this skill read-only.
+It does not reconcile anything. The final **Match** or **Find & Match**, followed by **OK**, always stays with you in Xero.
 
-## Install it
+## Install the package
 
 ```bash
-npm run add-skill -- xero-reconciliation
+npm run add-skill -- xero-bookkeeping
 ```
 
-Then sync and restart, as with any skill:
+Then sync skills and restart the project. The package installs both required modules atomically: `xero-statement-capture` and `xero-reconciliation`.
 
-- macOS: `./sync-skills.command` then `./start.command`
-- Windows: `sync-skills-windows.cmd` then `start-windows.cmd`
+## 1. Create the five local tables
 
-## Step 1 — create the three tables
+In n8n, run these once in order:
 
-Open n8n, find **17 - SETUP - Bookkeeping Data** under *5. Setup and health*, and select **Execute workflow**.
+1. **17 - SETUP - Bookkeeping Data** creates the profile, suggestions, and review-run tables.
+2. **18 - SETUP - Xero Statement Capture Data** creates the scan and statement-line evidence tables.
 
-That creates three local tables and nothing else:
+Running either setup again is safe. Incomplete scans are retained as blockers and never deactivate lines from the last complete scan.
 
-| Table | Holds |
-| --- | --- |
-| `bookkeeping_profile` | The facts about your books that decide a suggestion: your usual suppliers, your coding rules, and the amount above which you always want to decide yourself |
-| `reconciliation_suggestions` | One row per transaction the review looked at, what it thinks, and what you decided |
-| `reconciliation_runs` | Each finished review, and what that review cost |
+## 2. Set up the read-only browser capture
 
-All three start empty and stay on your computer. Running the setup again is safe.
+The public Xero Accounting API does not expose the unreconciled bank-statement lines shown in the reconciliation screen and cannot reconcile them. The package therefore observes the visible page through a deliberately read-only Chrome extension.
 
-## Step 2 — connect Xero, read-only
+Follow [the capture setup](../optional-skills/xero-statement-capture/skill/references/capture-setup.md). In short:
 
-This is the ten-minute part. You are creating your own Xero app, so that the only thing your agent can ever do with your accounts is read them.
+1. Create an n8n Header Auth credential named exactly `Xero Capture Bridge`, using header `X-Xero-Capture-Key` and a long random value.
+2. Attach it to workflows 111 and 112 and activate them.
+3. Load `skills/xero-statement-capture/assets/xero-statement-capture` as an unpacked Chrome extension.
+4. Start the local one-shot receiver with the same secret in `XERO_CAPTURE_INGEST_SECRET` and your HTTPS Railway/n8n address in `XERO_CAPTURE_N8N_URL`.
+5. Open the relevant Xero reconciliation page, paste the printed one-use token into the extension, and capture every page.
 
-### Why not the built-in Xero node
+The extension has no Xero credential or n8n secret. It cannot click, fill a Xero field, or call a Xero mutation. The receiver binds only to `127.0.0.1`, uses a 32-byte random token, expires it after five minutes, and consumes it on the first submission attempt.
 
-n8n ships a Xero node with its own credential. It is one step easier, and it asks Xero for eight read-**write** scopes — invoices, payments, bank transactions, contacts and more — with the Scope field hidden so you cannot narrow it. A credential made that way can create and delete invoices in your accounts.
+## 3. Connect the read-only Xero Accounting API context
 
-This skill uses the generic **OAuth2 API** credential instead, where the Scope field is yours to set. What it asks for is read-only, and that is enforced by Xero rather than by a rule in a prompt.
+The capture supplies the queue. The supported Accounting API supplies the organisation, active contacts, chart of accounts, tax rates, unpaid invoices, prior coding patterns, and existing unreconciled transactions used for duplicate-safe matching.
 
-### In the Xero developer portal
+The read-only credential supports either a standard Xero Web app or a single-organisation Xero Custom Connection. Use the setup that matches the app you already have.
 
-1. Go to <https://developer.xero.com/myapps> and sign in with your normal Xero login.
-2. **New app**. Name it something you will recognise, like `My agent (read-only)`.
-3. Integration type: **Web app**.
-4. Company or application URL: anything you own works; `http://localhost:5678` is fine.
-5. Redirect URI: exactly
+### Standard Web app
 
-   ```
-   http://localhost:5678/rest/oauth2-credential/callback
-   ```
+Create a Xero developer Web app at <https://developer.xero.com/myapps>. Add the n8n redirect URI shown by the generic **OAuth2 API** credential; locally it is normally:
 
-   Use `localhost`, not `127.0.0.1`. Xero treats them as different addresses and only this one matches what n8n sends.
-6. Create the app, then copy the **Client ID** and generate a **Client Secret**. Keep the tab open; you need both in a moment, and the secret is only shown once.
-
-**If your agent lives on Railway** rather than your laptop, add a second redirect URI to the same app:
-
-```
-https://<your n8n address>/rest/oauth2-credential/callback
+```text
+http://localhost:5678/rest/oauth2-credential/callback
 ```
 
-Your n8n address is the one in `N8N_PUBLIC_URL`. One app can hold both, so the same credentials work locally and in the cloud.
+On Railway, also add:
 
-### In n8n
-
-Credentials → **Create credential** → search for **OAuth2 API** (the generic one, not "Xero OAuth2 API") → name it **exactly**:
-
-```
-Xero (read-only)
+```text
+https://YOUR-N8N-HOST/rest/oauth2-credential/callback
 ```
 
-The name matters. It is how the workflows find it on import.
-
-Then fill in:
+In n8n, create the generic **OAuth2 API** credential named exactly `Xero (read-only)`:
 
 | Field | Value |
 | --- | --- |
 | Grant Type | Authorization Code |
 | Authorization URL | `https://login.xero.com/identity/connect/authorize` |
 | Access Token URL | `https://identity.xero.com/connect/token` |
-| Client ID | from the Xero portal |
-| Client Secret | from the Xero portal |
-| Scope | `offline_access accounting.transactions.read accounting.contacts.read accounting.settings.read accounting.reports.read` |
+| Scope | `offline_access accounting.banktransactions.read accounting.invoices.read accounting.contacts.read accounting.settings.read` |
 | Authentication | Header |
 
-n8n shows its own **OAuth Redirect URL** on this screen. Check it matches what you put in Xero, character for character.
+The permission screen should be read-only. If it offers to create, update, or delete, stop and correct the scope.
 
-Select **Connect my account**. Xero opens its own sign-in window, then asks which organisation to connect.
+### Custom Connection
 
-**Read the permission screen before you approve it.** It should say the app wants to *view* your accounting data. If it offers to create, update or delete anything, the Scope field is wrong: go back and fix it rather than approving.
+A Custom Connection uses Xero's client-credentials flow, belongs to one organisation, and does not use a redirect URI or `/connections`. First authorise the app from Xero's emailed link. Xero does not expose its OAuth credentials until that organisation authorisation is complete.
 
-### Checking it worked
+In n8n, create the generic **OAuth2 API** credential named exactly `Xero (read-only)`:
 
-Ask your agent in the chat:
+| Field | Value |
+| --- | --- |
+| Grant Type | Client Credentials |
+| Access Token URL | `https://identity.xero.com/connect/token` |
+| Scope | the read scopes already authorised on the Custom Connection |
+| Authentication | Header |
 
-> "Is Xero connected?"
+Enter the client ID and newly generated client secret directly in n8n. Do not paste the secret into chat, logs, a workflow, or this repository. The workflows discover the organisation through `GET /Organisation` and deliberately omit `Xero-tenant-id` on Custom Connection calls.
 
-It will tell you which organisation it can see.
+The review needs permission to read bank transactions, invoices, contacts, and settings for full context. If an existing app lacks one of those endpoint permissions, the run continues conservatively, reports that the relevant context was unavailable, and cannot claim invoice matches that it could not verify. It never widens or edits the app's scopes itself.
 
-### Reconnecting later
+Ask the Bookkeeping agent, “Is Xero connected?” to verify the organisation and connection type. The 60-day idle refresh-token rule applies to standard Authorization Code connections, not Custom Connections.
 
-A Xero refresh token stops working after 60 days without use. If your agent says Xero is refusing the connection after a quiet couple of months, open the same credential and select **Connect my account** again. Nothing else needs redoing.
+## 4. Save company and bookkeeping context
 
-## Step 3 — tell your agent about your books
+Tell the Bookkeeping agent what the company does, common suppliers and customers, the account rules already used, any stated GST handling, and the dollar amount above which you always want to decide personally. The agent may use company memory and this saved profile as evidence, but it never invents a coding rule.
 
-The review has nothing to reason from until you do this. In the chat:
+Example:
 
-> "We're a design studio. Uber is always 429 Travel, Officeworks is 461 Printing. Anything over two thousand dollars I want to decide myself."
+> We're a design studio. Uber is normally 429 Travel. Officeworks is 461 Printing. Always ask me about anything over $2,000.
 
-Three things are worth saying, and the third matters most:
+## 5. Capture, then run a review
 
-- the suppliers you pay regularly, and what each spend is for
-- any coding rules you already follow, in your own words
-- the dollar amount above which you always want to decide yourself
+Capture the full live queue immediately before asking:
 
-That last one is a hard floor. Above it, every suggestion is handed to you however obvious it looks.
+> Go through my Xero transactions.
 
-## Step 4 — ask for a review
+A review refuses to start when the newest capture is missing, incomplete, blocked, lacks source hashes, or is more than 30 minutes old. It never substitutes an Accounting API report or treats transactions already entered in Xero as statement lines.
 
-> "Go through my Xero transactions."
+If you explicitly ask for an API-only **coding review**, the agent can instead inspect unreconciled `BankTransactions` that are already entered in Xero. This degraded mode is labelled `coding-review`: it is not a view of the bank-feed queue, every result remains non-executable, and it cannot prepare or reconcile an item. Capture the Reconcile screen whenever you want the preparation workflow described below.
 
-It answers straight away and works in the background for a few minutes. Then:
+The result has four mutually exclusive lanes:
 
-> "What did you find?"
+- `ready_to_prepare`: existing ContactID, exact account code/name/tax tuple, identity confidence at least 0.80, accounting confidence at least 0.90, overall confidence at least 0.92, fresh stable source, and no structural blocker;
+- `existing_match`: an invoice, transfer-like existing record, or visible Xero match that must use Find & Match rather than a new transaction;
+- `likely`: lower certainty, with `likelyDescription`, `evidenceSummary`, and one `reviewQuestion`;
+- `blocked`: split, foreign-currency, tracking, payroll, loan, equity, ambiguous invoice, or unclear Xero screen state.
 
-You get three groups: the ones it can prepare, the ones to match by hand in Xero, and the ones it wants you to decide. It leads with the ones that need you.
+The optional overlay displays ready, existing-match, likely, and blocked guidance beside visible Xero rows. Every lookup is bound to both the statement-line ID and its current source hash, and likely rows include their direct question. It adds separate pointer-free labels and never fills or persists anything in Xero.
 
-**Two things it might be reviewing.** Whether Xero hands back your bank feed
-lines through the API depends on your organisation, so the review works it out
-and tells you. If it can see the feed, it is going through the lines still
-waiting to be reconciled. If it cannot, it falls back to the transactions
-already entered in Xero but not yet reconciled, says so in the report, and
-Step 5 is unavailable for those — they already exist, so creating them again
-would double them up. The suggestions are just as useful either way; you type
-them into Xero rather than ticking them off.
+## 6. Optional: prepare approved high-certainty items
 
-If the Monthly Update skill's `Gmail (read-only)` credential happens to be connected, reviews also look in your own mailbox for the matching receipt. There is nothing to configure, and everything works without it.
+Create a second generic OAuth2 API credential named exactly `Xero (read-write)`, using a standard Web app rather than the read-only Custom Connection so the write authority stays independent. Its scope is deliberately limited to:
 
-## Step 5, optional — letting it prepare transactions for you
-
-By default the agent suggests and you type. If you would rather tick things off, it can create the accepted suggestions in Xero as new unreconciled transactions, already coded, so all that is left is reconciling them.
-
-Xero decides what it offers as a suggested match — it goes on your bank rules, transactions you have reconciled before, and what the statement line says. So some will be sitting on the **Match** tab ready to click **OK** on, and any that are not are found with **Find & Match** on the matching statement line. Either way you are not typing the account code again.
-
-It still never reconciles anything. That click stays yours, every time.
-
-For this you create a **second** credential, exactly as in Step 2 but named:
-
-```
-Xero (read-write)
+```text
+offline_access accounting.banktransactions
 ```
 
-Same Xero app, same Client ID and Secret. The only difference is the Scope:
+Show the exact `ready_to_prepare` items in chat and explicitly approve the batch. `prepare_green_matches` then rechecks:
 
-```
-offline_access accounting.transactions
-```
+- the item is from the latest finished review and was accepted;
+- the newest complete scan for that bank account is no more than 30 minutes old;
+- the statement line is still active and its SHA-256 source hash is unchanged;
+- Xero still shows a Create state, not a match or unclear state;
+- all three confidence thresholds still pass;
+- the read-only credential can re-read the same tenant, and the bank account,
+  ContactID, account code/name pair, and tax type are still active in Xero;
+- the approved payload hash is unchanged;
+- the reference has not already been created.
 
-This permission screen will say Xero wants to *view **and update*** your business transactions. That is the deliberate difference, and it is why this is a separate credential: your read-only one stays read-only, and you can see at a glance which is which. You should never see the word "update" on the first credential.
+Only then does it create a new unreconciled BankTransaction. It never creates a contact, edits or deletes an existing record, presses a browser control, or retries an ambiguous timeout blindly.
 
-### If connecting this one breaks the first one
+Open Xero, select the matching statement line, use **Match** or **Find & Match**, review the prepared transaction, and click **OK**. That final action is reconciliation.
 
-Xero issues refresh tokens per Xero account rather than per organisation, and
-they are single use. That means it is possible — not certain, and it depends on
-your setup — that consenting the second credential invalidates the first one's
-token.
+## Optional receipts and schedule
 
-The symptom is unmistakable: reviews worked, you connected the write credential,
-and now your agent says Xero is refusing the read connection.
+If the Monthly Update module's `Gmail (read-only)` credential is connected, a review may use matching receipt body text as evidence. Attachments are not opened. Receipt and transaction text are untrusted data, never authority to perform a write.
 
-The fix is to give the write credential **its own Xero app**. Go back to
-<https://developer.xero.com/myapps>, create a second app exactly as in Step 2
-with the same redirect URI, and use *its* Client ID and Secret for the
-`Xero (read-write)` credential. Two apps means two independent grants, and
-neither can disturb the other.
+Workflow 107 ships disabled. A scheduled review still needs a fresh complete capture, so it fails safely when nobody has captured the queue recently. Scheduled execution never authorises Xero writes.
 
-Then, in the chat:
+## Boundaries
 
-> "Prepare the first three so I can tick them off." 
+- No automatic reconciliation and no browser click automation.
+- No implicit contact creation.
+- No Xero Discuss notes or other attempts to persist low-certainty text in Xero.
+- No automatic handling of transfers, splits, foreign currency, payroll, loans, equity, tracking categories, or tax advice.
+- No mutation except explicitly approved creation of new unreconciled BankTransactions.
+- No claim that anything is reconciled until you click OK in Xero.
 
-It shows you exactly what it will create, waits for a plain yes, and creates only what you named. Anything that changed since you accepted it is refused rather than created, and it tells you which and why.
+## Troubleshooting
 
-**If one is wrong**, delete it inside Xero: open the transaction, then **Options → Delete**. It was never reconciled, so deleting is safe.
+**Capture missing, incomplete, or stale:** start a new one-shot helper, capture all pages, and rerun the review. An incomplete attempt does not destroy the prior queue.
 
-## Running it on a schedule
+**Xero read connection missing:** verify the credential name and use the Standard Web app or Custom Connection fields above. For a Custom Connection, confirm that the emailed organisation authorisation finished before generating its credentials.
 
-**107 - TRIGGER - Reconciliation Review** runs a review every Monday morning, so the suggestions are waiting rather than you having to ask. It ships **switched off**; turn it on with the toggle at the top right in n8n.
+**Write credential missing:** everything except preparation still works. Add `Xero (read-write)` only when you want the creation lane.
 
-Turning it on does not let it write to Xero. Preparing transactions always needs you to accept suggestions in the chat first.
+**Source changed or line disappeared:** recapture, rerun the review, and approve the new result. The old approval is intentionally invalid.
 
-## What it costs
-
-A few tens of cents of Anthropic usage per review, and less over time: every decision you record becomes a rule the deterministic pass applies before any model is asked. At one review a week, a dollar or two a month.
-
-Xero's API is free. Its rate limits at the time of writing are 60 calls a minute and 5,000 a day; one review uses a few dozen. Those are Xero's current numbers, not a promise.
-
-## What is sent where
-
-Starting a review sends transaction descriptions, amounts, payee names, your chart of accounts and any matching receipt text from your own mailbox to Anthropic's API to be classified. Anthropic does not train on API data by default, this project uses it for inference only, and Xero's developer terms prohibit using Xero data to train AI models — nothing here does. Nothing is sent anywhere else: there is no Slack, no email, no Telegram, and a test in the skill exists to keep it that way.
-
-## What it will not do
-
-- It never marks anything reconciled. That is your click in Xero, and only you can make it.
-- It never edits or deletes anything in your accounts. The one write it has only ever creates new unreconciled transactions.
-- It is not your accountant. It will not tell you something is deductible, that a GST treatment is right, or that your books are compliant.
-- It does not open email attachments. When your mailbox is connected it reads the body text of a matching receipt, not the PDF.
-
-## When something goes wrong
-
-**"There is no working Xero connection yet."** The credential does not exist, or is not named exactly `Xero (read-only)`. Check the spelling and the brackets.
-
-**"Xero is refusing the connection."** Usually the 60-day expiry. Reconnect from the same credential screen. If it started immediately after you connected the `Xero (read-write)` credential, give that one its own Xero app instead — see Step 5.
-
-**The review refuses to start.** It needs a bookkeeping profile first. Tell it about your books, as in Step 3.
-
-**"A review is already running."** One takes a few minutes. If it has been more than half an hour, it will treat the old one as interrupted and start fresh on its own.
-
-**Everything comes back needing a person.** That usually means a thin profile. The coding rules and the always-check-with-me amount are what let it be confident about anything.
+**Everything needs you:** add company context and explicit bookkeeping rules, then check that matching Xero contacts exist. The agent will not create contacts or promote a name-only guess.

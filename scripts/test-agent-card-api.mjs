@@ -92,7 +92,7 @@ try {
   assert.equal(result.body.agents[0].syncRequired, false);
   assert.deepEqual(
     result.body.agents.map((agent) => agent.skills.length),
-    [1, 2, 2, 1, 0],
+    [1, 2, 2, 1, 1],
   );
   assert.equal(result.body.agents[0].skills[0].id, "meeting-to-actions");
   assert.equal(result.body.agents[0].skills[0].installed, true);
@@ -101,6 +101,9 @@ try {
   assert.equal(result.body.agents[1].skills[0].installed, true);
   assert.equal(result.body.agents[1].skills[1].id, "linkedin-prospect-search");
   assert.equal(result.body.agents[1].skills[1].installed, false);
+  assert.equal(result.body.agents[4].skills[0].id, "xero-bookkeeping");
+  assert.equal(result.body.agents[4].skills[0].installed, false);
+  assert.equal(result.body.agents[4].skills[0].modules.length, 2);
   assert.equal(Object.hasOwn(result.body.agents[0], "workflowPath"), false);
 
   const malformedDirectory = join(skillsDirectory, "malformed-skill");
@@ -112,7 +115,7 @@ try {
   );
   result = await jsonRequest("/api/agents");
   assert.equal(result.body.agents[0].syncRequired, true);
-  assert.equal(result.body.agents.flatMap((agent) => agent.skills).length, 6);
+  assert.equal(result.body.agents.flatMap((agent) => agent.skills).length, 7);
   assert(warnings.length >= 2 && warnings.length <= 3);
 
   result = await jsonRequest("/api/agent-settings");
@@ -171,7 +174,7 @@ try {
     undefined,
     skillPacksDirectory,
   );
-  assert.deepEqual(emptyCards.map((agent) => agent.skills.length), [1, 2, 2, 1, 0]);
+  assert.deepEqual(emptyCards.map((agent) => agent.skills.length), [1, 2, 2, 1, 1]);
   assert(emptyCards.flatMap((agent) => agent.skills).every((pack) => !pack.installed));
   assert(emptyCards.every((agent) => agent.syncRequired));
 
