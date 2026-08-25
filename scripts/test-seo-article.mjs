@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -9,9 +9,135 @@ import { createChatServer } from "../apps/chat/dist/app.js";
 import { ChatStore } from "../apps/chat/dist/chat-store.js";
 import { ProfileStore } from "../apps/chat/dist/profile.js";
 import { evaluateArticleQuality } from "../apps/chat/dist/article-quality.js";
+import {
+  articleStrategyPreservesTopic,
+  buildArticleTopicStrategy,
+} from "../apps/chat/dist/article-strategy.js";
 import { fetchPublicWebPage } from "../apps/chat/dist/public-web.js";
 
 const projectRoot = fileURLToPath(new URL("..", import.meta.url));
+const startWorkflow = JSON.parse(
+  await readFile(join(projectRoot, "n8n", "workflows", "56-tool-start-seo-article.json"), "utf8"),
+);
+const writerWorkflow = JSON.parse(
+  await readFile(
+    join(projectRoot, "n8n", "workflows", "57-internal-write-seo-article.json"),
+    "utf8",
+  ),
+);
+const startValidationCode = startWorkflow.nodes.find(
+  (node) => node.name === "Validate Article Brief",
+).parameters.jsCode;
+const runStartValidation = new Function("$json", startValidationCode);
+const directTopic = "what is artificial intelligence in simple terms?";
+const directRequest = runStartValidation({
+  sessionId: "11111111-1111-4111-8111-111111111111",
+  requestId: "22222222-2222-4222-8222-222222222222",
+  currentInstruction: `write an article for mlai.au about '${directTopic}'`,
+  domain: "wrong.example",
+  requestedTopic: "",
+  selectionNumber: 1,
+  chooseStrongestKeyword: true,
+}).json;
+assert.equal(directRequest.valid, true);
+assert.equal(directRequest.domain, "mlai.au");
+assert.equal(directRequest.requestedTopic, directTopic);
+assert.equal(directRequest.selectionNumber, 0);
+assert.equal(directRequest.chooseStrongestKeyword, false);
+
+const groundingPages = [1, 2, 3, 4].map((number) => ({
+  id: `S${number}`,
+  url: `https://source${number}.example/article`,
+  title: `Source ${number}`,
+  text: `Evidence ${number}\nline supporting this draft.`,
+}));
+const groundedDraft = {
+  markdown: '# AI basics\n\nAI systems can "recognise" patterns.',
+  sources: groundingPages.map((page, index) => ({
+    id: page.id,
+    url: page.url,
+    title: page.title,
+    excerpt: index === 1 ? "A paraphrase that is not on the page" : `Evidence ${index + 1} line`,
+  })),
+  claims: [
+    {
+      sentence: 'AI systems can "recognise" patterns.',
+      sourceIds: ["S1"],
+      excerpts: ["Evidence 1 line"],
+      support: "entailed",
+      repairAction: "",
+    },
+    {
+      sentence: "This unsupported sentence was removed during repair.",
+      sourceIds: [],
+      excerpts: [],
+      support: "unsupported",
+      repairAction: "Remove it.",
+    },
+  ],
+};
+const sanitizedGroundedDraft = {
+  ...groundedDraft,
+  sources: groundedDraft.sources.map((source, index) =>
+    index === 1
+      ? { ...source, excerpt: "Evidence 2 line supporting this draft." }
+      : source,
+  ),
+  claims: [groundedDraft.claims[0]],
+};
+const groundedResponse = {
+  statusCode: 200,
+  body: {
+    stop_reason: "tool_use",
+    content: [{ type: "tool_use", name: "save_seo_article", input: groundedDraft }],
+  },
+};
+const workflowLookup = (name) => ({
+  first: () => {
+    assert.ok(
+      name === "Prepare Grounded Draft" || name === "Prepare One Repair",
+      `Unexpected workflow lookup: ${name}`,
+    );
+    return { json: { pages: groundingPages } };
+  },
+});
+const inspectDraftCode = writerWorkflow.nodes.find(
+  (node) => node.name === "Inspect Draft",
+).parameters.jsCode;
+const inspectRepairedDraftCode = writerWorkflow.nodes.find(
+  (node) => node.name === "Inspect Repaired Draft",
+).parameters.jsCode;
+assert.deepEqual(
+  new Function("$json", "$", inspectDraftCode)(groundedResponse, workflowLookup).json,
+  {
+    pages: groundingPages,
+    valid: true,
+    draft: sanitizedGroundedDraft,
+    needsRepair: false,
+  },
+);
+assert.deepEqual(
+  new Function("$json", "$", inspectRepairedDraftCode)(groundedResponse, workflowLookup).json,
+  {
+    pages: groundingPages,
+    valid: true,
+    draft: sanitizedGroundedDraft,
+    needsRepair: false,
+  },
+);
+const incompleteRepair = new Function("$json", "$", inspectRepairedDraftCode)(
+  {
+    ...groundedResponse,
+    body: { ...groundedResponse.body, stop_reason: "max_tokens" },
+  },
+  workflowLookup,
+).json;
+assert.equal(incompleteRepair.valid, false);
+assert.match(
+  incompleteRepair.failure.message,
+  /incomplete repair/i,
+);
+
 const temporary = await mkdtemp(join(tmpdir(), "seo-article-test-"));
 const store = new ChatStore(join(temporary, "chat.sqlite"));
 const sessionId = "11111111-1111-4111-8111-111111111111";
@@ -52,7 +178,7 @@ const legacyDatabase = new DatabaseSync(migrationPath);
 legacyDatabase.exec("DROP TABLE seo_article_versions; DROP TABLE seo_article_jobs; DROP TABLE seo_article_briefs; PRAGMA user_version = 3;");
 legacyDatabase.close();
 const afterMigration = new ChatStore(migrationPath);
-assert.equal(afterMigration.health().schemaVersion, 5);
+assert.equal(afterMigration.health().schemaVersion, 6);
 assert.equal(afterMigration.getConversation(sessionId)?.title, "Preserve this conversation");
 afterMigration.close();
 const articleWords = Array.from(
@@ -97,6 +223,60 @@ const quality = evaluateArticleQuality({
   faqJsonLdCount: 0,
 });
 assert.equal(quality.passed, true, quality.errors.join(" "));
+
+const topicStrategy = buildArticleTopicStrategy({
+  requestedTopic: "what is artificial intelligence in simple terms?",
+  evidenceSource: "topic_specific_paid_research",
+  market: "Australia",
+  language: "en",
+  actualCostUsd: 0.02,
+  capturedAt: "2026-08-24T00:00:00.000Z",
+  candidates: [
+    {
+      keyword: "artificial intelligence",
+      intent: "informational",
+      searchVolume: 27_100,
+      difficulty: 55,
+      relevance: 0.9,
+      source: "live_keyword_data",
+      language: "en",
+      market: "Australia",
+    },
+    {
+      keyword: "what is artificial intelligence in simple terms",
+      intent: "informational",
+      searchVolume: 320,
+      difficulty: 24,
+      relevance: 1,
+      source: "live_keyword_data",
+      language: "en",
+      market: "Australia",
+      serpFormatMatch: 1,
+    },
+    {
+      keyword: "artificial intelligence near me",
+      intent: "local",
+      searchVolume: 1_300,
+      difficulty: 12,
+      relevance: 0.7,
+      source: "live_keyword_data",
+      language: "en",
+      market: "Australia",
+    },
+  ],
+});
+assert.equal(topicStrategy.requestedTopic, "what is artificial intelligence in simple terms?");
+assert.equal(topicStrategy.primaryKeyword, "what is artificial intelligence in simple terms");
+assert.equal(topicStrategy.supportingKeywords.some(({ keyword }) => keyword.includes("near me")), false);
+assert.equal(articleStrategyPreservesTopic(topicStrategy), true);
+
+const fallbackStrategy = buildArticleTopicStrategy({
+  requestedTopic: "how does a cash flow forecast work?",
+  evidenceSource: "saved_or_free_fallback",
+  candidates: [],
+});
+assert.equal(fallbackStrategy.primaryKeyword, "how does a cash flow forecast work?");
+assert.equal(fallbackStrategy.actualCostUsd, 0);
 
 await assert.rejects(fetchPublicWebPage("https://127.0.0.1/"), /public HTTPS/i);
 
@@ -164,6 +344,127 @@ try {
     researchSummary: "Grounded fixture research.",
     evidenceQuality: { confidence: "high" },
   });
+
+  // A topic supplied in the current request is not article option 1. The
+  // saved brief may contain a broader, higher-volume option, but it must never
+  // replace what the user actually asked the article to explain.
+  const customTopic = "what is bookkeeping in simple terms?";
+  const customTopicRequest = await jsonRequest("/api/seo-article/jobs", {
+    method: "POST",
+    body: JSON.stringify({
+      sessionId,
+      requestId: "77777777-7777-4777-8777-777777777777",
+      domain: "example.com",
+      requestedTopic: customTopic,
+      // Workflow 56 uses zero as the explicit custom-topic sentinel. The API
+      // must normalize it away instead of treating it as a numbered choice.
+      selectionNumber: 0,
+    }),
+  });
+  assert.equal(customTopicRequest.response.status, 201);
+  assert.equal(customTopicRequest.body.status, "queued");
+  assert.equal(customTopicRequest.body.job.requestedTopic, customTopic);
+  assert.equal(customTopicRequest.body.job.topicSource, "custom");
+  assert.equal(customTopicRequest.body.job.primaryKeyword, customTopic);
+  assert.equal(customTopicRequest.body.brief.selection.number, 0);
+  assert.equal(customTopicRequest.body.brief.selection.primaryKeyword, customTopic);
+
+  const storedCustomTopic = store.getSeoArticleJob(
+    sessionId,
+    customTopicRequest.body.job.jobId,
+  );
+  assert.equal(storedCustomTopic?.requestedTopic, customTopic);
+  assert.equal(storedCustomTopic?.topicSource, "custom");
+
+  const conflictingMode = await jsonRequest("/api/seo-article/jobs", {
+    method: "POST",
+    body: JSON.stringify({
+      sessionId,
+      requestId: "88888888-8888-4888-8888-888888888888",
+      domain: "example.com",
+      requestedTopic: customTopic,
+      selectionNumber: 1,
+    }),
+  });
+  assert.equal(conflictingMode.response.status, 400);
+
+  for (const stage of ["loading_context", "researching_keywords"]) {
+    const progress = await jsonRequest("/api/seo-article/jobs", {
+      method: "PATCH",
+      body: JSON.stringify({
+        sessionId,
+        jobId: customTopicRequest.body.job.jobId,
+        status: "running",
+        stage,
+      }),
+    });
+    assert.equal(progress.response.status, 200);
+    assert.equal(progress.body.job.stage, stage);
+  }
+  const savedStrategy = await jsonRequest("/api/seo-article/strategy", {
+    method: "PUT",
+    body: JSON.stringify({
+      sessionId,
+      jobId: customTopicRequest.body.job.jobId,
+      evidenceSource: "topic_specific_paid_research",
+      market: "Australia",
+      language: "en",
+      actualCostUsd: 0.01,
+      candidates: [
+        {
+          keyword: "bookkeeping",
+          intent: "informational",
+          searchVolume: 20_000,
+          difficulty: 50,
+          relevance: 0.9,
+          source: "live_keyword_data",
+          language: "en",
+          market: "Australia",
+        },
+        {
+          keyword: "what is bookkeeping",
+          intent: "informational",
+          searchVolume: 500,
+          difficulty: 20,
+          relevance: 1,
+          source: "live_keyword_data",
+          language: "en",
+          market: "Australia",
+          serpFormatMatch: 1,
+        },
+      ],
+    }),
+  });
+  assert.equal(savedStrategy.response.status, 200);
+  assert.equal(savedStrategy.body.strategy.requestedTopic, customTopic);
+  assert.equal(savedStrategy.body.strategy.primaryKeyword, "what is bookkeeping");
+  assert.equal(savedStrategy.body.job.stage, "choosing_strategy");
+  assert.equal(savedStrategy.body.job.requestedTopic, customTopic);
+
+  const backwardsProgress = await jsonRequest("/api/seo-article/jobs", {
+    method: "PATCH",
+    body: JSON.stringify({
+      sessionId,
+      jobId: customTopicRequest.body.job.jobId,
+      status: "running",
+      stage: "loading_context",
+    }),
+  });
+  assert.equal(backwardsProgress.response.status, 409);
+
+  const overBudgetStrategy = await jsonRequest("/api/seo-article/strategy", {
+    method: "PUT",
+    body: JSON.stringify({
+      sessionId,
+      jobId: customTopicRequest.body.job.jobId,
+      evidenceSource: "topic_specific_paid_research",
+      market: "Australia",
+      language: "en",
+      actualCostUsd: 0.151,
+      candidates: [],
+    }),
+  });
+  assert.equal(overBudgetStrategy.response.status, 400);
 
   const pricingNeedsDetail = await jsonRequest("/api/seo-article/jobs", {
     method: "POST",
@@ -239,6 +540,31 @@ try {
   assert.equal(first.body.job.primaryKeyword, "bookkeeping for freelancers");
   assert.match(first.body.job.briefId, /^brief-/);
   const jobId = first.body.job.jobId;
+  const firstRequestedTopic = first.body.job.requestedTopic;
+
+  const firstStrategy = await jsonRequest("/api/seo-article/strategy", {
+    method: "PUT",
+    body: JSON.stringify({
+      sessionId,
+      jobId,
+      evidenceSource: "fresh_saved_snapshot",
+      market: "Australia",
+      language: "en",
+      actualCostUsd: 0,
+      candidates: [{
+        keyword: "bookkeeping for freelancers",
+        intent: "informational",
+        searchVolume: 320,
+        difficulty: 28,
+        relevance: 1,
+        source: "fresh_saved_snapshot",
+        language: "en",
+        market: "Australia",
+        serpFormatMatch: 1,
+      }],
+    }),
+  });
+  assert.equal(firstStrategy.response.status, 200);
 
   const briefDuringWrite = await jsonRequest(
     `/api/seo-article/briefs?sessionId=${sessionId}&domain=example.com`,
@@ -310,7 +636,15 @@ try {
   const download = await fetch(`${base}${saved.body.article.downloadUrl}`);
   assert.equal(download.status, 200);
   assert.match(download.headers.get("content-disposition") ?? "", /\.md"$/);
-  assert.equal(await download.text(), markdown);
+  const downloadedMarkdown = await download.text();
+  assert(downloadedMarkdown.startsWith(markdown));
+  assert.match(downloadedMarkdown, /<!-- SEO REVIEW METADATA/);
+  assert(downloadedMarkdown.includes(`Requested topic: ${firstRequestedTopic}`));
+  assert.match(downloadedMarkdown, /Primary keyword: bookkeeping for freelancers/);
+  const storedVersion = store.getSeoArticleVersionForJob(sessionId, jobId);
+  assert.equal(storedVersion?.context.requestedTopic, firstRequestedTopic);
+  assert.equal(storedVersion?.plan.requestedTopic, firstRequestedTopic);
+  assert.equal(storedVersion?.context.articleStrategy.primaryKeyword, "bookkeeping for freelancers");
 
   const secondRequest = "44444444-4444-4444-8444-444444444444";
   const second = await jsonRequest("/api/seo-article/jobs", {
@@ -342,6 +676,8 @@ try {
     requestId: interruptedRequest,
     domain: "example.com",
     briefId: first.body.job.briefId,
+    requestedTopic: "record keeping",
+    topicSource: "custom",
     primaryKeyword: "record keeping",
     supportingKeywords: [],
     input: {},

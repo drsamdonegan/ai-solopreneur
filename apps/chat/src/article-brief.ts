@@ -343,20 +343,20 @@ export function requiresBoundaries(primaryKeyword: string): boolean {
 export function selectArticleOpportunity(
   brief: ArticleBriefRecord,
   input: {
-    primaryKeyword?: string;
+    requestedTopic?: string;
     selectionNumber?: number;
     chooseBest?: boolean;
   },
 ): ArticleOpportunity | undefined {
-  const primaryKeyword = text(input.primaryKeyword, 200).toLowerCase();
-  if (primaryKeyword) {
-    const existing = brief.opportunities.find(
-      (opportunity) => opportunity.primaryKeyword.toLowerCase() === primaryKeyword,
-    );
-    return existing ?? {
+  const requestedTopic = text(input.requestedTopic, 240);
+  if (requestedTopic) {
+    // A topic in the current request is an editorial constraint, not a lookup
+    // key for one of the saved numbered ideas. Always create a custom
+    // selection so a broader option cannot silently replace the user's words.
+    return {
       number: 0,
-      title: titleFor({ keyword: primaryKeyword, intent: "informational", relevance: 1 }),
-      primaryKeyword,
+      title: titleFor({ keyword: requestedTopic, intent: "informational", relevance: 1 }),
+      primaryKeyword: requestedTopic,
       supportingKeywords: [],
       intent: "informational",
       competition: "Not measured",

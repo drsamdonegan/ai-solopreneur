@@ -18,6 +18,7 @@ const load = async (name) =>
 
 const start = await load("68-tool-start-funding-scan.json");
 const report = await load("63-tool-get-funding-report.json");
+const scan = await load("71-run-funding-scan.json");
 const code = (workflow, name) =>
   workflow.nodes.find((entry) => entry.name === name).parameters.jsCode;
 
@@ -162,15 +163,18 @@ check(
   live.response.startedMinutesAgo === 3,
   "the owner is told how long the running search has been going",
 );
+// Pinned as intent rather than wording, because the wording has since been
+// rewritten once already and the test went red instead of the behaviour.
 check(
-  /search again anyway/.test(live.response.message),
+  /force/.test(live.response.message) &&
+    /never refuse|fresh one now|search again/i.test(live.response.message),
   "waiting on a running search always comes with a way out",
 );
 
 check(
-  decide([{ runId: "a", status: "running", ranAt: minutesAgo(24) }])
+  decide([{ runId: "a", status: "running", ranAt: minutesAgo(140) }])
     .replacing?.reason === "interrupted",
-  "a run older than twenty minutes is wreckage, not a reason to refuse",
+  "a run older than the scan's own timeout is wreckage, not a reason to refuse",
 );
 check(
   decide([{ runId: "a", status: "running", ranAt: minutesAgo(2) }], true)
@@ -200,12 +204,35 @@ check(
 );
 check(
   /longer than one usually takes/.test(
-    shape({ runId: "a", status: "running", ranAt: minutesAgo(14) }).message,
+    shape({ runId: "a", status: "running", ranAt: minutesAgo(40) }).message,
   ),
   "a slow search is flagged as slow rather than promised",
 );
+// The two tools read the same row and used to disagree about when it goes
+// stale: for the ten minutes in between, asking for the report insisted a
+// search was in progress while asking to search started a new one.
+const windowOf = (source) =>
+  Number(source.match(/const DEAD_AFTER = (\d+);/)?.[1] ?? NaN);
+check(
+  windowOf(code(report, "Shape Report Result")) <=
+    windowOf(code(start, "Decide Run")),
+  "the report never calls a run live that the start tool would already replace",
+);
+// A measured eighteen-minute run was written off as dead at thirteen, which is
+// how a working search gets a second one started on top of it. Before that
+// timeout there is no age at which death is a fact, so neither window may sit
+// below it.
+const scanTimeoutMinutes = scan.settings.executionTimeout / 60;
+check(
+  windowOf(code(report, "Shape Report Result")) >= scanTimeoutMinutes,
+  "no run is called dead while n8n would still be letting it work",
+);
+check(
+  windowOf(code(start, "Decide Run")) >= scanTimeoutMinutes,
+  "no second scan is started on top of one n8n is still running",
+);
 
-const dead = shape({ runId: "a", status: "running", ranAt: minutesAgo(38) });
+const dead = shape({ runId: "a", status: "running", ranAt: minutesAgo(140) });
 check(dead.interrupted === true, "a run that never came back reads as interrupted");
 check(
   dead.running !== true,
@@ -222,7 +249,6 @@ check(
 // item arriving at Write Report is a stored opportunity row rather than the
 // search. Reading the input instead of naming the node threw away a full
 // ten-minute search and reported it as a missing business profile.
-const scan = await load("71-run-funding-scan.json");
 const storedRow = {
   fingerprint: "abc",
   programName: "Some older program",
@@ -315,6 +341,535 @@ check(
   /fault on my side/.test(unreadable?.[0]?.json.reportText ?? ""),
   "details that are saved but unreadable are owned, not blamed on the owner",
 );
+
+// --- a search that never reached the web ------------------------------------
+// Every beat answers even when its web search never ran, and it answers with
+// an empty list. That was written up as "I checked national, regional, nongov
+// sources and found nothing new" — a confident account of work that did not
+// happen, indistinguishable from genuine good news, and the owner was then
+// told their business details were probably too thin.
+const searchless = attempt("Write Report when no search ran", () =>
+  run(code(scan, "Write Report"), {
+    self: storedRow,
+    incoming: [storedRow],
+    executed: {
+      "Check Profile": { runId: "r10", staleDays: null },
+      "Shape Findings": {
+        ...searchResult,
+        beatsRun: ["national", "regional", "nongov"],
+        beatsAttempted: 3,
+        beatsSucceeded: 3,
+        searchCount: 0,
+        candidates: [],
+        findings: [],
+        reportable: [],
+      },
+      "Load Closing Soon": [],
+    },
+  }),
+);
+check(
+  searchless?.[0]?.json.status === "failed",
+  "a run that searched nothing is not recorded as a clean run",
+);
+check(
+  !/found nothing new/.test(searchless?.[0]?.json.reportText ?? ""),
+  "a run that searched nothing never claims to have checked the sources",
+);
+check(
+  /could not search the web/.test(searchless?.[0]?.json.reportText ?? ""),
+  "a run that searched nothing says so",
+);
+check(
+  /nothing you need to fix/.test(searchless?.[0]?.json.reportText ?? ""),
+  "a fault on this side is not handed to the owner as homework",
+);
+
+const emptyButSearched = attempt("Write Report when the search found nothing", () =>
+  run(code(scan, "Write Report"), {
+    self: storedRow,
+    incoming: [storedRow],
+    executed: {
+      "Check Profile": { runId: "r11", staleDays: null },
+      "Shape Findings": {
+        ...searchResult,
+        searchCount: 9,
+        candidates: [],
+        findings: [],
+        reportable: [],
+      },
+      "Load Closing Soon": [],
+    },
+  }),
+);
+check(
+  emptyButSearched?.[0]?.json.status === "ok",
+  "a search that looked and found nothing is still a good run",
+);
+check(
+  /I ran 9 searches/.test(emptyButSearched?.[0]?.json.reportText ?? ""),
+  "an empty result says how hard it looked, so it can be told from a dud run",
+);
+check(
+  /without a single program to look at/.test(emptyButSearched?.[0]?.json.reportText ?? ""),
+  "searching hard and seeing nothing at all is called out as odd, not as no news",
+);
+
+const toolBroke = attempt("Write Report when web searches errored", () =>
+  run(code(scan, "Write Report"), {
+    self: storedRow,
+    incoming: [storedRow],
+    executed: {
+      "Check Profile": { runId: "r12", staleDays: null },
+      "Shape Findings": {
+        ...searchResult,
+        searchCount: 4,
+        toolErrors: ["max_uses_exceeded", "max_uses_exceeded"],
+      },
+      "Load Closing Soon": [],
+    },
+  }),
+);
+check(
+  toolBroke?.[0]?.json.status === "partial",
+  "searches that failed outright downgrade the run rather than passing silently",
+);
+check(
+  /max_uses_exceeded/.test(toolBroke?.[0]?.json.reportText ?? ""),
+  "the reason the web went missing reaches the report",
+);
+
+// --- what the agent is told when the report is empty ------------------------
+// With nothing to go on, the agent invented an explanation and picked the
+// worst available one: that the owner had not told it enough about their
+// business. The search only runs once a profile is saved, so that is never it.
+const emptyRead = run(code(report, "Shape Report Result"), {
+  incoming: [],
+  executed: {
+    "Validate Report Input": { filter: "open" },
+    "Read Latest Run": [
+      { runId: "a", status: "ok", ranAt: minutesAgo(3), reportText: "Funding scan", searchCount: 0, errorSummary: "no web searches ran" },
+    ],
+  },
+})[0].json.response;
+check(
+  emptyRead.searchCount === 0,
+  "how many searches ran is visible to the agent reading the report",
+);
+check(
+  /never suggest the business profile is missing details/.test(emptyRead.message),
+  "the agent is told not to blame the profile for an empty report",
+);
+
+// --- what the beat saw, not just what it returned ---------------------------
+// Nine real web searches came back with an empty candidate list and no way to
+// tell whether that meant everything found had closed or nothing was found at
+// all. The two need different fixes and the report said the same words for
+// both, so the beat now hands up its working.
+const beat = await load("72-run-funding-beat.json");
+const shapeBeat = (payload) => {
+  const checked = {
+    beat: "national",
+    scope: "national funding",
+    searchCount: 3,
+    failed: false,
+    firstBody: {
+      content: [{ type: "text", text: JSON.stringify(payload) }],
+      usage: { input_tokens: 10, output_tokens: 5 },
+    },
+  };
+  return run(code(beat, "Shape Beat Result"), {
+    self: checked,
+    executed: { "Check Search Response": checked },
+  }).json;
+};
+
+const sawAndDropped = attempt("a beat that saw programs and kept none", () =>
+  shapeBeat({
+    candidates: [],
+    considered: 12,
+    rejected: [
+      { programName: "One", reason: "closed" },
+      { programName: "Two", reason: "closed" },
+      { programName: "Three", reason: "not-applicable" },
+    ],
+  }),
+);
+check(
+  sawAndDropped?.considered === 12,
+  "how many programs a beat looked at survives the beat",
+);
+check(
+  sawAndDropped?.rejected?.length === 3,
+  "the reason each one was set aside survives the beat",
+);
+check(
+  sawAndDropped?.ok === true,
+  "reporting its working does not make a good beat look failed",
+);
+
+const badLink = attempt("a beat whose candidate had no usable link", () =>
+  shapeBeat({
+    candidates: [{ programName: "Program with no link", officialUrl: "" }],
+    considered: 1,
+    rejected: [],
+  }),
+);
+check(
+  (badLink?.rejected ?? []).some((entry) => entry.reason === "no usable link"),
+  "a candidate dropped for a broken link is no longer dropped in silence",
+);
+
+const noCount = attempt("a beat that forgot to count", () =>
+  shapeBeat({ candidates: [], rejected: [{ programName: "One", reason: "closed" }] }),
+);
+check(
+  noCount?.considered === 1,
+  "a beat that omits the count still accounts for what it rejected",
+);
+
+const allClosed = attempt("Write Report when everything found had closed", () =>
+  run(code(scan, "Write Report"), {
+    self: storedRow,
+    incoming: [storedRow],
+    executed: {
+      "Check Profile": { runId: "r13", staleDays: null },
+      "Shape Findings": {
+        ...searchResult,
+        searchCount: 9,
+        candidates: [],
+        findings: [],
+        reportable: [],
+        considered: 12,
+        rejected: [
+          { programName: "One", reason: "closed" },
+          { programName: "Two", reason: "closed" },
+          { programName: "Three", reason: "not-applicable" },
+        ],
+      },
+      "Load Closing Soon": [],
+    },
+  }),
+);
+check(
+  /looked at 12 programs/.test(allClosed?.[0]?.json.reportText ?? ""),
+  "a report that found nothing still says how much it went through",
+);
+check(
+  /2 closed/.test(allClosed?.[0]?.json.reportText ?? ""),
+  "the reasons are tallied, so a run of closed rounds reads differently from a dud",
+);
+check(
+  !/without a single program to look at/.test(allClosed?.[0]?.json.reportText ?? ""),
+  "a beat that saw plenty is not described as having seen nothing",
+);
+
+// --- a beat whose request never came back ------------------------------------
+// A dropped connection loses the beat's own name with it, and the report then
+// said "I could not reach the unknown sources today", which tells nobody which
+// sources went missing or whether it matters.
+const collect = (results, asked) =>
+  run(code(scan, "Collect Candidates"), {
+    incoming: results,
+    executed: { "Build Beats": asked.map((beat) => ({ beat })) },
+  })[0].json;
+
+const oneBeatDied = attempt("Collect Candidates with a beat that never answered", () =>
+  collect(
+    [
+      { beat: "national", ok: true, candidates: [], searchCount: 3, considered: 2, rejected: [{ programName: "One", reason: "closed" }] },
+      { beat: "regional", ok: true, candidates: [], searchCount: 3, considered: 0, rejected: [] },
+      { error: "The connection was aborted, perhaps the server is offline" },
+    ],
+    ["national", "regional", "nongov"],
+  ),
+);
+check(
+  (oneBeatDied?.failedBeats ?? []).some((entry) => entry.beat === "nongov"),
+  "a beat that died is named, so the report can say which sources went missing",
+);
+check(
+  !(oneBeatDied?.beatsRun ?? []).includes("unknown"),
+  "no beat is ever reported to the owner as 'unknown'",
+);
+check(
+  oneBeatDied?.considered === 2 && (oneBeatDied?.rejected ?? []).length === 1,
+  "the surviving beats' working is still totalled when one of them dies",
+);
+check(
+  (oneBeatDied?.rejected ?? [])[0]?.beat === "national",
+  "each rejection carries the beat it came from",
+);
+
+// --- the search budget, which the model kept hitting -------------------------
+const searchRequest = code(beat, "Build Search Request");
+check(
+  /max_uses: 30/.test(searchRequest),
+  "the beat gets the searches it kept asking for and being refused",
+);
+check(
+  /Do not decide eligibility yourself/.test(searchRequest),
+  "the wide step does not rule on fit either — sixteen programs went that way",
+);
+check(
+  !/open now or open within the next 90 days/.test(searchRequest),
+  "the wide step no longer has to certify a program is open before returning it",
+);
+check(
+  /cannot tell whether it is open/.test(searchRequest),
+  "the wide step is told what to do when it cannot tell, rather than left to guess",
+);
+
+// --- the time a full-budget beat actually needs -------------------------------
+// The beat that died on two runs running died on the HTTP timeout, not on a bad
+// line: at ten searches it already ran past four minutes. Thirty searches is
+// about eighteen, so the call, the beat, and the scan each have to allow it.
+const beatCall = beat.nodes.find((n) => n.name === "Search With Claude");
+const perSearchSeconds = 40;
+const searchBudget = Number(code(beat, "Build Search Request").match(/max_uses: (\d+)/)?.[1] ?? NaN);
+const beatSeconds = searchBudget * perSearchSeconds;
+check(
+  beatCall.parameters.options.timeout / 1000 >= beatSeconds,
+  "one API call is given long enough to spend the whole search budget",
+);
+check(
+  beat.settings.executionTimeout >= beatSeconds,
+  "the beat workflow outlasts the call it is waiting on",
+);
+check(
+  scan.settings.executionTimeout >= beatSeconds * 3,
+  "the scan outlasts its three beats, rather than cutting the last one off",
+);
+check(
+  !("retryOnFail" in beatCall),
+  "a call that ran out of time is not simply run again to run out of time twice",
+);
+
+// --- what the agent sends against what the workflow accepts -------------------
+// The agent had been passing force correctly all along and n8n had been dropping
+// it, because the receiving trigger never declared it. Every "search again
+// anyway" went in the bin, silently, and the owner was left deleting executions
+// by hand — the exact complaint the force flag was added to answer.
+const agent = await load("../../../n8n/workflows/00-start-here-project-partner.json")
+  .catch(() => null);
+check(agent !== null, "the agent workflow can be read, to check what it sends");
+const byId = new Map(
+  [start, report, scan, beat].map((workflow) => [workflow.id, workflow]),
+);
+let boundariesChecked = 0;
+for (const tool of (agent?.nodes ?? []).filter((n) => n.type.endsWith("toolWorkflow"))) {
+  const target = byId.get(tool.parameters?.workflowId?.value);
+  if (!target) continue;
+  const trigger = target.nodes.find((n) =>
+    n.type.endsWith("executeWorkflowTrigger"),
+  );
+  const accepted = new Set(
+    (trigger?.parameters?.workflowInputs?.values ?? []).map((v) => v.name),
+  );
+  for (const sent of Object.keys(tool.parameters?.workflowInputs?.value ?? {})) {
+    check(
+      accepted.has(sent),
+      `${tool.name} sends "${sent}" but ${target.id} never declared it, so n8n drops it`,
+    );
+    boundariesChecked += 1;
+  }
+}
+check(boundariesChecked > 0, "the tool-to-workflow boundary was actually inspected");
+
+// --- progress heartbeats -----------------------------------------------------
+// While a run is open its row's errorSummary carries a heartbeat: what the
+// search is doing, which step it is on, and when it last said so. The readers
+// then judge death by silence instead of age — an hour-long search with a
+// fresh heartbeat is alive, and a twenty-minute-old one that went quiet
+// half an hour ago is not.
+const hb = (minutesQuiet, extra = {}) =>
+  JSON.stringify({
+    hb: 1,
+    note: "Searching state and territory funding sources",
+    step: 2,
+    of: 5,
+    at: minutesAgo(minutesQuiet),
+    ...extra,
+  });
+
+const freshHeartbeat = shape({
+  runId: "a", status: "running", ranAt: minutesAgo(45), errorSummary: hb(3),
+});
+check(
+  freshHeartbeat.running === true,
+  "a search deep into an hour is still alive while its heartbeat is fresh",
+);
+check(
+  /step 2 of 5/.test(freshHeartbeat.message) && /state and territory/.test(freshHeartbeat.message),
+  "the agent is told what the running search is doing, not just how old it is",
+);
+
+const quietHeartbeat = shape({
+  runId: "a", status: "running", ranAt: minutesAgo(45), errorSummary: hb(35),
+});
+check(
+  quietHeartbeat.interrupted === true,
+  "a heartbeat quiet past thirty minutes is a dead run, whatever its age",
+);
+
+check(
+  shape({ runId: "a", status: "running", ranAt: minutesAgo(45), errorSummary: "" }).running === true,
+  "a run from before heartbeats existed is still judged by the old age rule",
+);
+
+const startFresh = decide([
+  { runId: "a", status: "running", ranAt: minutesAgo(50), errorSummary: hb(2) },
+]);
+check(
+  startFresh.shouldQueue === false,
+  "the start guard trusts a fresh heartbeat over a fifty-minute age",
+);
+check(
+  /state and territory/.test(startFresh.response.message),
+  "the refusal says what the running search is doing",
+);
+
+const startQuiet = decide([
+  { runId: "a", status: "running", ranAt: minutesAgo(50), errorSummary: hb(34) },
+]);
+check(
+  startQuiet.shouldQueue === true && startQuiet.replacing?.reason === "interrupted",
+  "a quiet heartbeat frees the lock without waiting out the full age window",
+);
+
+// The three writers and the three readers of the heartbeat have to agree on
+// the silence threshold, or one of them calls a working search dead.
+const quietOf = (source) => Number(source.match(/const QUIET_AFTER = (\d+);/)?.[1] ?? NaN);
+const progress = await load("65-internal-funding-progress.json");
+check(
+  quietOf(code(report, "Shape Report Result")) === quietOf(code(start, "Decide Run")) &&
+    quietOf(code(start, "Decide Run")) === quietOf(code(progress, "Shape Progress")),
+  "every reader of the heartbeat uses the same silence threshold",
+);
+
+// --- the progress webhook the chat page polls --------------------------------
+const shapeProgress = (rowsIn) =>
+  run(code(progress, "Shape Progress"), { incoming: rowsIn, executed: {} })[0].json;
+
+check(
+  shapeProgress([]).hasRun === false,
+  "no runs at all answers quietly instead of erroring",
+);
+const polling = shapeProgress([
+  { runId: "a", status: "running", ranAt: minutesAgo(9), errorSummary: hb(1) },
+]);
+check(
+  polling.running === true && polling.step === 2 && polling.of === 5 &&
+    /state and territory/.test(polling.note),
+  "a running search reports its step, its total, and what it is doing",
+);
+const pollDead = shapeProgress([
+  { runId: "a", status: "running", ranAt: minutesAgo(50), errorSummary: hb(40) },
+]);
+check(
+  pollDead.running === false && pollDead.interrupted === true,
+  "the page is told a dead run is dead, not shown a frozen bar",
+);
+const pollDone = shapeProgress([
+  { runId: "a", status: "ok", ranAt: minutesAgo(4), errorSummary: "", newCount: 3, closingSoonCount: 1 },
+]);
+check(
+  pollDone.running === false && pollDone.status === "ok" && pollDone.newCount === 3,
+  "a finished run reports its outcome counts and nothing heavier",
+);
+check(
+  !("reportText" in pollDone),
+  "the unauthenticated progress endpoint never carries the report itself",
+);
+
+// --- the heartbeat writers ---------------------------------------------------
+// The scan numbers its beats and hands the numbering to each one; the beat
+// writes the heartbeat under the runId it was given. All of that crosses the
+// 71-to-72 boundary, which is exactly where force was silently dropped.
+const beatTrigger = beat.nodes.find((n) => n.type.endsWith("executeWorkflowTrigger"));
+const beatAccepts = new Set(
+  (beatTrigger?.parameters?.workflowInputs?.values ?? []).map((v) => v.name),
+);
+const beatDeclares = new Map(
+  (beatTrigger?.parameters?.workflowInputs?.values ?? []).map((v) => [v.name, v.type]),
+);
+const runBeat = scan.nodes.find((n) => n.name === "Run Beat");
+for (const sent of Object.keys(runBeat?.parameters?.workflowInputs?.value ?? {})) {
+  check(
+    beatAccepts.has(sent),
+    `Run Beat sends "${sent}" but the beat trigger never declared it, so n8n drops it`,
+  );
+}
+const builtBeats = run(code(scan, "Build Beats"), {
+  self: {},
+  incoming: [{ memories: [] }],
+  executed: {
+    "Check Profile": {
+      runId: "r20",
+      beats: ["national", "nongov"],
+      sourceDomains: { national: ["business.gov.au"], regional: [], local: [] },
+      profileJson: JSON.stringify({ country: "Australia" }),
+      region: "NSW", city: "Sydney", industry: "software",
+      today: "2026-08-19", timezone: "Australia/Melbourne",
+    },
+  },
+});
+check(
+  builtBeats.length === 2 &&
+    builtBeats.every((item, index) => item.json.runId === "r20" &&
+      item.json.beatIndex === index && item.json.beatCount === 2),
+  "every beat leaves with the runId and its own number, so its heartbeat lands on the right row",
+);
+// Names matching is only half of it. n8n validates the declared *type* too, and
+// a number sent where a string was declared is rejected before the beat runs —
+// which killed every beat in a live scan and reported "the beat did not run"
+// three times over. So the types Build Beats actually produces are checked
+// against what the trigger says it will accept.
+const n8nTypeOf = (value) =>
+  typeof value === "number" ? "number"
+  : typeof value === "boolean" ? "boolean"
+  : typeof value === "string" ? "string"
+  : Array.isArray(value) ? "array"
+  : "object";
+// Three places have to agree, not two. The sending node carries its own cached
+// copy of the sub-workflow's input schema and coerces to it before sending, so
+// fixing only the trigger turned "number arriving where string was declared"
+// into "string arriving where number was declared" — same error, second deploy.
+const senderSchema = new Map(
+  (runBeat?.parameters?.workflowInputs?.schema ?? []).map((s) => [s.id, s.type]),
+);
+const produced = builtBeats[0]?.json ?? {};
+let typesChecked = 0;
+for (const [sent, expression] of Object.entries(
+  runBeat?.parameters?.workflowInputs?.value ?? {},
+)) {
+  const from = String(expression).match(/\$json\.(\w+)/)?.[1];
+  if (from === undefined || !(from in produced)) continue;
+  const actual = n8nTypeOf(produced[from]);
+  check(
+    beatDeclares.get(sent) === actual,
+    `Run Beat sends "${sent}" as ${actual} but the beat trigger declares ${beatDeclares.get(sent)}, so n8n rejects the whole beat`,
+  );
+  check(
+    senderSchema.get(sent) === actual,
+    `Run Beat's own schema calls "${sent}" a ${senderSchema.get(sent)} but it is a ${actual}, so it is coerced before the beat ever sees it`,
+  );
+  typesChecked += 1;
+}
+check(typesChecked > 0, "the types crossing into the beat were actually compared");
+
+const beatHeartbeat = beat.nodes.find((n) => n.name === "Note Beat Started");
+check(
+  beatHeartbeat !== undefined && beatHeartbeat.onError === "continueRegularOutput",
+  "a failed heartbeat write is a missing progress note, never a dead search",
+);
+for (const writer of ["Note Page Checks Started", "Note Judging Started"]) {
+  const found = scan.nodes.find((n) => n.name === writer);
+  check(
+    found !== undefined && found.onError === "continueRegularOutput",
+    `${writer} exists and cannot take the scan down with it`,
+  );
+}
 
 if (failures.length > 0) {
   for (const failure of failures) console.error(`- ${failure}`);

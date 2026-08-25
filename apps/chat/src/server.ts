@@ -50,6 +50,9 @@ const profileDataDirectory =
 const skillsDirectory =
   process.env.SKILLS_DIRECTORY ??
   fileURLToPath(new URL("../../../skills", import.meta.url));
+const skillPacksDirectory =
+  process.env.SKILL_PACKS_DIRECTORY ??
+  fileURLToPath(new URL("../../../skill-packs", import.meta.url));
 
 try {
   new URL(upstreamUrl);
@@ -106,6 +109,7 @@ const server = createChatServer({
   profileStore,
   agentSettingsStore,
   skillsDirectory,
+  skillPacksDirectory,
   profileDirectory: profileDataDirectory,
   publicDirectory,
   upstreamUrl,

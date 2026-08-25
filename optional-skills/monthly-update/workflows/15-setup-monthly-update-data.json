@@ -51,26 +51,90 @@
         "tableName": "company_profile",
         "columns": {
           "column": [
-            { "name": "profileId", "type": "string" },
-            { "name": "companyName", "type": "string" },
-            { "name": "oneLiner", "type": "string" },
-            { "name": "domainAliases", "type": "string" },
-            { "name": "founderNames", "type": "string" },
-            { "name": "teamNames", "type": "string" },
-            { "name": "investorDomains", "type": "string" },
-            { "name": "investorNames", "type": "string" },
-            { "name": "customerDomains", "type": "string" },
-            { "name": "customerNames", "type": "string" },
-            { "name": "prospectDomains", "type": "string" },
-            { "name": "prospectNames", "type": "string" },
-            { "name": "competitorDomains", "type": "string" },
-            { "name": "competitorNames", "type": "string" },
-            { "name": "positiveKeywords", "type": "string" },
-            { "name": "negativeKeywords", "type": "string" },
-            { "name": "stage", "type": "string" },
-            { "name": "voiceNotes", "type": "string" },
-            { "name": "audience", "type": "string" },
-            { "name": "deliverTo", "type": "string" }
+            {
+              "name": "profileId",
+              "type": "string"
+            },
+            {
+              "name": "profileSavedAt",
+              "type": "date"
+            },
+            {
+              "name": "companyName",
+              "type": "string"
+            },
+            {
+              "name": "oneLiner",
+              "type": "string"
+            },
+            {
+              "name": "domainAliases",
+              "type": "string"
+            },
+            {
+              "name": "founderNames",
+              "type": "string"
+            },
+            {
+              "name": "teamNames",
+              "type": "string"
+            },
+            {
+              "name": "investorDomains",
+              "type": "string"
+            },
+            {
+              "name": "investorNames",
+              "type": "string"
+            },
+            {
+              "name": "customerDomains",
+              "type": "string"
+            },
+            {
+              "name": "customerNames",
+              "type": "string"
+            },
+            {
+              "name": "prospectDomains",
+              "type": "string"
+            },
+            {
+              "name": "prospectNames",
+              "type": "string"
+            },
+            {
+              "name": "competitorDomains",
+              "type": "string"
+            },
+            {
+              "name": "competitorNames",
+              "type": "string"
+            },
+            {
+              "name": "positiveKeywords",
+              "type": "string"
+            },
+            {
+              "name": "negativeKeywords",
+              "type": "string"
+            },
+            {
+              "name": "stage",
+              "type": "string"
+            },
+            {
+              "name": "voiceNotes",
+              "type": "string"
+            },
+            {
+              "name": "audience",
+              "type": "string"
+            },
+            {
+              "name": "deliverTo",
+              "type": "string"
+            }
           ]
         },
         "options": {
@@ -93,31 +157,106 @@
         "tableName": "update_evidence",
         "columns": {
           "column": [
-            { "name": "evidenceId", "type": "string" },
-            { "name": "runId", "type": "string" },
-            { "name": "monthBucket", "type": "string" },
-            { "name": "kind", "type": "string" },
-            { "name": "canonicalKey", "type": "string" },
-            { "name": "eventType", "type": "string" },
-            { "name": "metricKey", "type": "string" },
-            { "name": "valueText", "type": "string" },
-            { "name": "valueNumber", "type": "string" },
-            { "name": "unit", "type": "string" },
-            { "name": "title", "type": "string" },
-            { "name": "summary", "type": "string" },
-            { "name": "eventDate", "type": "string" },
-            { "name": "datePrecision", "type": "string" },
-            { "name": "sentiment", "type": "string" },
-            { "name": "importance", "type": "number" },
-            { "name": "confidence", "type": "number" },
-            { "name": "evidenceMessageIds", "type": "string" },
-            { "name": "sourceThreadIds", "type": "string" },
-            { "name": "includeDecision", "type": "string" },
-            { "name": "includeScore", "type": "number" },
-            { "name": "suggestedSection", "type": "string" },
-            { "name": "whyItMatters", "type": "string" },
-            { "name": "excludeReason", "type": "string" },
-            { "name": "needsReview", "type": "string" }
+            {
+              "name": "evidenceId",
+              "type": "string"
+            },
+            {
+              "name": "runId",
+              "type": "string"
+            },
+            {
+              "name": "monthBucket",
+              "type": "string"
+            },
+            {
+              "name": "kind",
+              "type": "string"
+            },
+            {
+              "name": "canonicalKey",
+              "type": "string"
+            },
+            {
+              "name": "eventType",
+              "type": "string"
+            },
+            {
+              "name": "metricKey",
+              "type": "string"
+            },
+            {
+              "name": "valueText",
+              "type": "string"
+            },
+            {
+              "name": "valueNumber",
+              "type": "string"
+            },
+            {
+              "name": "unit",
+              "type": "string"
+            },
+            {
+              "name": "title",
+              "type": "string"
+            },
+            {
+              "name": "summary",
+              "type": "string"
+            },
+            {
+              "name": "eventDate",
+              "type": "string"
+            },
+            {
+              "name": "datePrecision",
+              "type": "string"
+            },
+            {
+              "name": "sentiment",
+              "type": "string"
+            },
+            {
+              "name": "importance",
+              "type": "number"
+            },
+            {
+              "name": "confidence",
+              "type": "number"
+            },
+            {
+              "name": "evidenceMessageIds",
+              "type": "string"
+            },
+            {
+              "name": "sourceThreadIds",
+              "type": "string"
+            },
+            {
+              "name": "includeDecision",
+              "type": "string"
+            },
+            {
+              "name": "includeScore",
+              "type": "number"
+            },
+            {
+              "name": "suggestedSection",
+              "type": "string"
+            },
+            {
+              "name": "whyItMatters",
+              "type": "string"
+            },
+            {
+              "name": "excludeReason",
+              "type": "string"
+            },
+            {
+              "name": "needsReview",
+              "type": "string"
+            }
           ]
         },
         "options": {
@@ -140,28 +279,94 @@
         "tableName": "update_runs",
         "columns": {
           "column": [
-            { "name": "runId", "type": "string" },
-            { "name": "startedAt", "type": "date" },
-            { "name": "finishedAt", "type": "date" },
-            { "name": "status", "type": "string" },
-            { "name": "monthLabel", "type": "string" },
-            { "name": "monthBucket", "type": "string" },
-            { "name": "windowStart", "type": "string" },
-            { "name": "windowEnd", "type": "string" },
-            { "name": "audience", "type": "string" },
-            { "name": "messagesListed", "type": "number" },
-            { "name": "messagesAfterHeuristic", "type": "number" },
-            { "name": "messagesClassified", "type": "number" },
-            { "name": "threadsExtracted", "type": "number" },
-            { "name": "evidenceExtracted", "type": "number" },
-            { "name": "evidenceIncluded", "type": "number" },
-            { "name": "inputTokens", "type": "number" },
-            { "name": "outputTokens", "type": "number" },
-            { "name": "groundednessStatus", "type": "string" },
-            { "name": "groundednessNotes", "type": "string" },
-            { "name": "updateText", "type": "string" },
-            { "name": "structuredJson", "type": "string" },
-            { "name": "errorSummary", "type": "string" }
+            {
+              "name": "runId",
+              "type": "string"
+            },
+            {
+              "name": "startedAt",
+              "type": "date"
+            },
+            {
+              "name": "finishedAt",
+              "type": "date"
+            },
+            {
+              "name": "status",
+              "type": "string"
+            },
+            {
+              "name": "monthLabel",
+              "type": "string"
+            },
+            {
+              "name": "monthBucket",
+              "type": "string"
+            },
+            {
+              "name": "windowStart",
+              "type": "string"
+            },
+            {
+              "name": "windowEnd",
+              "type": "string"
+            },
+            {
+              "name": "audience",
+              "type": "string"
+            },
+            {
+              "name": "messagesListed",
+              "type": "number"
+            },
+            {
+              "name": "messagesAfterHeuristic",
+              "type": "number"
+            },
+            {
+              "name": "messagesClassified",
+              "type": "number"
+            },
+            {
+              "name": "threadsExtracted",
+              "type": "number"
+            },
+            {
+              "name": "evidenceExtracted",
+              "type": "number"
+            },
+            {
+              "name": "evidenceIncluded",
+              "type": "number"
+            },
+            {
+              "name": "inputTokens",
+              "type": "number"
+            },
+            {
+              "name": "outputTokens",
+              "type": "number"
+            },
+            {
+              "name": "groundednessStatus",
+              "type": "string"
+            },
+            {
+              "name": "groundednessNotes",
+              "type": "string"
+            },
+            {
+              "name": "updateText",
+              "type": "string"
+            },
+            {
+              "name": "structuredJson",
+              "type": "string"
+            },
+            {
+              "name": "errorSummary",
+              "type": "string"
+            }
           ]
         },
         "options": {

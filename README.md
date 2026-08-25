@@ -2,7 +2,7 @@
 
 Build and personalise a useful Claude-powered project assistant on your own computer. No manual Node.js install is required: Claude Code or the one-click setup selects the reviewed Node.js 24.18.0 and npm 11.16.0 pair, downloading a verified private copy inside this project when that exact pair is not already available.
 
-**Local release:** `v0.2.0`
+**Local release:** `v0.3.0`
 
 If this is your first technical project, use the
 **[complete beginner getting-started guide](docs/GETTING_STARTED.md)**. It
@@ -16,9 +16,12 @@ In about 30 minutes you will have:
 - Claude connected through a private n8n credential.
 - PDF, DOCX, TXT, and long-transcript input.
 - Local project tasks and conversation memory.
-- Editable Markdown skills.
-- Optional paid DataForSEO-backed domain and SEO research with durable evidence snapshots.
+- Five physically scoped agents with accessible role cards and saved settings.
+- Editable Markdown skills loaded only for their owning agent.
+- Free first-party domain research, with paid DataForSEO research as an
+  explicit optional upgrade.
 - Background SEO article drafts grounded in saved research and verified public sources.
+- An optional daily Funding Radar trigger that ships switched off.
 - Confirmation-gated task creation and status changes.
 
 Everything runs locally as ordinary Node.js processes. Nothing is deployed to the cloud in this release.
@@ -221,7 +224,8 @@ Reset asks you to type `RESET`. The [operations and recovery guide](docs/LOCAL_O
 - Durable local SQLite chat history with browsing, full-text search, rename,
   deletion, and restart-safe bounded conversation memory.
 - Four local Data Tables for tasks, audits, pending confirmations, and enabled skills.
-- Four editable base Markdown skills, with a six-skill optional catalogue.
+- Four editable base Markdown skills, six learner-facing skill packages, and
+  nine retained optional modules/extensions behind those packages and add-ons.
 - A central registry with Project Manager, Sales, Marketing, Investment, and
   Bookkeeping active; prompts and tool connections are isolated by role.
 - Local extraction for searchable PDFs, DOCX, TXT, and pasted text.
@@ -291,7 +295,7 @@ The maintenance helpers are also available directly: `node scripts/local.mjs hel
 ## Current milestone
 
 Phases 0–8 of the local-first implementation plan are implemented for local
-release `v0.2.0`, using a verified project-local Node.js runtime throughout.
+release `v0.3.0`, using a verified project-local Node.js runtime throughout.
 The repository owner reviewed the experience and
 explicitly authorised Phase 8 without the planned five-person pilot. That
 waiver is recorded transparently: `pilot/results.json` remains `not_run` and

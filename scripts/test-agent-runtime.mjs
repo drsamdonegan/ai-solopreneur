@@ -115,6 +115,72 @@ const unknown = runValidation({
 assert.equal(unknown.valid, false);
 assert.equal(unknown.errorCode, "INVALID_REQUEST");
 
+const directArticleCode = workflow.nodes.find(
+  (node) => node.name === "Detect Direct Article Request",
+).parameters.jsCode;
+const runDirectArticleDetection = new Function("$json", directArticleCode);
+const directArticle = runDirectArticleDetection({
+  agentId: "marketing",
+  message:
+    "write an article for mlai.au about 'what is artificial intelligence in simple terms?'",
+  documents: [],
+}).json;
+assert.equal(directArticle.directArticleRequest, true);
+assert.equal(directArticle.directArticleDomain, "mlai.au");
+assert.equal(
+  directArticle.directArticleTopic,
+  "what is artificial intelligence in simple terms?",
+);
+assert.equal(
+  runDirectArticleDetection({
+    agentId: "project-manager",
+    message: "write an article for mlai.au about 'AI basics'",
+    documents: [],
+  }).json.directArticleRequest,
+  false,
+);
+assert.equal(
+  runDirectArticleDetection({
+    agentId: "marketing",
+    message: "write an article for mlai.au about 'AI basics'",
+    documents: [{ id: "source-document" }],
+  }).json.directArticleRequest,
+  false,
+);
+
+const directArticleReplyCode = workflow.nodes.find(
+  (node) => node.name === "Shape Direct Article Reply",
+).parameters.jsCode;
+const directArticleLookup = () => ({
+  first: () => ({ json: directArticle }),
+});
+const runDirectArticleReply = new Function("$json", "$", directArticleReplyCode);
+assert.match(
+  runDirectArticleReply(
+    {
+      ok: true,
+      status: "queued",
+      requestedTopic: directArticle.directArticleTopic,
+    },
+    directArticleLookup,
+  ).json.output,
+  /Keyword research and writing have started.*progress card will update automatically/i,
+);
+assert.match(
+  runDirectArticleReply(
+    {
+      response: {
+        ok: true,
+        status: "needs_details",
+        requestedTopic: directArticle.directArticleTopic,
+        missingFields: ["who", "offer"],
+      },
+    },
+    directArticleLookup,
+  ).json.output,
+  /who the article is for.*what the business offers/i,
+);
+
 const fixtureWorkflow = structuredClone(workflow);
 
 /**
@@ -133,7 +199,13 @@ const ownership = new Map([
 
 const optionalSkillsDir = fileURLToPath(new URL("../optional-skills", import.meta.url));
 const installedSkillsDir = fileURLToPath(new URL("../skills", import.meta.url));
-for (const entry of await readdir(optionalSkillsDir, { withFileTypes: true })) {
+let optionalEntries = [];
+try {
+  optionalEntries = await readdir(optionalSkillsDir, { withFileTypes: true });
+} catch (error) {
+  if (error?.code !== "ENOENT") throw error;
+}
+for (const entry of optionalEntries) {
   if (!entry.isDirectory() || entry.name.startsWith("_")) {
     continue;
   }

@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "id": "funding-and-investor-updates",
+  "agent": "investment",
+  "name": "Funding & Investor Updates",
+  "description": "Finds relevant funding and keeps the optional evidence-backed monthly company update in one Investment package.",
+  "icon": "grant",
+  "installable": true,
+  "requires": [],
+  "modules": [
+    { "id": "funding-radar", "name": "Funding Radar", "role": "core", "source": "optional" },
+    { "id": "monthly-update", "name": "Monthly company update", "role": "extension", "source": "optional" }
+  ]
+}

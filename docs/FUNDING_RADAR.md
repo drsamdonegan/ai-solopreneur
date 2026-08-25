@@ -2,7 +2,7 @@
 
 Ask your agent to go looking for grants, rebates, tax incentives, and credit programs your business could apply for. It searches, checks each program against its own official page, and reports what it found.
 
-It searches when you ask. There is no schedule — that arrives later, as its own skill.
+It searches when you ask. It also includes an optional daily 8am trigger, which ships switched off so it cannot spend money until you deliberately enable it.
 
 ## Install it
 
@@ -28,6 +28,8 @@ Running locally, open n8n, find **14 - SETUP - Funding Data** under *5. Setup an
 | `funding_runs` | A copy of each report, and what that search cost |
 
 All three start empty and stay on your own agent. Running the setup again is safe.
+
+If you created `funding_runs` with an older preview of this skill, open that table in n8n and check that it has a text column named exactly `runId`. The setup workflow does not alter an existing table. Add that column before using the trigger; without it, the shared concurrency guard cannot identify an in-flight run. If the table contains nothing you need, deleting only `funding_runs` and rerunning the setup workflow is the simpler migration.
 
 ## Step 2 — tell your agent about your business
 
@@ -68,7 +70,9 @@ The report is deliberately short — five items at most. A report you scroll pas
 
 ## What it costs
 
-About **a dollar per search**: nine searches, four page checks, one eligibility pass. It only runs when you ask, so you control the bill.
+While a search runs, the chat page shows a progress bar above the message box: which step it is on, what it is searching right now, and when it last reported. The search writes its own progress notes as it works, so a stalled search stops moving within half an hour instead of leaving you guessing — and asking the agent mid-search gets you the same answer the bar shows.
+
+About **a few dollars per search, and about an hour**: up to thirty web searches per source group, eight page checks, one eligibility pass. The source groups run one after another, which is where the hour goes. Every run records what it actually used in `funding_runs`, so you can read the real number after a few goes. It only runs when you ask, so you control the bill.
 
 Those are estimates. Your real numbers are recorded on every run in `funding_runs`: `searchCount`, `inputTokens`, `outputTokens`. After a few searches, read those instead of trusting this page.
 
@@ -80,16 +84,23 @@ To spend less, drop a beat. A search covers national sources, your state, and no
 
 - **It never says you are eligible.** It says what the published criteria say, and names the one thing you have to check yourself. Only the body running the program can decide.
 - **It never applies for anything, and never contacts anyone.** Grant conditions are legal commitments; that decision stays with you.
-- **It never searches on its own.** Every search is one you asked for.
+- **The schedule is off by default.** It searches on its own only after you deliberately switch on the daily trigger.
 - **It never sends the report anywhere.** No Slack, no email, no phone. It is saved on your agent and read back in the chat when you ask.
 
 ## Running it on a schedule
 
-Not yet, and deliberately so.
+The workflow **76 - TRIGGER - Daily Funding Scan** runs at 8am in the timezone configured in n8n. It ships inactive.
 
-The searching lives in its own workflow, **71 - RUN - Funding Scan**, which does not care what starts it. Today your agent starts it when you ask. When the scheduler skill lands, it will start the same workflow on a clock — no change to this skill, and no second copy of the search to keep in step.
+Before switching it on:
 
-If you want to run one by hand in the meantime, open that workflow in n8n and select **Execute workflow**.
+1. Run one search from the chat and read the saved report.
+2. Check the actual searches and token counts in `funding_runs`.
+3. Confirm that spending roughly that amount every day is acceptable — about a dollar per run is roughly $30 a month.
+4. Open workflow 76 and use the toggle at the top right.
+
+Chat and scheduled runs both call **71 - RUN - Funding Scan**. That shared workflow checks for a `running` row less than 20 minutes old before doing any paid work, so the two entry points cannot overlap. A stale row older than 20 minutes does not block the system forever.
+
+To run one by hand without enabling the schedule, open workflow 71 and select **Execute workflow**.
 
 ## When something goes wrong
 

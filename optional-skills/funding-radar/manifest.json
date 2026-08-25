@@ -394,9 +394,10 @@
   "unavailableCapabilities": [],
   "tests": [
     "tests/chat-only-delivery.test.mjs",
+    "tests/daily-schedule.test.mjs",
     "tests/run-state.test.mjs"
   ],
-  "setup": "Two steps:\n  1. Run the '14 - SETUP - Funding Data' workflow once in n8n.\n  2. Tell your agent about your business in the chat, so it can save a funding profile. Searching does nothing until one exists.\nThen just ask: 'go and find funding I could apply for'.\nSee docs/FUNDING_RADAR.md for the whole walkthrough, including what it costs.",
+  "setup": "Two steps:\n  1. Run the '14 - SETUP - Funding Data' workflow once in n8n.\n  2. Tell your agent about your business in the chat, so it can save a funding profile. Searching does nothing until one exists.\nThen just ask: 'go and find funding I could apply for'. The optional '76 - TRIGGER - Daily Funding Scan' ships switched off; enable it only after checking one manual result and its cost.\nSee docs/FUNDING_RADAR.md for the whole walkthrough, including what it costs.",
   "folders": [
     {
       "id": "skill-free-money",
@@ -405,9 +406,11 @@
       "workflows": [
         "63-tool-get-funding-report.json",
         "64-tool-set-funding-profile.json",
+        "65-internal-funding-progress.json",
         "68-tool-start-funding-scan.json",
         "71-run-funding-scan.json",
-        "72-run-funding-beat.json"
+        "72-run-funding-beat.json",
+        "76-trigger-daily-funding-scan.json"
       ]
     },
     {

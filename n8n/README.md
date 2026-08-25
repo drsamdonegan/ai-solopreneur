@@ -4,7 +4,7 @@ This directory contains portable workflow exports for the local AI agent.
 
 | File | Purpose |
 | --- | --- |
-| `workflows/00-start-here-project-partner.json` | Validates chat requests, calls Claude, keeps session memory, and returns the chat contract |
+| `workflows/00-start-here-project-partner.json` | Validates chat requests, selects one agent-scoped prompt and tool graph, calls Claude, and returns the chat contract |
 | `workflows/01-start-here-learner-checklist.json` | Gives learners a five-step visual path from local owner setup to a customised, diagnosed agent |
 | `workflows/10-setup-local-task-data.json` | Idempotently creates task, audit, and pending-confirmation tables plus three sample tasks |
 | `workflows/11-setup-sync-enabled-skills.json` | Validates and stores the enabled Markdown skill bundle through a temporary local endpoint |
@@ -22,7 +22,10 @@ Optional skills document any additional provider credentials they require.
 
 ## Skill folders
 
-`folders.manifest.json` decides how the workflows are grouped in n8n. Eleven numbered workflows read to a beginner as eleven unrelated things, so import files them into three folders named after what the agent can do, and the launcher prints the link to the page that shows them.
+`folders.manifest.json` decides how the workflows are grouped in n8n. The
+eleven base workflows plus any installed optional workflows read as unrelated
+things without grouping, so import files them into capability folders and the
+launcher prints the link to the page that shows them.
 
 That page is the local owner's **Personal** project. n8n only draws folders inside a project; its **Overview** page is always a flat list of everything and cannot be grouped. Nothing about the agent depends on the folders — they change the list, not the wiring — so a learner who ignores them still has a working agent.
 

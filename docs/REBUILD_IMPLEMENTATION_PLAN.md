@@ -237,7 +237,11 @@ rg -n \
   README.md docs scripts n8n optional-skills
 ```
 
-Expected: the catalogue lists six retained optional skills before Xero is added, and the final search has no live references other than an intentional changelog/archive note.
+Expected: the catalogue lists the six retained audited skills, plus the later
+cloud-only Telegram trigger and global Scheduler when that concurrent main-line
+work is present.
+The final search has no live references to removed skills other than an
+intentional changelog/archive note.
 
 Rollback: restore a removed skill only as a complete directory plus its docs and validator coverage.
 
@@ -648,6 +652,8 @@ Commit: `fix(sales): remove non-runnable lookup fallback`.
 
 ## Phase 8 — Build the read-only Xero Coding Review skill
 
+Status: deferred by the repository owner on 18 August 2026. Do not implement or ship this phase in v0.3.0. Bookkeeping remains a routable, safely scoped agent with no installed Xero capability; it must say that no role-specific tool is installed when asked for live accounting work. The design below is retained for a later release.
+
 ### Step 8.1 — Confirm the integration contract
 
 The public feature is a coding review, not bank reconciliation:
@@ -833,7 +839,6 @@ Add required release artifacts for:
 - feature-slice map;
 - v0.3 upgrade guide;
 - agent registry schema v2;
-- Xero safety docs;
 - any new test files.
 
 ### Step 9.5 — Full release gate
@@ -856,7 +861,7 @@ In a separate disposable clone:
 2. add Funding Radar and complete its setup;
 3. import workflows and sync skills;
 4. verify that the Investment card and runtime expose only Investment capabilities;
-5. add Xero Coding Review without credentials and confirm the Bookkeeping agent explains the connection step rather than fabricating data;
+5. select Bookkeeping and confirm it says no role-specific accounting tool is installed rather than fabricating data;
 6. create a pack and validate it;
 7. rehearse the documented v0.2 → v0.3 upgrade path with retained chats and profile data.
 
@@ -892,6 +897,6 @@ The rebuild is done only when all of these are true:
 - no retained `SKILL.md` instructs the model to call an unavailable script or tool;
 - daily Funding Radar is present and off by default;
 - free domain research can drive the SEO writer;
-- Xero uses granular read-only scopes and never writes or claims reconciliation;
+- Bookkeeping has no Xero capability in v0.3.0 and never fabricates accounting access;
 - the v0.2 → v0.3 rehearsal preserves chats, profile data, and installed optional skills;
 - `docs/FEATURE_SLICES.md` lets a student or Claude Code identify and apply one capability without reading the full audit.

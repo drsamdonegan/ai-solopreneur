@@ -80,7 +80,7 @@
       "risk": "paid_external_read",
       "available": true,
       "modelCallable": true,
-      "mode": "direct_request_defaults_to_standard_paid_with_free_fallback",
+      "mode": "explicit_paid_request_defaults_to_standard_with_free_fallback",
       "workflowId": "phase11StartPaidDomainResearch"
     },
     {
@@ -98,6 +98,70 @@
       "modelCallable": true,
       "mode": "automatic",
       "workflowId": "phase11GetPaidDomainResearch"
+    },
+    {
+      "id": "create_schedule",
+      "risk": "bounded_local_write",
+      "available": true,
+      "modelCallable": true,
+      "mode": "explicit_request_required",
+      "workflowId": "phase18CreateSchedule"
+    },
+    {
+      "id": "list_schedules",
+      "risk": "read",
+      "available": true,
+      "modelCallable": true,
+      "mode": "automatic",
+      "workflowId": "phase18ListSchedules"
+    },
+    {
+      "id": "update_schedule",
+      "risk": "bounded_local_write",
+      "available": true,
+      "modelCallable": true,
+      "mode": "explicit_request_required",
+      "workflowId": "phase18UpdateSchedule"
+    },
+    {
+      "id": "lookup_linkedin_profile",
+      "risk": "paid_external_read",
+      "available": true,
+      "modelCallable": true,
+      "mode": "explicit_per_search_credit_approval",
+      "workflowId": "phase12LookupLinkedInProfile"
+    },
+    {
+      "id": "search_linkedin_prospects",
+      "risk": "paid_external_read",
+      "available": true,
+      "modelCallable": true,
+      "mode": "explicit_per_search_credit_approval",
+      "workflowId": "phase12SearchLinkedInProspects"
+    },
+    {
+      "id": "start_seo_article",
+      "risk": "bounded_external_read_and_local_write",
+      "available": true,
+      "modelCallable": true,
+      "mode": "explicit_request_required",
+      "workflowId": "phase13StartSeoArticle"
+    },
+    {
+      "id": "get_seo_article",
+      "risk": "read",
+      "available": true,
+      "modelCallable": true,
+      "mode": "automatic",
+      "workflowId": "phase13GetSeoArticle"
+    },
+    {
+      "id": "write_seo_article",
+      "risk": "bounded_external_read_and_local_write",
+      "available": true,
+      "modelCallable": false,
+      "mode": "internal_background_only",
+      "workflowId": "phase13WriteSeoArticle"
     },
     {
       "id": "delete_task",

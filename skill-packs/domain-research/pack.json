@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "id": "domain-research",
+  "agent": "marketing",
+  "name": "Domain Research",
+  "description": "Researches a public business website, saves grounded business memory, and can add explicitly requested paid search evidence as an upgrade.",
+  "icon": "globe",
+  "installable": true,
+  "requires": [],
+  "modules": [
+    { "id": "domain-research", "name": "Website research", "role": "core", "source": "optional" },
+    { "id": "paid-domain-research", "name": "Paid search-evidence upgrade", "role": "extension", "source": "optional" }
+  ]
+}

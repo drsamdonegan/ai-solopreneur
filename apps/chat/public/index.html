@@ -7,7 +7,7 @@
       name="description"
       content="A private, local workspace for reusable business agents."
     />
-    <title>Project Manager</title>
+    <title>My AI Agent</title>
     <link rel="stylesheet" href="/styles.css" />
     <script src="/agent.config.js" defer></script>
     <script src="/app.js" defer></script>
@@ -23,15 +23,15 @@
         </button>
         <div>
           <div class="brand">
-            <span class="brand__mark" id="agent-initials" aria-hidden="true">PM</span>
+            <span class="brand__mark" id="agent-initials" aria-hidden="true">AI</span>
             <div>
-              <p class="brand__eyebrow">My local agent</p>
-              <h1 id="agent-name">Project Manager</h1>
+              <p class="brand__eyebrow">Local workspace</p>
+              <h1 id="agent-name">My AI Agent</h1>
             </div>
           </div>
 
           <p class="agent-panel__subtitle" id="agent-subtitle">
-            Turn meetings, documents, and project ideas into clear next actions.
+            Pick an agent below. Each one has its own skills.
           </p>
 
           <div class="local-status">
@@ -42,7 +42,10 @@
 
         <section class="agent-selector" aria-labelledby="agent-selector-title">
           <p class="section-label" id="agent-selector-title">Agents</p>
-          <div class="agent-list" id="agent-list" role="list"></div>
+          <div class="agent-list" id="agent-list"></div>
+          <button class="workspace-settings-button" id="my-business-button" type="button">
+            My Business
+          </button>
         </section>
 
         <section class="history-panel" aria-labelledby="history-title">
@@ -151,7 +154,7 @@
                 name="message"
                 rows="2"
                 maxlength="8000"
-                placeholder="What should the Project Manager do?"
+                placeholder="What should your agent do?"
                 autocomplete="off"
                 required
               ></textarea>
@@ -327,7 +330,7 @@
             class="profile-avatar"
             id="profile-avatar-button"
             type="button"
-            aria-label="Choose a picture for this agent"
+            aria-label="Choose a picture for this workspace"
           >
             <span class="profile-avatar__initials" id="profile-avatar-initials" aria-hidden="true"></span>
             <span class="profile-avatar__edit" aria-hidden="true">
@@ -350,12 +353,12 @@
             hidden
           />
           <div class="profile-identity__fields">
-            <label for="profile-agent-name">What is this agent called?</label>
+            <label for="profile-agent-name">What do you want to call this workspace?</label>
             <input
               id="profile-agent-name"
               name="profile-agent-name"
               maxlength="80"
-              placeholder="Sales"
+              placeholder="My AI Agent"
               autocomplete="off"
             />
           </div>
@@ -442,6 +445,45 @@
             Cancel
           </button>
           <button class="send-button" id="profile-save" type="submit">Save</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog
+      class="paste-dialog agent-dialog"
+      id="agent-dialog"
+      aria-labelledby="agent-dialog-title"
+    >
+      <form class="paste-dialog__card" id="agent-dialog-form">
+        <div class="agent-dialog__heading">
+          <p class="section-label" id="agent-dialog-kicker">Agent</p>
+          <h2 id="agent-dialog-title">Agent</h2>
+          <p id="agent-dialog-description"></p>
+        </div>
+
+        <section class="agent-dialog__section" aria-labelledby="agent-dialog-skills-title">
+          <h3 id="agent-dialog-skills-title">Skill packages</h3>
+          <ul class="agent-dialog__skills" id="agent-dialog-skills"></ul>
+        </section>
+
+        <section class="agent-dialog__section" aria-labelledby="agent-dialog-settings-title">
+          <h3 id="agent-dialog-settings-title">What this agent should know</h3>
+          <div class="agent-dialog__fields" id="agent-dialog-fields"></div>
+        </section>
+
+        <p class="agent-dialog__sync" id="agent-dialog-sync"></p>
+        <p class="profile-status" id="agent-dialog-status" role="status" aria-live="polite"></p>
+
+        <div class="paste-dialog__actions">
+          <button class="secondary-button" id="agent-dialog-close" type="button">
+            Close
+          </button>
+          <button class="secondary-button" id="agent-dialog-chat" type="button">
+            Chat with agent
+          </button>
+          <button class="send-button" id="agent-dialog-save" type="submit">
+            Save
+          </button>
         </div>
       </form>
     </dialog>

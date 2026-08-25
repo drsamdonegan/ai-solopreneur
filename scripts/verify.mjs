@@ -27,7 +27,12 @@ function run(label, command, args, cwd = projectRoot) {
 }
 
 async function declaredOptionalTests() {
-  const entries = await readdir(optionalRoot, { withFileTypes: true });
+  let entries = [];
+  try {
+    entries = await readdir(optionalRoot, { withFileTypes: true });
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+  }
   const tests = [];
 
   for (const entry of entries) {
@@ -61,13 +66,31 @@ async function declaredOptionalTests() {
   return tests.sort((left, right) => left.path.localeCompare(right.path));
 }
 
+run("public skill-package contract", process.execPath, [
+  "scripts/test-skill-packages.mjs",
+]);
 run("workflow validation", process.execPath, ["scripts/validate-workflows.mjs"]);
 run("agent runtime isolation", process.execPath, ["scripts/test-agent-runtime.mjs"]);
-run("agent-aware optional installer", process.execPath, [
-  "scripts/test-optional-installer.mjs",
-]);
+try {
+  const optionalEntries = await readdir(optionalRoot, { withFileTypes: true });
+  const hasCatalogue = optionalEntries.some(
+    (entry) => entry.isDirectory() && !entry.name.startsWith("_"),
+  );
+  if (!hasCatalogue) throw Object.assign(new Error("catalogue omitted"), { code: "ENOENT" });
+  run("agent-aware optional installer", process.execPath, [
+    "scripts/test-optional-installer.mjs",
+  ]);
+} catch (error) {
+  if (error?.code !== "ENOENT") throw error;
+}
 run("release validation", process.execPath, ["scripts/validate-release.mjs"]);
 run("skill compilation", process.execPath, ["scripts/compile-skills.mjs"]);
+run("read-only upgrade preflight", process.execPath, [
+  "scripts/test-upgrade-check.mjs",
+]);
+run("SEO article installed-skill upgrade", process.execPath, [
+  "scripts/test-seo-article-upgrade.mjs",
+]);
 
 for (const test of await declaredOptionalTests()) {
   run(test.label, process.execPath, [test.path]);
@@ -81,6 +104,8 @@ run("chat TypeScript build", process.execPath, [
 run("agent card and settings API", process.execPath, [
   "scripts/test-agent-card-api.mjs",
 ]);
+run("agent card frontend", process.execPath, ["scripts/test-agent-ui.mjs"]);
+run("article progress frontend", process.execPath, ["scripts/test-article-ui.mjs"]);
 run("agent-scoped skill bundle", process.execPath, [
   "scripts/test-agent-scoped-skills.mjs",
 ]);

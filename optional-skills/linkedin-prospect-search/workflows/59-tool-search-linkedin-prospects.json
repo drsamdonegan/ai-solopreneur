@@ -1,0 +1,383 @@
+{
+  "name": "59 - TOOL - search_linkedin_prospects",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## LinkedIn prospect search\n\nThis paid, read-only tool searches Crustdata's indexed professional-person dataset for up to ten possible prospects. It requires explicit approval for a maximum 0.30-credit search, uses reviewed professional filters, ranks the returned rows locally, and exposes only public professional fields. It never returns contact data, paginates, retries, or claims anyone is a qualified buyer.",
+        "height": 260,
+        "width": 620,
+        "color": 5
+      },
+      "id": "c5900000-0000-4000-8000-000000000000",
+      "name": "Prospect search explanation",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1120,
+        -300
+      ]
+    },
+    {
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "session_id",
+              "type": "string"
+            },
+            {
+              "name": "request_id",
+              "type": "string"
+            },
+            {
+              "name": "job_titles",
+              "type": "string"
+            },
+            {
+              "name": "sector",
+              "type": "string"
+            },
+            {
+              "name": "location",
+              "type": "string"
+            },
+            {
+              "name": "company_size",
+              "type": "string"
+            },
+            {
+              "name": "result_limit",
+              "type": "number"
+            },
+            {
+              "name": "paid_search_confirmed",
+              "type": "boolean"
+            }
+          ]
+        }
+      },
+      "id": "c5900000-0000-4000-8000-000000000001",
+      "name": "Tool Input",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -1120,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const clean = (value, limit = 200) => typeof value === 'string' ? value.trim().slice(0, limit) : '';\nconst sessionId = clean($json.session_id, 100);\nconst requestId = clean($json.request_id, 100) || 'prospects-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);\nconst splitTerms = (value, maximum) => [...new Set(clean(value, 300).split(/[,;|]/).map((term) => term.trim()).filter(Boolean))].slice(0, maximum);\nconst jobTitles = splitTerms($json.job_titles, 5);\nconst sector = clean($json.sector, 120);\nconst location = clean($json.location, 120);\nconst companySize = clean($json.company_size, 20);\nconst allowedSizes = new Set(['', '1-10', '11-50', '51-200', '201-500', '501-1000', '1001+']);\nconst requestedLimit = Number($json.result_limit ?? 5);\nconst resultLimit = Number.isInteger(requestedLimit) ? Math.max(1, Math.min(10, requestedLimit)) : 5;\nconst paidSearchConfirmed = $json.paid_search_confirmed === true;\nlet errorCode = '';\nlet errorMessage = '';\nif (jobTitles.length === 0 && !sector) {\n  errorCode = 'SEARCH_CRITERIA_REQUIRED';\n  errorMessage = 'Provide at least one current job title or a sector before searching.';\n} else if (!allowedSizes.has(companySize)) {\n  errorCode = 'INVALID_COMPANY_SIZE';\n  errorMessage = 'Company size must be 1-10, 11-50, 51-200, 201-500, 501-1000, 1001+, or blank.';\n} else if (!paidSearchConfirmed) {\n  errorCode = 'PAID_SEARCH_APPROVAL_REQUIRED';\n  errorMessage = 'Before searching, explicitly approve one Crustdata prospect search costing up to 0.30 credits.';\n}\nconst conditions = [];\nif (jobTitles.length === 1) {\n  conditions.push({ field: 'experience.employment_details.current.title', type: '(.)', value: jobTitles[0] });\n} else if (jobTitles.length > 1) {\n  conditions.push({ op: 'or', conditions: jobTitles.map((title) => ({ field: 'experience.employment_details.current.title', type: '(.)', value: title })) });\n}\nif (sector) conditions.push({ field: 'experience.employment_details.current.company_industries', type: '(.)', value: sector });\nif (location) conditions.push({ field: 'basic_profile.location.full_location', type: '(.)', value: location });\nconst filters = conditions.length === 1 ? conditions[0] : { op: 'and', conditions };\nconst searchBody = {\n  filters,\n  fields: ['metadata.updated_at', 'basic_profile', 'experience.employment_details.current', 'social_handles.professional_network_identifier.profile_url'],\n  limit: resultLimit\n};\nreturn { json: {\n  valid: errorCode === '', errorCode, errorMessage, sessionId, requestId,\n  jobTitles, sector, location, companySize, resultLimit, paidSearchConfirmed,\n  searchBody, maxCredits: 0.30\n} };"
+      },
+      "id": "c5900000-0000-4000-8000-000000000002",
+      "name": "Validate Prospect Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -880,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "b6100000-0000-4000-8000-000000000003c",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "c5900000-0000-4000-8000-000000000003",
+      "name": "Input Is Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -640,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.crustdata.com/person/search",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-version",
+              "value": "2025-11-01"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.searchBody) }}",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "c5900000-0000-4000-8000-000000000004",
+      "name": "Search Crustdata Prospects",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -400,
+        -100
+      ],
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "phase12Crustdata",
+          "name": "CRUSTDATA_API_KEY"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const input = $('Validate Prospect Input').first().json;\nconst statusCode = Number($json.statusCode ?? 200);\nconst body = $json.body && typeof $json.body === 'object' ? $json.body : $json;\nconst headers = $json.headers && typeof $json.headers === 'object' ? $json.headers : {};\nconst creditsUsed = Number(headers['x-credits-used'] ?? headers['X-Credits-Used'] ?? 0) || 0;\nconst criteria = { job_titles: input.jobTitles, sector: input.sector, location: input.location, company_size: input.companySize, result_limit: input.resultLimit };\nif (statusCode < 200 || statusCode >= 300) {\n  return { json: { response: { ok: false, search_status: 'unavailable', criteria, prospects: [], credits_used: creditsUsed, message: 'The professional-data provider was unavailable (HTTP ' + statusCode + '). No automatic retry was made.' } } };\n}\nconst normalise = (value) => String(value ?? '').normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();\nconst linkedinSlug = (value) => {\n  const url = String(value ?? '').trim();\n  try {\n    const parsed = new URL(url);\n    const host = parsed.hostname.toLowerCase();\n    if ((host !== 'linkedin.com' && !host.endsWith('.linkedin.com')) || !parsed.pathname.startsWith('/in/')) return '';\n    const slug = parsed.pathname.slice(4).split('/')[0];\n    return /^[a-z0-9%_.-]+$/i.test(slug) ? slug : '';\n  } catch { return ''; }\n};\nconst sizeRange = (label) => {\n  if (!label) return null;\n  if (label === '1001+') return [1001, Number.POSITIVE_INFINITY];\n  const parts = label.split('-').map(Number);\n  return parts.length === 2 && parts.every(Number.isFinite) ? parts : null;\n};\nconst requestedRange = sizeRange(input.companySize);\nconst wantedTitles = (input.jobTitles ?? []).map(normalise).filter(Boolean);\nconst wantedSector = normalise(input.sector);\nconst wantedLocation = normalise(input.location);\nconst profiles = Array.isArray(body.profiles) ? body.profiles : [];\nconst rows = profiles.map((raw) => {\n  const basic = raw.basic_profile && typeof raw.basic_profile === 'object' ? raw.basic_profile : {};\n  const location = basic.location && typeof basic.location === 'object' ? basic.location : {};\n  const current = raw.experience?.employment_details?.current;\n  const jobs = Array.isArray(current) ? current : [];\n  const primary = jobs.find((job) => job?.is_default === true) ?? jobs[0] ?? {};\n  const url = String(raw.social_handles?.professional_network_identifier?.profile_url ?? '').trim();\n  const slug = linkedinSlug(url);\n  if (!slug) return null;\n  const name = String(basic.professional_network_name ?? basic.name ?? '').trim();\n  const title = String(basic.current_title ?? primary.title ?? '').trim();\n  const company = String(primary.name ?? primary.company_name ?? '').trim();\n  const industries = [...new Set(jobs.flatMap((job) => [\n    ...(Array.isArray(job?.company_industries) ? job.company_industries : []),\n    job?.company_professional_network_industry\n  ]).map((value) => String(value ?? '').trim()).filter(Boolean))];\n  const displayLocation = String(location.full_location ?? location.raw ?? [location.city, location.state, location.country].filter(Boolean).join(', ')).trim();\n  const headcountCandidates = [primary.company_headcount, primary.company_employee_count, primary.employee_count, primary.company_size];\n  const headcount = headcountCandidates.map(Number).find((value) => Number.isFinite(value) && value >= 0) ?? null;\n  const professionalText = normalise([title, industries.join(' '), company, basic.headline, ...jobs.flatMap((job) => [job?.title, job?.function_category, job?.description])].join(' '));\n  let score = 0;\n  const evidence = [];\n  if (wantedTitles.some((wanted) => normalise(title).includes(wanted) || professionalText.includes(wanted))) { score += 45; evidence.push('current role'); }\n  if (wantedSector && professionalText.includes(wantedSector)) { score += 30; evidence.push('sector'); }\n  if (wantedLocation && normalise(displayLocation).includes(wantedLocation)) { score += 15; evidence.push('location'); }\n  if (requestedRange && headcount !== null && headcount >= requestedRange[0] && headcount <= requestedRange[1]) { score += 10; evidence.push('company size'); }\n  return {\n    score: Math.min(100, score),\n    prospect: {\n      name: name || null,\n      linkedin_url: url,\n      public_identifier: slug,\n      current_title: title || null,\n      current_company: company || null,\n      location: displayLocation || null,\n      industry: industries.join(', ') || null,\n      company_headcount: headcount,\n      evidence\n    }\n  };\n}).filter(Boolean).sort((left, right) => right.score - left.score);\nconst prospects = rows.slice(0, input.resultLimit).map((row) => row.prospect);\nconst warnings = [];\nif (input.companySize && prospects.some((prospect) => prospect.company_headcount === null)) warnings.push('Company headcount was not returned for every prospect, so the size band could not be confirmed for those rows.');\nif (prospects.length === 0) warnings.push('No public professional profile matched the approved criteria. Broaden or correct the brief before approving another paid search.');\nreturn { json: { response: {\n  ok: true,\n  search_status: prospects.length > 0 ? 'complete' : 'not_found',\n  criteria,\n  prospects,\n  warnings,\n  credits_used: creditsUsed,\n  total_matches: Number(body.total_count ?? prospects.length),\n  returned_matches: profiles.length,\n  message: prospects.length > 0 ? 'Possible prospects were returned from the approved public professional-data search. Verify fit before using the list.' : warnings[0]\n} } };"
+      },
+      "id": "c5900000-0000-4000-8000-000000000005",
+      "name": "Rank Safe Prospects",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -160,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const input = $('Validate Prospect Input').first().json;\nreturn { json: { response: { ok: false, search_status: 'unavailable', criteria: { job_titles: input.jobTitles ?? [], sector: input.sector ?? '', location: input.location ?? '', company_size: input.companySize ?? '' }, prospects: [], credits_used: 0, error: { code: input.errorCode || 'INVALID_INPUT', message: input.errorMessage || 'The prospect-search input could not be read.' }, message: input.errorMessage || 'The prospect-search input could not be read.' } } };"
+      },
+      "id": "c5900000-0000-4000-8000-000000000006",
+      "name": "Shape Invalid Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -400,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const input = $('Validate Prospect Input').first().json;\nconst response = $json.response;\nconst error = response?.ok === false ? String(response.error?.message ?? response.message ?? 'Tool failed') : '';\nreturn { json: { occurredAt: new Date().toISOString(), sessionId: input.sessionId, requestId: input.requestId, toolName: 'search_linkedin_prospects', proposedInput: JSON.stringify({ job_titles: input.jobTitles, sector: input.sector, location: input.location, company_size: input.companySize, result_limit: input.resultLimit, maximum_credits: input.maxCredits }), result: error ? 'error' : String(response.search_status ?? 'ok'), error, response } };"
+      },
+      "id": "c5900000-0000-4000-8000-000000000007",
+      "name": "Prepare Audit",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        80,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "value": "tool_audit",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "occurredAt": "={{ $json.occurredAt }}",
+            "sessionId": "={{ $json.sessionId }}",
+            "requestId": "={{ $json.requestId }}",
+            "toolName": "={{ $json.toolName }}",
+            "proposedInput": "={{ $json.proposedInput }}",
+            "result": "={{ $json.result }}",
+            "error": "={{ $json.error }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "c5900000-0000-4000-8000-000000000008",
+      "name": "Write Tool Audit",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        320,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const prepared = $('Prepare Audit').item.json;\nconst response = { ...prepared.response };\nif (!Number.isInteger($json.id)) response.auditWarning = 'The lookup result could not be written to the local tool audit.';\nreturn { json: response };"
+      },
+      "id": "c5900000-0000-4000-8000-000000000009",
+      "name": "Return Tool Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        560,
+        0
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Tool Input": {
+      "main": [
+        [
+          {
+            "node": "Validate Prospect Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Input Is Valid?": {
+      "main": [
+        [
+          {
+            "node": "Search Crustdata Prospects",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Shape Invalid Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shape Invalid Input": {
+      "main": [
+        [
+          {
+            "node": "Prepare Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Audit": {
+      "main": [
+        [
+          {
+            "node": "Write Tool Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Tool Audit": {
+      "main": [
+        [
+          {
+            "node": "Return Tool Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Prospect Input": {
+      "main": [
+        [
+          {
+            "node": "Input Is Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Crustdata Prospects": {
+      "main": [
+        [
+          {
+            "node": "Rank Safe Prospects",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rank Safe Prospects": {
+      "main": [
+        [
+          {
+            "node": "Prepare Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "executionTimeout": 45,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true
+  },
+  "versionId": "b6100000-0000-4000-8000-000000000100",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "phase": 12,
+    "testedWithN8n": "2.30.5",
+    "toolRisk": "paid_external_read",
+    "authorization": "explicit-current-user-credit-approval",
+    "maximumCreditsPerRun": 0.3,
+    "maximumResultsPerRun": 10,
+    "externalWrite": "none",
+    "personalContactData": "not-requested-not-returned"
+  },
+  "tags": [
+    {
+      "id": "tagAgentCanDo",
+      "name": "What your agent can do"
+    }
+  ],
+  "id": "phase12SearchLinkedInProspects"
+}

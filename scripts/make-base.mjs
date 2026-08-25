@@ -1,5 +1,6 @@
-// Makes a clean copy of the base agent: no optional skills, no optional tools,
-// and no catalogue folder either.
+// Makes a clean copy of the base agent: no installed optional modules, no
+// optional tools, and no large module catalogue. Small skill-package contracts
+// remain so learners can see and surgically fetch the supported packages.
 //
 // This is an instructor tool. It reads from the last commit rather than the
 // working folder, so whatever you have installed or half-edited locally cannot
@@ -10,7 +11,7 @@
 // The result is a plain folder. Zip it and hand it out, or push it somewhere
 // learners can download it.
 
-import { mkdir, writeFile, rm, access } from "node:fs/promises";
+import { access, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -38,6 +39,13 @@ const BASE_WORKFLOWS = [
   "40-confirm-task-write.json",
   "90-debug-agent-health.json",
 ];
+const AGENT_IDS = [
+  "project-manager",
+  "sales",
+  "marketing",
+  "investment",
+  "bookkeeping",
+];
 
 function git(args) {
   const result = spawnSync("git", args, {
@@ -54,7 +62,13 @@ function git(args) {
 }
 
 function shouldInclude(path) {
-  // The catalogue itself never ships in a base copy.
+  // Keep the small surgical installer, but not the module catalogue itself.
+  if (
+    path === "optional-skills/_installer" ||
+    path.startsWith("optional-skills/_installer/")
+  ) {
+    return true;
+  }
   if (path === "optional-skills" || path.startsWith("optional-skills/")) {
     return false;
   }
@@ -109,6 +123,9 @@ const tracked = git(["ls-tree", "-r", "HEAD", "--name-only", "-z"])
 
 const included = tracked.filter(shouldInclude);
 const skipped = tracked.length - included.length;
+const optionalManifests = tracked
+  .filter((path) => /^optional-skills\/[^/]+\/manifest\.json$/.test(path))
+  .map((path) => JSON.parse(git(["show", `HEAD:${path}`]).toString()));
 
 for (const path of included) {
   const outPath = join(destination, path);
@@ -116,28 +133,161 @@ for (const path of included) {
   await writeFile(outPath, git(["show", `HEAD:${path}`]));
 }
 
-// Verify rather than assume: a base copy with a stray optional skill enabled
-// would fail for every learner who downloaded it.
-const enabled = git(["show", "HEAD:skills/enabled.txt"])
-  .toString()
-  .split(/\r?\n/)
-  .map((line) => line.trim())
-  .filter((line) => line && !line.startsWith("#"));
-const unexpected = enabled.filter((id) => !BASE_SKILLS.includes(id));
+// A maintainer may have optional skills enabled in the source checkout. The
+// generated learner base always receives the canonical four, independently of
+// that local release state.
+await writeFile(
+  join(destination, "skills", "enabled.txt"),
+  `${BASE_SKILLS.join("\n")}\n`,
+  "utf8",
+);
+
+// Optional installers make surgical additions to the shared workflow, policy,
+// enabled-list, and folder-manifest files.
+// Excluding the skill's own files is therefore not enough: reverse every
+// catalogue-declared addition so the output is a physically clean base even
+// when the release checkout has optional skills installed.
+const agentPath = join(
+  destination,
+  "n8n",
+  "workflows",
+  "00-start-here-project-partner.json",
+);
+const policyPath = join(destination, "tools", "policy.json");
+const foldersPath = join(destination, "n8n", "folders.manifest.json");
+const agentWorkflow = JSON.parse(await readFile(agentPath, "utf8"));
+const policy = JSON.parse(await readFile(policyPath, "utf8"));
+const folders = JSON.parse(await readFile(foldersPath, "utf8"));
+const optionalToolNames = new Set(
+  optionalManifests.flatMap((manifest) =>
+    (manifest.agentTools ?? []).map((tool) => tool.name),
+  ),
+);
+const optionalPolicyIds = new Set(
+  optionalManifests.flatMap((manifest) =>
+    (manifest.policyEntries ?? []).map((entry) => entry.id),
+  ),
+);
+const optionalWorkflowNames = new Set(
+  optionalManifests.flatMap((manifest) =>
+    (manifest.folders ?? []).flatMap((folder) => folder.workflows ?? []),
+  ),
+);
+
+agentWorkflow.nodes = agentWorkflow.nodes.filter(
+  (node) => !optionalToolNames.has(node.name),
+);
+for (const toolName of optionalToolNames) {
+  delete agentWorkflow.connections[toolName];
+}
+for (const sourceConnections of Object.values(agentWorkflow.connections)) {
+  for (const [type, groups] of Object.entries(sourceConnections)) {
+    sourceConnections[type] = groups.map((group) =>
+      group.filter((connection) => !optionalToolNames.has(connection.node)),
+    );
+  }
+}
+
+const contextNode = agentWorkflow.nodes.find(
+  (node) => node.name === "Build Agent Context",
+);
+if (!contextNode) {
+  throw new Error('The committed agent has no "Build Agent Context" node.');
+}
+let contextCode = contextNode.parameters.jsCode;
+function removeRuleFromAgent(code, agentId, rule) {
+  const anchor = `/* INSTALL ${agentId} TOOL RULES */`;
+  const end = code.indexOf(anchor);
+  if (end === -1) {
+    return code;
+  }
+
+  let start = 0;
+  for (const otherAgentId of AGENT_IDS) {
+    if (otherAgentId === agentId) {
+      continue;
+    }
+    const otherAnchor = `/* INSTALL ${otherAgentId} TOOL RULES */`;
+    const at = code.indexOf(otherAnchor);
+    if (at !== -1 && at < end) {
+      start = Math.max(start, at + otherAnchor.length);
+    }
+  }
+
+  const before = code.slice(0, start);
+  let scopedRules = code.slice(start, end);
+  const encodedRule = `${JSON.stringify(rule)},\n      `;
+  while (scopedRules.includes(encodedRule)) {
+    scopedRules = scopedRules.replace(encodedRule, "");
+  }
+  return `${before}${scopedRules}${code.slice(end)}`;
+}
+
+// Undo the catalogue in reverse order. Some later skills deliberately broaden
+// text introduced by an earlier skill (Telegram extends Domain Research's
+// safety line), so reversing in catalogue order can strand the later text.
+for (const manifest of [...optionalManifests].reverse()) {
+  const rules = [
+    ...(manifest.policyRules ?? []),
+    ...(manifest.unavailableCapabilities ?? []).map(
+      (capability) => `- ${capability} is unavailable for this role.`,
+    ),
+  ];
+  const targetAgents =
+    manifest.agent === "global" ? AGENT_IDS : [manifest.agent];
+  for (const targetAgent of targetAgents) {
+    for (const rule of rules) {
+      contextCode = removeRuleFromAgent(contextCode, targetAgent, rule);
+    }
+  }
+  for (const replacement of manifest.policyReplacements ?? []) {
+    if (contextCode.includes(replacement.replace)) {
+      contextCode = contextCode.replace(replacement.replace, replacement.find);
+    }
+  }
+}
+
+for (const manifest of optionalManifests) {
+  const rules = [
+    ...(manifest.policyRules ?? []),
+    ...(manifest.unavailableCapabilities ?? []).map(
+      (capability) => `- ${capability} is unavailable for this role.`,
+    ),
+  ];
+  for (const rule of rules) {
+    if (contextCode.includes(JSON.stringify(rule))) {
+      throw new Error(
+        `Optional prompt rule from "${manifest.id}" remained in the learner base.`,
+      );
+    }
+  }
+  for (const replacement of manifest.policyReplacements ?? []) {
+    if (contextCode.includes(replacement.replace)) {
+      throw new Error(
+        `Optional prompt replacement from "${manifest.id}" remained in the learner base.`,
+      );
+    }
+  }
+}
+contextNode.parameters.jsCode = contextCode;
+
+policy.tools = policy.tools.filter((tool) => !optionalPolicyIds.has(tool.id));
+for (const folder of folders.folders) {
+  folder.workflows = folder.workflows.filter(
+    (workflow) => !optionalWorkflowNames.has(workflow),
+  );
+}
+folders.folders = folders.folders.filter((folder) => folder.workflows.length > 0);
+
+await writeFile(agentPath, `${JSON.stringify(agentWorkflow, null, 2)}\n`, "utf8");
+await writeFile(policyPath, `${JSON.stringify(policy, null, 2)}\n`, "utf8");
+await writeFile(foldersPath, `${JSON.stringify(folders, null, 2)}\n`, "utf8");
 
 process.stdout.write(`\nBase agent written to ${destination}\n\n`);
 process.stdout.write(`  from commit   ${head}\n`);
 process.stdout.write(`  files         ${included.length} (${skipped} left out)\n`);
 process.stdout.write(`  skills        ${BASE_SKILLS.join(", ")}\n`);
 process.stdout.write(`  workflows     ${BASE_WORKFLOWS.length}\n`);
-
-if (unexpected.length > 0) {
-  process.stderr.write(
-    `\nWARNING: skills/enabled.txt at HEAD still switches on ${unexpected.join(", ")}.\n` +
-      "Commit a clean enabled.txt before handing this out.\n",
-  );
-  process.exit(1);
-}
 
 process.stdout.write(
   "\nNothing optional is installed. A learner who runs setup here gets the\n" +

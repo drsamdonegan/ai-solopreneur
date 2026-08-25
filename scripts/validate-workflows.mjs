@@ -43,7 +43,7 @@ const basePolicyTuples = [
   ["update_task_status", "write", "confirmation_required"],
 ];
 // Non-sticky nodes in the base agent workflow. Each installed tool adds one.
-const baseAgentNodeCount = 21;
+const baseAgentNodeCount = 25;
 
 async function readOptionalSkills() {
   const optionalRoot = join(projectRoot, "optional-skills");
@@ -203,6 +203,48 @@ for (const file of filedWorkflows.keys()) {
     expectedFiles.includes(file),
     `Folder manifest: ${file} is filed in a folder but is not a workflow export`,
   );
+}
+
+// n8n reserves a few column names on its own tables, and a dataTable create
+// that asks for one fails outright — which takes the whole skill with it: the
+// tables never appear, every tool built on them errors, and the only clue is a
+// line in the n8n log. The scheduler shipped with createdAt and monthly-update
+// with updatedAt, and both were dead on arrival for exactly this reason. It is
+// a one-word mistake that costs an afternoon to find, so it is checked here,
+// across every skill, installed or not.
+const RESERVED_COLUMN_NAMES = new Set(["id", "createdAt", "updatedAt"]);
+
+async function checkReservedColumns(label, path) {
+  let workflow;
+  try {
+    workflow = JSON.parse(await readFile(path, "utf8"));
+  } catch {
+    return;
+  }
+  for (const node of workflow.nodes ?? []) {
+    const columns = node.parameters?.columns?.column;
+    if (node.parameters?.operation !== "create" || !Array.isArray(columns)) {
+      continue;
+    }
+    for (const column of columns) {
+      check(
+        !RESERVED_COLUMN_NAMES.has(column.name),
+        `${label}: table "${node.parameters.tableName}" declares "${column.name}", which n8n reserves — the table is never created and the skill cannot work`,
+      );
+    }
+  }
+}
+
+for (const file of actualFiles) {
+  await checkReservedColumns(file, join(workflowDirectory, file));
+}
+for (const skill of optionalSkills) {
+  for (const file of skill.workflowFiles) {
+    await checkReservedColumns(
+      `optional-skills/${skill.id}/workflows/${file}`,
+      join(projectRoot, "optional-skills", skill.id, "workflows", file),
+    );
+  }
 }
 
 const workflows = new Map();
@@ -497,13 +539,13 @@ if (agentWorkflow) {
   check(
     startResearchTool?.parameters?.workflowId?.value ===
       "phase9StartDomainResearch" &&
-      /free website-only fallback/i.test(
+      /default free website-only tool/i.test(
         startResearchTool?.parameters?.description ?? "",
       ) &&
       /never ask an ownership or permission question/i.test(
         startResearchTool?.parameters?.description ?? "",
       ),
-    "Agent: start_domain_research must be the no-ownership free fallback",
+    "Agent: start_domain_research must be the no-ownership default free path",
   );
   const completeResearchTool = nodeByName(
     agentWorkflow,
@@ -536,16 +578,16 @@ if (agentWorkflow) {
   check(
     startPaidResearchTool?.parameters?.workflowId?.value ===
       "phase11StartPaidDomainResearch" &&
-      /default tool/i.test(
+      /optional paid upgrade/i.test(
         startPaidResearchTool?.parameters?.description ?? "",
       ) &&
-      /standard depth, Australia and English by default/i.test(
+      /explicitly asks for paid DataForSEO research/i.test(
         startPaidResearchTool?.parameters?.description ?? "",
       ) &&
       /free start_domain_research fallback/i.test(
         startPaidResearchTool?.parameters?.description ?? "",
       ),
-    "Agent: start_paid_domain_research must default to paid standard research with a free fallback",
+    "Agent: start_paid_domain_research must require an explicit paid request and retain the free fallback",
   );
   const completePaidResearchTool = nodeByName(
     agentWorkflow,
@@ -587,6 +629,10 @@ if (agentWorkflow) {
       /Do not normalize or shorten it/.test(
         linkedInLookupTool?.parameters?.workflowInputs?.value?.full_name ?? "",
       ) &&
+      /True only after the current user explicitly approves this one Crustdata profile search costing up to 0\.30 credits/.test(
+        linkedInLookupTool?.parameters?.workflowInputs?.value
+          ?.paid_lookup_confirmed ?? "",
+      ) &&
       /never returns phone numbers, email addresses, contact data/i.test(
         linkedInLookupTool?.parameters?.description ?? "",
       ),
@@ -596,9 +642,49 @@ if (agentWorkflow) {
   check(
     startSeoArticleTool?.parameters?.workflowId?.value === "phase13StartSeoArticle" &&
       /background/i.test(startSeoArticleTool?.parameters?.description ?? "") &&
-      /no new DataForSEO purchase/i.test(startSeoArticleTool?.parameters?.description ?? "") &&
+      /custom topic wins/i.test(startSeoArticleTool?.parameters?.description ?? "") &&
+      /never invent or restate numbered choices/i.test(
+        startSeoArticleTool?.parameters?.description ?? "",
+      ) &&
+      /US\$0\.15 application ceiling/i.test(
+        startSeoArticleTool?.parameters?.description ?? "",
+      ) &&
+      /job IDs out of normal replies/i.test(
+        startSeoArticleTool?.parameters?.description ?? "",
+      ) &&
+      startSeoArticleTool?.parameters?.workflowInputs?.value?.currentInstruction ===
+        "={{ $('Validate and Normalise').first().json.message }}" &&
+      startSeoArticleTool?.parameters?.workflowInputs?.value?.requestedTopic &&
       /never publishes/i.test(startSeoArticleTool?.parameters?.description ?? ""),
-    "Agent: start_seo_article must queue the reviewed no-publish, no-new-paid-search workflow",
+    "Agent: start_seo_article must start exact custom topics, bound research, hide internals, and never publish",
+  );
+  const directArticleDetector = nodeByName(agentWorkflow, "Detect Direct Article Request");
+  const directArticleStart = nodeByName(agentWorkflow, "Start Direct SEO Article");
+  const directArticleReply = nodeByName(agentWorkflow, "Shape Direct Article Reply");
+  const directValues = directArticleStart?.parameters?.workflowInputs?.value ?? {};
+  check(
+    /agentId==='marketing'/.test(directArticleDetector?.parameters?.jsCode ?? "") &&
+      /directArticleTopic/.test(directArticleDetector?.parameters?.jsCode ?? "") &&
+      /documents/.test(directArticleDetector?.parameters?.jsCode ?? "") &&
+      directArticleStart?.parameters?.workflowId?.value === "phase13StartSeoArticle" &&
+      directArticleStart?.parameters?.options?.waitForSubWorkflow === true &&
+      directValues.currentInstruction ===
+        "={{ $('Validate and Normalise').first().json.message }}" &&
+      directValues.requestedTopic === "={{ $json.directArticleTopic }}" &&
+      directValues.selectionNumber === 0 &&
+      directValues.chooseStrongestKeyword === false &&
+      /progress card will update automatically/i.test(
+        directArticleReply?.parameters?.jsCode ?? "",
+      ) &&
+      /\$json\.response\?\?\$json/.test(
+        directArticleReply?.parameters?.jsCode ?? "",
+      ) &&
+      !/jobId/.test(directArticleReply?.parameters?.jsCode ?? "") &&
+      agentWorkflow.connections["Direct Article Request?"]?.main?.[0]?.[0]?.node ===
+        "Start Direct SEO Article" &&
+      agentWorkflow.connections["Direct Article Request?"]?.main?.[1]?.[0]?.node ===
+        "Load Enabled Skills",
+    "Agent: explicit simple Marketing article requests must bypass model discretion and start deterministically",
   );
   const getSeoArticleTool = nodeByName(agentWorkflow, "get_seo_article");
   check(
@@ -621,9 +707,12 @@ if (agentWorkflow) {
       "Confirm Stored Action",
     ) &&
       connectionTargets(agentWorkflow, "Exact Confirmation?", "main", 1).includes(
+        "Detect Direct Article Request",
+      ) &&
+      connectionTargets(agentWorkflow, "Direct Article Request?", "main", 1).includes(
         "Load Enabled Skills",
       ),
-    "Agent: exact confirmations must bypass Claude and ordinary messages must load skills",
+    "Agent: exact confirmations must bypass Claude and ordinary messages must pass the direct-route guard before loading skills",
   );
   const confirmAction = nodeByName(agentWorkflow, "Confirm Stored Action");
   check(
@@ -693,6 +782,13 @@ if (agentWorkflow) {
   // a single-quoted description closes the string early and the tool node dies
   // with "Unbalanced parentheses" the first time the model reaches for it. A
   // description carrying an apostrophe has to be written in backticks.
+  //
+  // Which makes a backtick inside a backtick exactly as fatal, and far more
+  // tempting: backticks are how anyone writes an example value, and the
+  // description they are writing is already backtick-quoted because it
+  // contains an apostrophe. This check read only the single-quoted ones and
+  // waved five broken descriptions through. It now reads whichever quote the
+  // description actually opened with.
   const brokenFromAi = [
     ...new Set(
       agentWorkflow.nodes.flatMap((node) =>
@@ -702,9 +798,10 @@ if (agentWorkflow) {
           .map((tail) => tail.slice(0, tail.indexOf(") }}") + 1))
           .filter((call) => {
             const description = call.slice(call.indexOf(",") + 1).trim();
-            if (!description.startsWith("'")) return false;
+            const quote = description.charAt(0);
+            if (quote !== "'" && quote !== "`") return false;
             const body = description.slice(1);
-            return !body.slice(body.indexOf("'") + 1).trim().startsWith(",");
+            return !body.slice(body.indexOf(quote) + 1).trim().startsWith(",");
           })
           .map(() => node.name),
       ),
@@ -712,7 +809,8 @@ if (agentWorkflow) {
   ];
   check(
     brokenFromAi.length === 0,
-    "Tool descriptions must not close their own quote; write them in backticks when they contain an apostrophe" +
+    "Tool descriptions must not close their own quote: write one containing an " +
+      "apostrophe in backticks, and never put a backtick inside it" +
       (brokenFromAi.length > 0 ? ` (${brokenFromAi.join(", ")})` : ""),
   );
 
@@ -877,6 +975,7 @@ if (linkedInLookupWorkflow) {
         "request_id",
         "email_address",
         "full_name",
+        "company_name",
         "country_region",
         "state_province",
         "city_location",
@@ -919,7 +1018,7 @@ if (linkedInLookupWorkflow) {
       ?.jsCode ?? "";
   check(
     /profile_enriched: false/.test(rankingCode) &&
-      /slice\(0, 3\)/.test(rankingCode) &&
+      /slice\(0, 10\)/.test(rankingCode) &&
       /linkedinSlug/.test(rankingCode) &&
       /structuredLocation/.test(rankingCode) &&
       /professionalText/.test(rankingCode) &&
@@ -1374,7 +1473,7 @@ const startPaidResearchWorkflow = workflows.get(
 if (startPaidResearchWorkflow) {
   check(
     startPaidResearchWorkflow.meta?.toolRisk === "paid_external_read" &&
-      /direct-current-user-request-with-default-standard-paid-run-or-explicit-depth/.test(
+      /explicit-current-user-paid-dataforseo-request-or-named-paid-mode/.test(
         startPaidResearchWorkflow.meta?.authorization ?? "",
       ) &&
       /no-automatic-retry/.test(
@@ -1395,7 +1494,7 @@ if (startPaidResearchWorkflow) {
       /deep:\{limit:\.50,expansionReserve:\.38,serpReserve:\.02/.test(validation) &&
       /locationCode/.test(validation) &&
       /languageCode/.test(validation),
-    "start_paid_domain_research must validate a direct paid-first request, market, language, and reserved caps",
+    "start_paid_domain_research must validate explicit paid authority, market, language, and reserved caps",
   );
   const dataForSeoUrls = [
     "https://api.dataforseo.com/v3/dataforseo_labs/google/ranked_keywords/live",
@@ -1405,13 +1504,25 @@ if (startPaidResearchWorkflow) {
     "https://api.dataforseo.com/v3/dataforseo_labs/google/related_keywords/live",
     "https://api.dataforseo.com/v3/serp/google/organic/live/regular",
   ];
-  const paidHttpNodes = startPaidResearchWorkflow.nodes.filter(
-    (node) => dataForSeoUrls.includes(String(node.parameters?.url ?? "")),
+  // Each seed gets its own call, because a live endpoint rejects every task after
+  // the first, so a reviewed endpoint may now appear several times. What must not
+  // change is the set: every DataForSEO URL in here is one of the six, and all six
+  // are still present.
+  const paidHttpNodes = startPaidResearchWorkflow.nodes.filter((node) =>
+    String(node.parameters?.url ?? "").includes("api.dataforseo.com"),
   );
+  const paidCalledUrls = startPaidResearchWorkflow.nodes
+    .map((node) => String(node.parameters?.url ?? ""))
+    .filter((url) => url.includes("api.dataforseo.com"));
+  const unreviewed = [...new Set(paidCalledUrls)].filter(
+    (url) => !dataForSeoUrls.includes(url),
+  );
+  const missing = dataForSeoUrls.filter((url) => !paidCalledUrls.includes(url));
   check(
-    JSON.stringify(paidHttpNodes.map((node) => node.parameters.url)) ===
-      JSON.stringify(dataForSeoUrls),
-    "start_paid_domain_research may use only the six reviewed DataForSEO endpoints",
+    unreviewed.length === 0 && missing.length === 0,
+    "start_paid_domain_research may use only the six reviewed DataForSEO endpoints" +
+      (unreviewed.length > 0 ? ` (unreviewed: ${unreviewed.join(", ")})` : "") +
+      (missing.length > 0 ? ` (missing: ${missing.join(", ")})` : ""),
   );
   check(
     paidHttpNodes.every(
@@ -1557,10 +1668,18 @@ if (startSeoArticleWorkflow) {
   );
   const registrationBody =
     nodeByName(startSeoArticleWorkflow, "Register Article Job")?.parameters?.jsonBody ?? "";
+  const startTrigger = startSeoArticleWorkflow.nodes.find(
+    (node) => node.type === "n8n-nodes-base.executeWorkflowTrigger",
+  );
   const registrationCheck =
     nodeByName(startSeoArticleWorkflow, "Check Job Registration")?.parameters?.jsCode ?? "";
+  const startValidation =
+    nodeByName(startSeoArticleWorkflow, "Validate Article Brief")?.parameters?.jsCode ?? "";
+  const startResult =
+    nodeByName(startSeoArticleWorkflow, "Shape Start Result")?.parameters?.jsCode ?? "";
   check(
-    /selectionNumber/.test(registrationBody) &&
+    /requestedTopic/.test(registrationBody) &&
+      /selectionNumber/.test(registrationBody) &&
       /chooseStrongestKeyword/.test(registrationBody) &&
       /targetAudience/.test(registrationBody) &&
       /offer/.test(registrationBody) &&
@@ -1568,8 +1687,17 @@ if (startSeoArticleWorkflow) {
       /boundaries/.test(registrationBody) &&
       /voice/.test(registrationBody) &&
       /needs_selection/.test(registrationCheck) &&
-      /needs_details/.test(registrationCheck),
-    "start_seo_article must use the saved brief and ask only for missing essentials",
+      /needs_details/.test(registrationCheck) &&
+      startTrigger?.parameters?.workflowInputs?.values?.some(
+        (value) => value.name === "currentInstruction" && value.type === "string",
+      ) &&
+      /currentInstruction/.test(startValidation) &&
+      /inferredTopic/.test(startValidation) &&
+      /CONFLICTING_MODE/.test(startValidation) &&
+      /requestedTopic/.test(startResult) &&
+      /progress/.test(startResult) &&
+      !/response:\{[^}]*jobId/.test(startResult),
+    "start_seo_article must preserve custom topics, reject conflicting modes, hide job IDs, and ask only for missing essentials",
   );
 }
 
@@ -1579,17 +1707,99 @@ if (writeSeoArticleWorkflow) {
     (node) => node.type === "n8n-nodes-base.httpRequest",
   );
   const destinations = requests.map((node) => String(node.parameters?.url ?? ""));
+  const articleProviderUrls = [
+    "https://api.dataforseo.com/v3/dataforseo_labs/google/keyword_ideas/live",
+    "https://api.dataforseo.com/v3/dataforseo_labs/google/keyword_suggestions/live",
+    "https://api.dataforseo.com/v3/dataforseo_labs/google/related_keywords/live",
+    "https://api.dataforseo.com/v3/serp/google/organic/live/regular",
+  ];
+  const providerRequests = requests.filter((node) =>
+    articleProviderUrls.includes(String(node.parameters?.url ?? "")),
+  );
   check(
     writeSeoArticleWorkflow.id === "phase13WriteSeoArticle" &&
       writeSeoArticleWorkflow.meta?.modelCallable === false &&
-      writeSeoArticleWorkflow.meta?.paidCalls === "none" &&
+      writeSeoArticleWorkflow.meta?.paidCalls === "bounded_topic_research_with_free_fallback" &&
       writeSeoArticleWorkflow.settings?.executionTimeout === 1800 &&
       destinations.every(
         (url) =>
           /^=?http:\/\/127\.0\.0\.1:3000\//.test(url) ||
-          url === "https://api.anthropic.com/v1/messages",
+          url === "https://api.anthropic.com/v1/messages" ||
+          articleProviderUrls.includes(url),
       ),
     "write_seo_article must remain an internal bounded compiler with reviewed destinations",
+  );
+  check(
+    providerRequests.length === articleProviderUrls.length &&
+      new Set(providerRequests.map((node) => String(node.parameters?.url ?? ""))).size ===
+        articleProviderUrls.length &&
+      providerRequests.every(
+        (node) =>
+          node.credentials?.httpBasicAuth?.name === "DataForSEO API" &&
+          node.onError === "continueRegularOutput",
+      ) &&
+      /useSaved/.test(
+        nodeByName(writeSeoArticleWorkflow, "Prepare Topic Research")?.parameters?.jsCode ?? "",
+      ) &&
+      /saved_or_free_fallback/.test(
+        nodeByName(writeSeoArticleWorkflow, "Build Topic Strategy Request")?.parameters?.jsCode ?? "",
+      ) &&
+      /api\/seo-article\/strategy/.test(
+        nodeByName(writeSeoArticleWorkflow, "Persist Topic Strategy")?.parameters?.url ?? "",
+      ),
+    "write_seo_article must reuse sufficient evidence or make one fixed topic-research pass with a free fallback",
+  );
+  const expectedStages = [
+    "loading_context",
+    "researching_keywords",
+    "finding_sources",
+    "drafting",
+    "checking_claims",
+    "repairing",
+    "saving",
+  ];
+  const workflowText = JSON.stringify(writeSeoArticleWorkflow);
+  const progressNodes = writeSeoArticleWorkflow.nodes.filter((workflowNode) =>
+    /^Mark (?:Researching Keywords|Finding Sources|Drafting|Checking Claims|Repairing|Saving)$/.test(
+      workflowNode.name,
+    ),
+  );
+  // A progress write is deliberately inline. A sibling branch can be deferred
+  // until the long branch finishes, and its HTTP response would replace the
+  // article payload if it fed the worker directly, so each write is followed
+  // by a tiny node that restores the pre-write payload.
+  const progressBeforeWork = [
+    ["Prepare Topic Research", 0, "Mark Researching Keywords", "Restore Topic Research", "Saved Topic Evidence?"],
+    ["Choose Public Sources", 0, "Mark Finding Sources", "Restore Public Sources", "Context Is Ready?"],
+    ["Enough Sources?", 0, "Mark Drafting", "Restore Grounded Draft", "Draft With Claude"],
+    ["Draft With Claude", 0, "Mark Checking Claims", "Restore Draft Response", "Inspect Draft"],
+    ["Prepare One Repair", 0, "Mark Repairing", "Restore Repair Request", "Repair With Claude"],
+    ["Draft Needs Repair?", 1, "Mark Saving", "Restore Save Payload", "Save Article Version"],
+    ["Repair Is Valid?", 0, "Mark Saving", "Restore Save Payload", "Save Article Version"],
+  ];
+  check(
+    expectedStages.every((stage) => workflowText.includes(stage)) &&
+      /api\/seo-article\/strategy/.test(workflowText) &&
+      progressNodes.length === 6 &&
+      progressNodes.every(
+        (progressNode) =>
+          progressNode.onError === "continueRegularOutput" &&
+          writeSeoArticleWorkflow.connections[progressNode.name] !== undefined,
+      ) &&
+      progressBeforeWork.every(
+        ([from, output, stageNode, restoreNode, workNode]) => {
+          const sourceTargets = connectionTargets(writeSeoArticleWorkflow, from, "main", output);
+          const progressTargets = connectionTargets(writeSeoArticleWorkflow, stageNode, "main", 0);
+          const restoreTargets = connectionTargets(writeSeoArticleWorkflow, restoreNode, "main", 0);
+          return sourceTargets.length === 1 &&
+            sourceTargets[0] === stageNode &&
+            progressTargets.length === 1 &&
+            progressTargets[0] === restoreNode &&
+            restoreTargets.length === 1 &&
+            restoreTargets[0] === workNode;
+        },
+      ),
+    "write_seo_article must persist every monotonic stage without feeding progress responses into the draft chain",
   );
   check(
     destinations.filter((url) => url === "https://api.anthropic.com/v1/messages").length === 2 &&
@@ -1599,9 +1809,18 @@ if (writeSeoArticleWorkflow) {
       /UNTRUSTED DATA/.test(
         nodeByName(writeSeoArticleWorkflow, "Prepare Grounded Draft")?.parameters?.jsCode ?? "",
       ) &&
-      /unsupported/.test(
-        nodeByName(writeSeoArticleWorkflow, "Inspect Repaired Draft")?.parameters?.jsCode ?? "",
-      ),
+      ["Inspect Draft", "Inspect Repaired Draft"].every((name) => {
+        const code = nodeByName(writeSeoArticleWorkflow, name)?.parameters?.jsCode ?? "";
+        return (
+          /unsupported/.test(code) &&
+          /normalize\('NFKC'\)/.test(code) &&
+          /contains\(p\?\.text,s\.excerpt\)/.test(code) &&
+          /contains\(assembled,c\.sentence\)/.test(code) &&
+          /presentClaims/.test(code) &&
+          /sanitizedSources/.test(code) &&
+          /sanitizedDraft/.test(code)
+        );
+      }),
     "write_seo_article must require four sources, resist prompt injection, and allow one repair only",
   );
 }
@@ -1831,7 +2050,7 @@ for (const installed of installedSkills) {
     (skill) => skill.id === installed.id,
   );
   check(
-    AGENT_IDS.includes(installed.agent) &&
+    (AGENT_IDS.includes(installed.agent) || installed.agent === "global") &&
       compiled?.agent === installed.agent,
     `Installed skill ${installed.id} must declare the same reviewed agent in manifest.json and skill.yaml`,
   );

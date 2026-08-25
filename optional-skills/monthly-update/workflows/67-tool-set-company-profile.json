@@ -22,27 +22,90 @@
         "inputSource": "workflowInputs",
         "workflowInputs": {
           "values": [
-            { "name": "sessionId", "type": "string" },
-            { "name": "requestId", "type": "string" },
-            { "name": "companyName", "type": "string" },
-            { "name": "oneLiner", "type": "string" },
-            { "name": "domainAliases", "type": "string" },
-            { "name": "founderNames", "type": "string" },
-            { "name": "teamNames", "type": "string" },
-            { "name": "investorNames", "type": "string" },
-            { "name": "investorDomains", "type": "string" },
-            { "name": "customerNames", "type": "string" },
-            { "name": "customerDomains", "type": "string" },
-            { "name": "prospectNames", "type": "string" },
-            { "name": "prospectDomains", "type": "string" },
-            { "name": "competitorNames", "type": "string" },
-            { "name": "competitorDomains", "type": "string" },
-            { "name": "positiveKeywords", "type": "string" },
-            { "name": "negativeKeywords", "type": "string" },
-            { "name": "stage", "type": "string" },
-            { "name": "voiceNotes", "type": "string" },
-            { "name": "audience", "type": "string" },
-            { "name": "deliverTo", "type": "string" }
+            {
+              "name": "sessionId",
+              "type": "string"
+            },
+            {
+              "name": "requestId",
+              "type": "string"
+            },
+            {
+              "name": "companyName",
+              "type": "string"
+            },
+            {
+              "name": "oneLiner",
+              "type": "string"
+            },
+            {
+              "name": "domainAliases",
+              "type": "string"
+            },
+            {
+              "name": "founderNames",
+              "type": "string"
+            },
+            {
+              "name": "teamNames",
+              "type": "string"
+            },
+            {
+              "name": "investorNames",
+              "type": "string"
+            },
+            {
+              "name": "investorDomains",
+              "type": "string"
+            },
+            {
+              "name": "customerNames",
+              "type": "string"
+            },
+            {
+              "name": "customerDomains",
+              "type": "string"
+            },
+            {
+              "name": "prospectNames",
+              "type": "string"
+            },
+            {
+              "name": "prospectDomains",
+              "type": "string"
+            },
+            {
+              "name": "competitorNames",
+              "type": "string"
+            },
+            {
+              "name": "competitorDomains",
+              "type": "string"
+            },
+            {
+              "name": "positiveKeywords",
+              "type": "string"
+            },
+            {
+              "name": "negativeKeywords",
+              "type": "string"
+            },
+            {
+              "name": "stage",
+              "type": "string"
+            },
+            {
+              "name": "voiceNotes",
+              "type": "string"
+            },
+            {
+              "name": "audience",
+              "type": "string"
+            },
+            {
+              "name": "deliverTo",
+              "type": "string"
+            }
           ]
         }
       },
@@ -93,7 +156,7 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "const input = $('Tool Input').first().json;\nconst existingRows = $input.all().map((item) => item.json).filter((row) => row && row.profileId === 'default');\nconst existing = existingRows[0] ?? {};\n\nconst sessionId = typeof input.sessionId === 'string' ? input.sessionId.trim() : '';\nconst requestId = typeof input.requestId === 'string' ? input.requestId.trim() : '';\nconst uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;\nlet error = null;\nif (!uuidPattern.test(sessionId) || !uuidPattern.test(requestId)) {\n  error = { code: 'INVALID_SESSION', message: 'Saving a company profile needs a valid conversation and request ID.' };\n}\n\nconst text = (value, limit) => {\n  const raw = typeof value === 'string' ? value.trim() : '';\n  return raw.slice(0, limit ?? 300);\n};\n\n// Names are matched case-insensitively against email text, so they are\n// stored lowercased and deduped. Anything under three characters is dropped:\n// a two-letter alias matches inside half the words in the English language\n// and would allowlist the entire inbox.\nconst nameList = (value, limit) => {\n  const parts = text(value, 1200)\n    .split(',')\n    .map((part) => part.trim().toLowerCase())\n    .filter((part) => part.length >= 3);\n  return Array.from(new Set(parts)).slice(0, limit ?? 30).join(',');\n};\n\n// Accepts anything a person might paste: https://www.acme.com/pricing,\n// sam@acme.com, or plain acme.com. Everything becomes the bare host.\nconst domainList = (value, limit) => {\n  const parts = text(value, 1200)\n    .split(',')\n    .map((part) => {\n      let raw = part.trim().toLowerCase();\n      if (!raw) return '';\n      if (raw.includes('@')) raw = raw.split('@').pop();\n      raw = raw.replace(/^https?:\\/\\//, '').replace(/^www\\./, '').split('/')[0].split('?')[0].trim();\n      return /^[a-z0-9.-]+\\.[a-z]{2,}$/.test(raw) ? raw : '';\n    })\n    .filter(Boolean);\n  return Array.from(new Set(parts)).slice(0, limit ?? 30).join(',');\n};\n\nconst STAGES = ['pre-seed', 'seed', 'series-a', 'revenue', 'unknown'];\nconst stage = (value) => {\n  const raw = text(value, 20).toLowerCase().replace(/\\s+/g, '-');\n  return STAGES.includes(raw) ? raw : '';\n};\n\nconst AUDIENCES = ['investor', 'team', 'community'];\nconst audience = (value) => {\n  const raw = text(value, 20).toLowerCase();\n  return AUDIENCES.includes(raw) ? raw : '';\n};\n\n// A blank field means 'not mentioned this time', never 'erase what I said before'.\nconst keep = (next, previous) => (next === '' || next === null ? (previous ?? '') : next);\n\nconst merged = {\n  companyName: keep(text(input.companyName, 120), existing.companyName),\n  oneLiner: keep(text(input.oneLiner, 300), existing.oneLiner),\n  domainAliases: keep(domainList(input.domainAliases, 10), existing.domainAliases),\n  founderNames: keep(nameList(input.founderNames, 12), existing.founderNames),\n  teamNames: keep(nameList(input.teamNames, 40), existing.teamNames),\n  investorNames: keep(nameList(input.investorNames, 40), existing.investorNames),\n  investorDomains: keep(domainList(input.investorDomains, 40), existing.investorDomains),\n  customerNames: keep(nameList(input.customerNames, 60), existing.customerNames),\n  customerDomains: keep(domainList(input.customerDomains, 60), existing.customerDomains),\n  prospectNames: keep(nameList(input.prospectNames, 60), existing.prospectNames),\n  prospectDomains: keep(domainList(input.prospectDomains, 60), existing.prospectDomains),\n  competitorNames: keep(nameList(input.competitorNames, 40), existing.competitorNames),\n  competitorDomains: keep(domainList(input.competitorDomains, 40), existing.competitorDomains),\n  positiveKeywords: keep(nameList(input.positiveKeywords, 40), existing.positiveKeywords),\n  negativeKeywords: keep(nameList(input.negativeKeywords, 40), existing.negativeKeywords),\n  stage: keep(stage(input.stage), existing.stage) || 'unknown',\n  voiceNotes: keep(text(input.voiceNotes, 800), existing.voiceNotes),\n  audience: keep(audience(input.audience), existing.audience) || 'team',\n  deliverTo: keep(text(input.deliverTo, 120), existing.deliverTo) || 'chat-only',\n};\n\nif (!error && !merged.companyName) {\n  error = { code: 'COMPANY_NAME_REQUIRED', message: 'Ask the user what the company is called before saving.' };\n}\n// The scan scores an email partly on whether the company's own domain is\n// among the participants. Without it, an inbox of real customer threads\n// scores identically to an inbox of newsletters.\nif (!error && !merged.domainAliases) {\n  error = { code: 'DOMAIN_REQUIRED', message: 'Ask the user for the company email domain, such as acme.com, before saving. Without it the email scan cannot tell company mail apart from everything else.' };\n}\n\nconst proposedInput = { sessionId, requestId, ...merged };\nif (error) {\n  return [{ json: { valid: false, sessionId, requestId, proposedInput, response: { ok: false, error } } }];\n}\n\nreturn [{ json: {\n  valid: true,\n  sessionId,\n  requestId,\n  proposedInput,\n  ...merged,\n} }];"
+        "jsCode": "const input = $('Tool Input').first().json;\nconst existingRows = $input.all().map((item) => item.json).filter((row) => row && row.profileId === 'default');\nconst existing = existingRows[0] ?? {};\n\nconst sessionId = typeof input.sessionId === 'string' ? input.sessionId.trim() : '';\nconst requestId = typeof input.requestId === 'string' ? input.requestId.trim() : '';\nconst uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;\nlet error = null;\nif (!uuidPattern.test(sessionId) || !uuidPattern.test(requestId)) {\n  error = { code: 'INVALID_SESSION', message: 'Saving a company profile needs a valid conversation and request ID.' };\n}\n\nconst text = (value, limit) => {\n  const raw = typeof value === 'string' ? value.trim() : '';\n  return raw.slice(0, limit ?? 300);\n};\n\n// Names are matched case-insensitively against email text, so they are\n// stored lowercased and deduped. Anything under three characters is dropped:\n// a two-letter alias matches inside half the words in the English language\n// and would allowlist the entire inbox.\nconst nameList = (value, limit) => {\n  const parts = text(value, 1200)\n    .split(',')\n    .map((part) => part.trim().toLowerCase())\n    .filter((part) => part.length >= 3);\n  return Array.from(new Set(parts)).slice(0, limit ?? 30).join(',');\n};\n\n// Accepts anything a person might paste: https://www.acme.com/pricing,\n// sam@acme.com, or plain acme.com. Everything becomes the bare host.\nconst domainList = (value, limit) => {\n  const parts = text(value, 1200)\n    .split(',')\n    .map((part) => {\n      let raw = part.trim().toLowerCase();\n      if (!raw) return '';\n      if (raw.includes('@')) raw = raw.split('@').pop();\n      raw = raw.replace(/^https?:\\/\\//, '').replace(/^www\\./, '').split('/')[0].split('?')[0].trim();\n      return /^[a-z0-9.-]+\\.[a-z]{2,}$/.test(raw) ? raw : '';\n    })\n    .filter(Boolean);\n  return Array.from(new Set(parts)).slice(0, limit ?? 30).join(',');\n};\n\nconst STAGES = ['pre-seed', 'seed', 'series-a', 'revenue', 'unknown'];\nconst stage = (value) => {\n  const raw = text(value, 20).toLowerCase().replace(/\\s+/g, '-');\n  return STAGES.includes(raw) ? raw : '';\n};\n\nconst AUDIENCES = ['investor', 'team', 'community'];\nconst audience = (value) => {\n  const raw = text(value, 20).toLowerCase();\n  return AUDIENCES.includes(raw) ? raw : '';\n};\n\n// A blank field means 'not mentioned this time', never 'erase what I said before'.\nconst keep = (next, previous) => (next === '' || next === null ? (previous ?? '') : next);\n\nconst merged = {\n  companyName: keep(text(input.companyName, 120), existing.companyName),\n  oneLiner: keep(text(input.oneLiner, 300), existing.oneLiner),\n  domainAliases: keep(domainList(input.domainAliases, 10), existing.domainAliases),\n  founderNames: keep(nameList(input.founderNames, 12), existing.founderNames),\n  teamNames: keep(nameList(input.teamNames, 40), existing.teamNames),\n  investorNames: keep(nameList(input.investorNames, 40), existing.investorNames),\n  investorDomains: keep(domainList(input.investorDomains, 40), existing.investorDomains),\n  customerNames: keep(nameList(input.customerNames, 60), existing.customerNames),\n  customerDomains: keep(domainList(input.customerDomains, 60), existing.customerDomains),\n  prospectNames: keep(nameList(input.prospectNames, 60), existing.prospectNames),\n  prospectDomains: keep(domainList(input.prospectDomains, 60), existing.prospectDomains),\n  competitorNames: keep(nameList(input.competitorNames, 40), existing.competitorNames),\n  competitorDomains: keep(domainList(input.competitorDomains, 40), existing.competitorDomains),\n  positiveKeywords: keep(nameList(input.positiveKeywords, 40), existing.positiveKeywords),\n  negativeKeywords: keep(nameList(input.negativeKeywords, 40), existing.negativeKeywords),\n  stage: keep(stage(input.stage), existing.stage) || 'unknown',\n  voiceNotes: keep(text(input.voiceNotes, 800), existing.voiceNotes),\n  audience: keep(audience(input.audience), existing.audience) || 'team',\n  deliverTo: keep(text(input.deliverTo, 120), existing.deliverTo) || 'chat-only',\n};\n\nif (!error && !merged.companyName) {\n  error = { code: 'COMPANY_NAME_REQUIRED', message: 'Ask the user what the company is called before saving.' };\n}\n// The scan scores an email partly on whether the company's own domain is\n// among the participants. Without it, an inbox of real customer threads\n// scores identically to an inbox of newsletters.\nif (!error && !merged.domainAliases) {\n  error = { code: 'DOMAIN_REQUIRED', message: 'Ask the user for the company email domain, such as acme.com, before saving. Without it the email scan cannot tell company mail apart from everything else.' };\n}\n\nconst proposedInput = { sessionId, requestId, ...merged };\nif (error) {\n  return [{ json: { valid: false, sessionId, requestId, proposedInput, response: { ok: false, error } } }];\n}\n\nreturn [{ json: {\n  valid: true,\n  sessionId,\n  requestId,\n  proposedInput,\n  profileSavedAt: new Date().toISOString(),\n  ...merged,\n} }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -161,6 +224,7 @@
           "mappingMode": "defineBelow",
           "value": {
             "profileId": "default",
+            "profileSavedAt": "={{ $json.profileSavedAt }}",
             "companyName": "={{ $json.companyName }}",
             "oneLiner": "={{ $json.oneLiner }}",
             "domainAliases": "={{ $json.domainAliases }}",
@@ -183,26 +247,195 @@
           },
           "matchingColumns": [],
           "schema": [
-            { "id": "profileId", "displayName": "profileId", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
-            { "id": "companyName", "displayName": "companyName", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
-            { "id": "oneLiner", "displayName": "oneLiner", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
-            { "id": "domainAliases", "displayName": "domainAliases", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
-            { "id": "founderNames", "displayName": "founderNames", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
-            { "id": "teamNames", "displayName": "teamNames", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
-            { "id": "investorNames", "displayName": "investorNames", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
-            { "id": "investorDomains", "displayName": "investorDomains", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
-            { "id": "customerNames", "displayName": "customerNames", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
-            { "id": "customerDomains", "displayName": "customerDomains", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
-            { "id": "prospectNames", "displayName": "prospectNames", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
-            { "id": "prospectDomains", "displayName": "prospectDomains", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
-            { "id": "competitorNames", "displayName": "competitorNames", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
-            { "id": "competitorDomains", "displayName": "competitorDomains", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
-            { "id": "positiveKeywords", "displayName": "positiveKeywords", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
-            { "id": "negativeKeywords", "displayName": "negativeKeywords", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
-            { "id": "stage", "displayName": "stage", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
-            { "id": "voiceNotes", "displayName": "voiceNotes", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
-            { "id": "audience", "displayName": "audience", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
-            { "id": "deliverTo", "displayName": "deliverTo", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" }
+            {
+              "id": "profileId",
+              "displayName": "profileId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "profileSavedAt",
+              "displayName": "profileSavedAt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "companyName",
+              "displayName": "companyName",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "oneLiner",
+              "displayName": "oneLiner",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "domainAliases",
+              "displayName": "domainAliases",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "founderNames",
+              "displayName": "founderNames",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "teamNames",
+              "displayName": "teamNames",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "investorNames",
+              "displayName": "investorNames",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "investorDomains",
+              "displayName": "investorDomains",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "customerNames",
+              "displayName": "customerNames",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "customerDomains",
+              "displayName": "customerDomains",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "prospectNames",
+              "displayName": "prospectNames",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "prospectDomains",
+              "displayName": "prospectDomains",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "competitorNames",
+              "displayName": "competitorNames",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "competitorDomains",
+              "displayName": "competitorDomains",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "positiveKeywords",
+              "displayName": "positiveKeywords",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "negativeKeywords",
+              "displayName": "negativeKeywords",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "stage",
+              "displayName": "stage",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "voiceNotes",
+              "displayName": "voiceNotes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "audience",
+              "displayName": "audience",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "deliverTo",
+              "displayName": "deliverTo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
           ],
           "attemptToConvertTypes": true,
           "convertFieldsToString": false
@@ -272,13 +505,69 @@
           },
           "matchingColumns": [],
           "schema": [
-            { "id": "occurredAt", "displayName": "occurredAt", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
-            { "id": "sessionId", "displayName": "sessionId", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
-            { "id": "requestId", "displayName": "requestId", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
-            { "id": "toolName", "displayName": "toolName", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
-            { "id": "proposedInput", "displayName": "proposedInput", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
-            { "id": "result", "displayName": "result", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
-            { "id": "error", "displayName": "error", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" }
+            {
+              "id": "occurredAt",
+              "displayName": "occurredAt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "sessionId",
+              "displayName": "sessionId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "requestId",
+              "displayName": "requestId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "toolName",
+              "displayName": "toolName",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "proposedInput",
+              "displayName": "proposedInput",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "result",
+              "displayName": "result",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "error",
+              "displayName": "error",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
           ],
           "attemptToConvertTypes": true,
           "convertFieldsToString": false
@@ -314,31 +603,99 @@
   "pinData": {},
   "connections": {
     "Tool Input": {
-      "main": [[{ "node": "Read Existing Profile", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Read Existing Profile",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Read Existing Profile": {
-      "main": [[{ "node": "Validate And Merge", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Validate And Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Validate And Merge": {
-      "main": [[{ "node": "Input Is Valid?", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Input Is Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Input Is Valid?": {
       "main": [
-        [{ "node": "Upsert Profile", "type": "main", "index": 0 }],
-        [{ "node": "Prepare Audit", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Upsert Profile",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Upsert Profile": {
-      "main": [[{ "node": "Shape Profile Result", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Shape Profile Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Shape Profile Result": {
-      "main": [[{ "node": "Prepare Audit", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Prepare Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Prepare Audit": {
-      "main": [[{ "node": "Write Tool Audit", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Write Tool Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Write Tool Audit": {
-      "main": [[{ "node": "Return Tool Result", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Return Tool Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "active": false,

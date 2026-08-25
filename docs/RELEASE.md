@@ -2,10 +2,10 @@
 
 ## Release identity
 
-- Product version: `0.2.0`
-- Intended tag: `v0.2.0`
+- Product version: `0.3.0`
+- Intended tag: `v0.3.0`
 - Release type: local-first workshop release
-- Release date: 2026-07-29
+- Release date: 2026-08-19
 - Public/cloud deployment: not included
 
 The root `VERSION` file is authoritative. `CHANGELOG.md` records learner-visible
@@ -39,7 +39,8 @@ evaluator remains `NO_GO`; the owner waiver is recorded in
 The kit contains:
 
 - a source archive from the exact release commit;
-- the twenty canonical workflow exports;
+- the eleven base workflow exports and any optional workflows installed in the
+  release checkout;
 - pinned Node.js, npm, and n8n version metadata;
 - native setup instructions;
 - SHA-256 checksums for every included file.
@@ -54,7 +55,7 @@ Double-click `prepare-instructor-pack-windows.cmd`.
 
 The full helper refuses to run from a dirty Git worktree so the source archive
 and recorded commit cannot disagree. Output is written below
-`instructor-pack/v0.2.0-source/`.
+`instructor-pack/v0.3.0-source/`.
 
 Do not put `.env`, local `data/`, backups, API keys, or credentials in the kit.
 
@@ -77,14 +78,14 @@ Anthropic API key.
 Tag only the commit whose complete CI run is green:
 
 ```bash
-git tag -a v0.2.0 -m "AI Solopreneur local release v0.2.0"
-git push origin v0.2.0
+git tag -a v0.3.0 -m "AI Solopreneur local release v0.3.0"
+git push origin v0.3.0
 ```
 
 Reproduce the release later:
 
 ```bash
-git clone --branch v0.2.0 --depth 1 \
+git clone --branch v0.3.0 --depth 1 \
   https://github.com/drsamdonegan/ai-solopreneur.git
 cd ai-solopreneur
 node scripts/local.mjs setup
@@ -97,13 +98,13 @@ Then follow [Getting started](GETTING_STARTED.md) from the cloned tag.
 Run:
 
 ```bash
-node scripts/validate-release.mjs
-node scripts/validate-workflows.mjs
+npm run verify
+node scripts/make-base.mjs <empty-target-folder>
 ```
 
-The repository does not currently run automated CI/CD or test jobs. Before a
-release, complete the instructor fresh-copy checklist on every supported
-platform and manually exercise setup, chat persistence, restart recovery,
-backup, restore, safe write confirmation, and diagnostics. A release is not
-valid if the tag, `VERSION`, version pins, documentation, workflows, or
-checksums disagree.
+The repository does not currently run hosted CI/CD. Before a release, run the
+full local verification, verify the generated clean base, complete the
+instructor fresh-copy checklist on every supported platform, and manually
+exercise setup, chat persistence, restart recovery, backup, restore, safe write
+confirmation, and diagnostics. A release is not valid if the tag, `VERSION`,
+version pins, documentation, workflows, or checksums disagree.

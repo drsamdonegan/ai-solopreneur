@@ -3,7 +3,7 @@
   "nodes": [
     {
       "parameters": {
-        "content": "## Default paid domain research\nA direct current-user request for a named public business domain starts one standard DataForSEO search without ownership, permission, market-code, language-code, or second payment-confirmation questions. Australia and English are the defaults. An explicit refresh or deep request selects that mode. The workflow checks a 24-hour same-market cache, uses only fixed reviewed DataForSEO endpoints, and never retries a paid call automatically.\n\nEvery component records success, no_results, failed, unavailable, or skipped. Failed attempts are saved without replacing the latest successful company memory.",
+        "content": "## Optional paid domain research\nOnly an explicit current-user request for paid DataForSEO research, or an explicitly selected paid refresh, standard, or deep mode, starts a provider call. A generic request to research a domain uses the free tool. After explicit paid authority, standard research uses Australia and English by default without ownership, permission, market-code, language-code, or second payment-confirmation questions. The workflow checks a 24-hour same-market cache, uses only fixed reviewed DataForSEO endpoints, and never retries a paid call automatically.\n\nEvery component records success, no_results, failed, unavailable, or skipped. Failed attempts are saved without replacing the latest successful company memory.",
         "height": 320,
         "width": 650,
         "color": 4
@@ -525,7 +525,7 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($('Shape Offering Profile').item.json.suggestionTasks) }}",
+        "jsonBody": "={{ JSON.stringify(($('Shape Offering Profile').first().json.suggestionTasks || []).slice(0, 1)) }}",
         "options": {
           "timeout": 30000,
           "response": {
@@ -561,7 +561,7 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($('Shape Offering Profile').item.json.relatedTasks) }}",
+        "jsonBody": "={{ JSON.stringify(($('Shape Offering Profile').first().json.relatedTasks || []).slice(0, 1)) }}",
         "options": {
           "timeout": 30000,
           "response": {
@@ -646,7 +646,7 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($('Prepare SERP Tasks').item.json.serpTasks) }}",
+        "jsonBody": "={{ JSON.stringify(($('Prepare SERP Tasks').first().json.serpTasks || []).slice(0, 1)) }}",
         "options": {
           "timeout": 30000,
           "response": {
@@ -677,7 +677,7 @@
       "parameters": {
         "mode": "runOnceForEachItem",
         "language": "javaScript",
-        "jsCode": "const input=$('Shape Offering Profile').first().json;\nconst budget=(()=>{try{return $('Check Expansion Budget').first().json}catch{return input}})(),plan=(()=>{try{return $('Prepare SERP Tasks').first().json}catch{return budget}})();\nconst get=n=>{try{return $(n).first().json}catch{return{}}},unwrap=v=>v?.body??v?.data??v??{};\nconst endpoint=(name,url,skipped)=>{if(skipped)return{name,url,status:'skipped',cost:0,taskIds:[],items:[],tasks:[]};const raw=get(name),b=unwrap(raw),http=Number(raw?.statusCode??0),tasks=Array.isArray(b?.tasks)?b.tasks:[],taskIds=tasks.map(t=>t?.id).filter(id=>typeof id==='string'),cost=Number.isFinite(Number(b?.cost))?Number(b.cost):tasks.reduce((s,t)=>s+(Number(t?.cost)||0),0),failed=(http&&(http<200||http>=300))||Number(b?.status_code||0)!==20000||tasks.some(t=>Number(t?.status_code)!==20000),items=tasks.flatMap(t=>(Array.isArray(t?.result)?t.result:[]).flatMap(r=>Array.isArray(r?.items)?r.items:[]));return{name,url,status:failed||!tasks.length?'failed':items.length?'success':'no_results',cost,taskIds,items,tasks}};\nconst refresh=input.researchDepth==='refresh',skipExpansion=refresh||budget.expansionSkippedForBudget;\nconst ranked=endpoint('DataForSEO Ranked Keywords','https://api.dataforseo.com/v3/dataforseo_labs/google/ranked_keywords/live',false),competitors=endpoint('DataForSEO Domain Competitors','https://api.dataforseo.com/v3/dataforseo_labs/google/competitors_domain/live',false),ideas=endpoint('DataForSEO Keyword Ideas','https://api.dataforseo.com/v3/dataforseo_labs/google/keyword_ideas/live',skipExpansion),suggestions=endpoint('DataForSEO Keyword Suggestions','https://api.dataforseo.com/v3/dataforseo_labs/google/keyword_suggestions/live',skipExpansion),related=endpoint('DataForSEO Related Keywords','https://api.dataforseo.com/v3/dataforseo_labs/google/related_keywords/live',skipExpansion),serp=endpoint('DataForSEO Live SERPs','https://api.dataforseo.com/v3/serp/google/organic/live/regular',refresh||!plan.needsSerp),endpoints=[ranked,competitors,ideas,suggestions,related,serp];\nconst text=(v,n=500)=>typeof v==='string'?v.trim().slice(0,n):'',word=i=>text(i?.keyword??i?.keyword_data?.keyword,300).toLowerCase(),volume=i=>Number(i?.keyword_info?.search_volume??i?.keyword_data?.keyword_info?.search_volume??0)||0,difficulty=i=>Number(i?.keyword_properties?.keyword_difficulty??i?.keyword_data?.keyword_properties?.keyword_difficulty??0)||0,rank=i=>Number(i?.ranked_serp_element?.serp_item?.rank_absolute??i?.rank_absolute??0)||null;\nconst tokens=new Set([...(input.profile.positiveTokens||[]),...(input.profile.categoryLanes||[]),...(input.profile.seedKeywords||[]),...(input.profile.audiences||[]),...(input.profile.markets||[]),input.companyName,input.domain.split('.')[0]].flatMap(v=>String(v||'').toLowerCase().split(/[^a-z0-9]+/)).filter(v=>v.length>2)),exclusions=(input.profile.excludedMeanings||[]).map(v=>String(v).toLowerCase()).filter(Boolean);\nconst relevance=p=>{const w=p.split(/[^a-z0-9]+/).filter(x=>x.length>2),overlap=w.filter(x=>tokens.has(x)).length;return exclusions.some(x=>p.includes(x))?0:Math.min(1,overlap/Math.max(1,w.length)+(overlap?0.25:0))},intent=i=>String(i?.search_intent_info?.main_intent??i?.keyword_data?.search_intent_info?.main_intent??i?.keyword_properties?.search_intent??'unknown').toLowerCase();\nconst rankedKeywords=ranked.items.map(i=>({keyword:word(i),rank:rank(i),searchVolume:volume(i),difficulty:difficulty(i),url:text(i?.ranked_serp_element?.serp_item?.url,2000),source:'ranked_keywords'})).filter(i=>i.keyword).slice(0,80);\nconst map=new Map();for(const[source,list,sourceConfidence]of[['current_ranking',ranked.items,.95],['keyword_idea',ideas.items,.80],['keyword_suggestion',suggestions.items,.75],['related_keyword',related.items,.60]])for(const i of list){const k=word(i);if(!k)continue;const lexicalFit=relevance(k);if(lexicalFit<.15)continue;const r=Number((lexicalFit*.85+sourceConfidence*.15).toFixed(4)),c={keyword:k,relevance:r,lexicalFit,sourceConfidence,intent:intent(i),searchVolume:volume(i),difficulty:difficulty(i),source},old=map.get(k);if(!old||c.relevance>old.relevance||c.searchVolume>old.searchVolume)map.set(k,c)}\nconst keywordCandidates=[...map.values()].sort((a,b)=>b.relevance-a.relevance||b.searchVolume-a.searchVolume||a.difficulty-b.difficulty).slice(0,300),selectedKeywords=keywordCandidates.slice(0,input.researchDepth==='deep'?40:20);\nconst seoCompetitors=competitors.items.map(i=>({domain:text(i?.domain??i?.target,253),intersections:Number(i?.intersections??i?.keywords_count??0)||0,averagePosition:Number(i?.avg_position??i?.average_position??0)||null,basis:'DataForSEO organic keyword overlap',category:'seo_competitor'})).filter(i=>i.domain&&i.domain!==input.domain).slice(0,50);\nconst serpEvidence=(Array.isArray(serp.tasks)?serp.tasks:[]).flatMap(t=>{const query=text(t?.data?.keyword,300);return(Array.isArray(t?.result)?t.result:[]).flatMap(r=>(Array.isArray(r?.items)?r.items:[]).filter(i=>i?.type==='organic').slice(0,10).map(i=>({query,rank:Number(i?.rank_absolute??0)||null,title:text(i?.title,500),domain:text(i?.domain,253),url:text(i?.url,2000),category:'serp_competitor'})))});\nconst componentStatus={website:input.websiteStatus,offering_profile:input.profileStatus,ranked_keywords:ranked.status,seo_competitors:competitors.status,keyword_ideas:ideas.status,keyword_suggestions:suggestions.status,related_keywords:related.status,live_serps:serp.status},actualCostUsd=Number(endpoints.reduce((s,v)=>s+v.cost,0).toFixed(6)),warnings=[];\nif(input.profileWarning)warnings.push(input.profileWarning);if(budget.expansionSkippedForBudget)warnings.push('Keyword expansion was skipped to stay within the authorised cost ceiling.');if(plan.serpSkippedForBudget)warnings.push('Live SERPs were skipped to stay within the authorised cost ceiling.');for(const v of endpoints)if(v.status==='failed')warnings.push(v.name+' failed or was unavailable; no findings were invented for that component.');if(actualCostUsd>input.costLimitUsd)warnings.push('The provider-reported cost exceeded the intended ceiling; the exact returned cost was retained for review.');\nconst paid=endpoints.filter(v=>['success','no_results'].includes(v.status)),required=refresh?[ranked,competitors]:[ranked,competitors,ideas,suggestions,related,serp],status=paid.length===0?'failed':input.websiteStatus==='success'&&input.profileStatus==='success'&&required.every(v=>['success','no_results'].includes(v.status))&&!warnings.some(w=>w.includes('failed'))?'completed':'partial',capturedAt=new Date().toISOString();\nconst sources=endpoints.map(v=>({provider:'DataForSEO',component:v.name,endpoint:v.url,status:v.status,taskIds:v.taskIds,costUsd:v.cost,locationCode:input.locationCode,languageCode:input.languageCode,capturedAt}));sources.unshift({provider:'website',component:'business profile',url:input.fetchedUrl,status:input.websiteStatus,capturedAt});\nconst snapshot={schemaVersion:1,jobId:input.jobId,status,researchDepth:input.researchDepth,domain:input.domain,locationCode:input.locationCode,languageCode:input.languageCode,device:'desktop',costLimitUsd:input.costLimitUsd,actualCostUsd,componentStatus,offeringProfile:input.profile,rankedKeywords,keywordCandidates,selectedKeywords,seoCompetitors,serpEvidence,sources,warnings:warnings.slice(0,100),evidenceSummary:{provider:'DataForSEO',paidComponentCount:paid.length,rankedKeywordCount:rankedKeywords.length,candidateCount:keywordCandidates.length,selectedKeywordCount:selectedKeywords.length,seoCompetitorCount:seoCompetitors.length,serpResultCount:serpEvidence.length,providerTaskIds:endpoints.flatMap(v=>v.taskIds),selectionMethod:'Deterministic offering, audience and market lexical fit plus exclusions, returned intent, and source confidence; relevance before volume and difficulty.'},capturedAt,expiresAt:new Date(Date.now()+86400000).toISOString()};\nconst memory=status==='failed'?undefined:{schemaVersion:1,jobId:input.jobId,status,domain:input.domain,companyOverview:text(input.profile.offeringSummary,60000),profile:input.profile,competitors:{direct:(input.profile.directCompetitors||[]).slice(0,20),seo:seoCompetitors.slice(0,20),adjacent:(input.profile.adjacentOrganisations||[]).slice(0,20)},seedKeywords:(input.profile.seedKeywords||[]).slice(0,100),keywordCandidates:selectedKeywords,keywordGroups:[{name:'Paid DataForSEO candidates',keywords:selectedKeywords.map(i=>i.keyword),ordering:'relevance, volume, difficulty'}],sources,warnings:warnings.slice(0,40),researchSummary:status==='completed'?'Paid domain and SEO research completed with DataForSEO evidence.':'Paid domain and SEO research saved as partial; review component statuses and warnings.',evidenceQuality:{confidence:status==='completed'?'high':'medium',provider:'DataForSEO',componentStatus,marketSpecific:true},researchedAt:capturedAt};\nreturn{json:{...input,status,snapshot,savePayload:{sessionId:input.sessionId,snapshot,...(memory?{memory}:{})}}};"
+        "jsCode": "const input=$('Shape Offering Profile').first().json;\nconst budget=(()=>{try{return $('Check Expansion Budget').first().json}catch{return input}})(),plan=(()=>{try{return $('Prepare SERP Tasks').first().json}catch{return budget}})();\nconst get=n=>{try{return $(n).first().json}catch{return{}}},unwrap=v=>v?.body??v?.data??v??{};\nconst endpoint=(name,url,skipped)=>{if(skipped)return{name,url,status:'skipped',cost:0,taskIds:[],items:[],tasks:[]};const raw=get(name),b=unwrap(raw),http=Number(raw?.statusCode??0),tasks=Array.isArray(b?.tasks)?b.tasks:[],taskIds=tasks.map(t=>t?.id).filter(id=>typeof id==='string'),cost=Number.isFinite(Number(b?.cost))?Number(b.cost):tasks.reduce((s,t)=>s+(Number(t?.cost)||0),0),failed=(http&&(http<200||http>=300))||Number(b?.status_code||0)!==20000||tasks.some(t=>Number(t?.status_code)!==20000),items=tasks.flatMap(t=>(Array.isArray(t?.result)?t.result:[]).flatMap(r=>Array.isArray(r?.items)?r.items:[])),badTask=tasks.find(t=>Number(t?.status_code)!==20000),detail=[http&&(http<200||http>=300)?'HTTP '+http:'',Number(b?.status_code||0)!==20000?'api '+(b?.status_code??'none')+(b?.status_message?' '+String(b.status_message).slice(0,200):''):'',badTask?'task '+(badTask.status_code??'none')+(badTask.status_message?' '+String(badTask.status_message).slice(0,200):''):'',!tasks.length?'the response carried no tasks':''].filter(Boolean).join('; ');return{name,url,status:failed||!tasks.length?'failed':items.length?'success':'no_results',cost,taskIds,items,tasks,detail}};\n// DataForSEO's live endpoints answer \"You can set only one task at a time\" to every\n// task after the first, and charge for the one that ran. So each seed gets its own\n// call, and they are added back together here. A seed that fails no longer throws\n// away the seeds that worked - the component counts as successful if anything came\n// back, and the ones that failed are still named in the warnings.\nconst multi=(name,url,skipped,sourceTasks)=>{if(skipped)return{name,url,status:'skipped',cost:0,taskIds:[],items:[],tasks:[],detail:''};const slots=Math.max(1,Math.min(3,Array.isArray(sourceTasks)?sourceTasks.length:0)),parts=Array.from({length:slots},(_,s)=>endpoint(s===0?name:name+' '+(s+1),url,false)),bad=parts.filter(v=>v.status==='failed'),items=parts.flatMap(v=>v.items),cost=Number(parts.reduce((t,v)=>t+v.cost,0).toFixed(6));return{name,url,status:items.length?'success':(bad.length?'failed':'no_results'),cost,taskIds:parts.flatMap(v=>v.taskIds),items,tasks:parts.flatMap(v=>v.tasks),detail:bad.map(v=>v.name+': '+(v.detail||'no detail returned')).join(' | ')}};\nconst refresh=input.researchDepth==='refresh',skipExpansion=refresh||budget.expansionSkippedForBudget;\nconst ranked=endpoint('DataForSEO Ranked Keywords','https://api.dataforseo.com/v3/dataforseo_labs/google/ranked_keywords/live',false),competitors=endpoint('DataForSEO Domain Competitors','https://api.dataforseo.com/v3/dataforseo_labs/google/competitors_domain/live',false),ideas=endpoint('DataForSEO Keyword Ideas','https://api.dataforseo.com/v3/dataforseo_labs/google/keyword_ideas/live',skipExpansion),suggestions=multi('DataForSEO Keyword Suggestions','https://api.dataforseo.com/v3/dataforseo_labs/google/keyword_suggestions/live',skipExpansion,input.suggestionTasks),related=multi('DataForSEO Related Keywords','https://api.dataforseo.com/v3/dataforseo_labs/google/related_keywords/live',skipExpansion,input.relatedTasks),serp=multi('DataForSEO Live SERPs','https://api.dataforseo.com/v3/serp/google/organic/live/regular',refresh||!plan.needsSerp,plan.serpTasks),endpoints=[ranked,competitors,ideas,suggestions,related,serp];\nconst text=(v,n=500)=>typeof v==='string'?v.trim().slice(0,n):'',word=i=>text(i?.keyword??i?.keyword_data?.keyword,300).toLowerCase(),volume=i=>Number(i?.keyword_info?.search_volume??i?.keyword_data?.keyword_info?.search_volume??0)||0,difficulty=i=>Number(i?.keyword_properties?.keyword_difficulty??i?.keyword_data?.keyword_properties?.keyword_difficulty??0)||0,rank=i=>Number(i?.ranked_serp_element?.serp_item?.rank_absolute??i?.rank_absolute??0)||null;\nconst tokens=new Set([...(input.profile.positiveTokens||[]),...(input.profile.categoryLanes||[]),...(input.profile.seedKeywords||[]),...(input.profile.audiences||[]),...(input.profile.markets||[]),input.companyName,input.domain.split('.')[0]].flatMap(v=>String(v||'').toLowerCase().split(/[^a-z0-9]+/)).filter(v=>v.length>2)),exclusions=(input.profile.excludedMeanings||[]).map(v=>String(v).toLowerCase()).filter(Boolean);\nconst relevance=p=>{const w=p.split(/[^a-z0-9]+/).filter(x=>x.length>2),overlap=w.filter(x=>tokens.has(x)).length;return exclusions.some(x=>p.includes(x))?0:Math.min(1,overlap/Math.max(1,w.length)+(overlap?0.25:0))},intent=i=>String(i?.search_intent_info?.main_intent??i?.keyword_data?.search_intent_info?.main_intent??i?.keyword_properties?.search_intent??'unknown').toLowerCase();\nconst rankedKeywords=ranked.items.map(i=>({keyword:word(i),rank:rank(i),searchVolume:volume(i),difficulty:difficulty(i),url:text(i?.ranked_serp_element?.serp_item?.url,2000),source:'ranked_keywords'})).filter(i=>i.keyword).slice(0,80);\nconst map=new Map();for(const[source,list,sourceConfidence]of[['current_ranking',ranked.items,.95],['keyword_idea',ideas.items,.80],['keyword_suggestion',suggestions.items,.75],['related_keyword',related.items,.60]])for(const i of list){const k=word(i);if(!k)continue;const lexicalFit=relevance(k);if(lexicalFit<.15)continue;const r=Number((lexicalFit*.85+sourceConfidence*.15).toFixed(4)),c={keyword:k,relevance:r,lexicalFit,sourceConfidence,intent:intent(i),searchVolume:volume(i),difficulty:difficulty(i),source},old=map.get(k);if(!old||c.relevance>old.relevance||c.searchVolume>old.searchVolume)map.set(k,c)}\nconst keywordCandidates=[...map.values()].sort((a,b)=>b.relevance-a.relevance||b.searchVolume-a.searchVolume||a.difficulty-b.difficulty).slice(0,300),selectedKeywords=keywordCandidates.slice(0,input.researchDepth==='deep'?40:20);\nconst seoCompetitors=competitors.items.map(i=>({domain:text(i?.domain??i?.target,253),intersections:Number(i?.intersections??i?.keywords_count??0)||0,averagePosition:Number(i?.avg_position??i?.average_position??0)||null,basis:'DataForSEO organic keyword overlap',category:'seo_competitor'})).filter(i=>i.domain&&i.domain!==input.domain).slice(0,50);\nconst serpEvidence=(Array.isArray(serp.tasks)?serp.tasks:[]).flatMap(t=>{const query=text(t?.data?.keyword,300);return(Array.isArray(t?.result)?t.result:[]).flatMap(r=>(Array.isArray(r?.items)?r.items:[]).filter(i=>i?.type==='organic').slice(0,10).map(i=>({query,rank:Number(i?.rank_absolute??0)||null,title:text(i?.title,500),domain:text(i?.domain,253),url:text(i?.url,2000),category:'serp_competitor'})))});\nconst componentStatus={website:input.websiteStatus,offering_profile:input.profileStatus,ranked_keywords:ranked.status,seo_competitors:competitors.status,keyword_ideas:ideas.status,keyword_suggestions:suggestions.status,related_keywords:related.status,live_serps:serp.status},actualCostUsd=Number(endpoints.reduce((s,v)=>s+v.cost,0).toFixed(6)),warnings=[];\nif(input.profileWarning)warnings.push(input.profileWarning);if(budget.expansionSkippedForBudget)warnings.push('Keyword expansion was skipped to stay within the authorised cost ceiling.');if(plan.serpSkippedForBudget)warnings.push('Live SERPs were skipped to stay within the authorised cost ceiling.');for(const v of endpoints)if(v.status==='failed')warnings.push(v.name+' failed or was unavailable ('+(v.detail||'no detail returned')+'); no findings were invented for that component.');for(const v of endpoints)if(v.status!=='failed'&&v.detail)warnings.push(v.name+' returned findings for some seeds but not all ('+v.detail+').');if(actualCostUsd>input.costLimitUsd)warnings.push('The provider-reported cost exceeded the intended ceiling; the exact returned cost was retained for review.');\nconst paid=endpoints.filter(v=>['success','no_results'].includes(v.status)),required=refresh?[ranked,competitors]:[ranked,competitors,ideas,suggestions,related,serp],status=paid.length===0?'failed':input.websiteStatus==='success'&&input.profileStatus==='success'&&required.every(v=>['success','no_results'].includes(v.status))&&!warnings.some(w=>w.includes('failed'))?'completed':'partial',capturedAt=new Date().toISOString();\nconst sources=endpoints.map(v=>({provider:'DataForSEO',component:v.name,endpoint:v.url,status:v.status,taskIds:v.taskIds,costUsd:v.cost,locationCode:input.locationCode,languageCode:input.languageCode,capturedAt}));sources.unshift({provider:'website',component:'business profile',url:input.fetchedUrl,status:input.websiteStatus,capturedAt});\nconst snapshot={schemaVersion:1,jobId:input.jobId,status,researchDepth:input.researchDepth,domain:input.domain,locationCode:input.locationCode,languageCode:input.languageCode,device:'desktop',costLimitUsd:input.costLimitUsd,actualCostUsd,componentStatus,offeringProfile:input.profile,rankedKeywords,keywordCandidates,selectedKeywords,seoCompetitors,serpEvidence,sources,warnings:warnings.slice(0,100),evidenceSummary:{provider:'DataForSEO',paidComponentCount:paid.length,rankedKeywordCount:rankedKeywords.length,candidateCount:keywordCandidates.length,selectedKeywordCount:selectedKeywords.length,seoCompetitorCount:seoCompetitors.length,serpResultCount:serpEvidence.length,providerTaskIds:endpoints.flatMap(v=>v.taskIds),selectionMethod:'Deterministic offering, audience and market lexical fit plus exclusions, returned intent, and source confidence; relevance before volume and difficulty.'},capturedAt,expiresAt:new Date(Date.now()+86400000).toISOString()};\nconst memory=status==='failed'?undefined:{schemaVersion:1,jobId:input.jobId,status,domain:input.domain,companyOverview:text(input.profile.offeringSummary,60000),profile:input.profile,competitors:{direct:(input.profile.directCompetitors||[]).slice(0,20),seo:seoCompetitors.slice(0,20),adjacent:(input.profile.adjacentOrganisations||[]).slice(0,20)},seedKeywords:(input.profile.seedKeywords||[]).slice(0,100),keywordCandidates:selectedKeywords,keywordGroups:[{name:'Paid DataForSEO candidates',keywords:selectedKeywords.map(i=>i.keyword),ordering:'relevance, volume, difficulty'}],sources,warnings:warnings.slice(0,40),researchSummary:status==='completed'?'Paid domain and SEO research completed with DataForSEO evidence.':'Paid domain and SEO research saved as partial; review component statuses and warnings.',evidenceQuality:{confidence:status==='completed'?'high':'medium',provider:'DataForSEO',componentStatus,marketSpecific:true},researchedAt:capturedAt};\nreturn{json:{...input,status,snapshot,savePayload:{sessionId:input.sessionId,snapshot,...(memory?{memory}:{})}}};"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -791,6 +791,222 @@
       ],
       "id": "a1100000-0000-4000-8000-000000000035",
       "name": "Return Tool Result"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.dataforseo.com/v3/dataforseo_labs/google/keyword_suggestions/live",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify(($('Shape Offering Profile').first().json.suggestionTasks || []).slice(1, 2)) }}",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        3780,
+        -200
+      ],
+      "id": "a1100000-0000-4000-8000-0000000000a1",
+      "name": "DataForSEO Keyword Suggestions 2",
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "phase11DataForSeo",
+          "name": "DataForSEO API"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.dataforseo.com/v3/dataforseo_labs/google/keyword_suggestions/live",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify(($('Shape Offering Profile').first().json.suggestionTasks || []).slice(2, 3)) }}",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        4000,
+        -200
+      ],
+      "id": "a1100000-0000-4000-8000-0000000000a2",
+      "name": "DataForSEO Keyword Suggestions 3",
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "phase11DataForSeo",
+          "name": "DataForSEO API"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.dataforseo.com/v3/dataforseo_labs/google/related_keywords/live",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify(($('Shape Offering Profile').first().json.relatedTasks || []).slice(1, 2)) }}",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        4020,
+        -200
+      ],
+      "id": "a1100000-0000-4000-8000-0000000000a3",
+      "name": "DataForSEO Related Keywords 2",
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "phase11DataForSeo",
+          "name": "DataForSEO API"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.dataforseo.com/v3/dataforseo_labs/google/related_keywords/live",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify(($('Shape Offering Profile').first().json.relatedTasks || []).slice(2, 3)) }}",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        4240,
+        -200
+      ],
+      "id": "a1100000-0000-4000-8000-0000000000a4",
+      "name": "DataForSEO Related Keywords 3",
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "phase11DataForSeo",
+          "name": "DataForSEO API"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.dataforseo.com/v3/serp/google/organic/live/regular",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify(($('Prepare SERP Tasks').first().json.serpTasks || []).slice(1, 2)) }}",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        4740,
+        -200
+      ],
+      "id": "a1100000-0000-4000-8000-0000000000a5",
+      "name": "DataForSEO Live SERPs 2",
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "phase11DataForSeo",
+          "name": "DataForSEO API"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.dataforseo.com/v3/serp/google/organic/live/regular",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify(($('Prepare SERP Tasks').first().json.serpTasks || []).slice(2, 3)) }}",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        4960,
+        -200
+      ],
+      "id": "a1100000-0000-4000-8000-0000000000a6",
+      "name": "DataForSEO Live SERPs 3",
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "phase11DataForSeo",
+          "name": "DataForSEO API"
+        }
+      },
+      "onError": "continueRegularOutput"
     }
   ],
   "pinData": {},
@@ -1025,7 +1241,7 @@
       "main": [
         [
           {
-            "node": "DataForSEO Related Keywords",
+            "node": "DataForSEO Keyword Suggestions 2",
             "type": "main",
             "index": 0
           }
@@ -1036,7 +1252,7 @@
       "main": [
         [
           {
-            "node": "Prepare SERP Tasks",
+            "node": "DataForSEO Related Keywords 2",
             "type": "main",
             "index": 0
           }
@@ -1076,7 +1292,7 @@
       "main": [
         [
           {
-            "node": "Shape Paid Research Payload",
+            "node": "DataForSEO Live SERPs 2",
             "type": "main",
             "index": 0
           }
@@ -1137,6 +1353,72 @@
           }
         ]
       ]
+    },
+    "DataForSEO Keyword Suggestions 2": {
+      "main": [
+        [
+          {
+            "node": "DataForSEO Keyword Suggestions 3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DataForSEO Keyword Suggestions 3": {
+      "main": [
+        [
+          {
+            "node": "DataForSEO Related Keywords",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DataForSEO Related Keywords 2": {
+      "main": [
+        [
+          {
+            "node": "DataForSEO Related Keywords 3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DataForSEO Related Keywords 3": {
+      "main": [
+        [
+          {
+            "node": "Prepare SERP Tasks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DataForSEO Live SERPs 2": {
+      "main": [
+        [
+          {
+            "node": "DataForSEO Live SERPs 3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DataForSEO Live SERPs 3": {
+      "main": [
+        [
+          {
+            "node": "Shape Paid Research Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "active": false,
@@ -1154,7 +1436,7 @@
     "phase": 11,
     "testedWithN8n": "2.30.5",
     "toolRisk": "paid_external_read",
-    "authorization": "direct-current-user-request-with-default-standard-paid-run-or-explicit-depth",
+    "authorization": "explicit-current-user-paid-dataforseo-request-or-named-paid-mode",
     "externalWrite": "none",
     "localWrite": "conversation-bound-paid-snapshot-and-successful-business-memory",
     "externalRead": "dns-safe-same-domain-home-page-gateway-anthropic-and-fixed-dataforseo-endpoints",

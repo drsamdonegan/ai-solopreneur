@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "id": "meeting-to-actions",
+  "agent": "project-manager",
+  "name": "Meeting to Actions",
+  "description": "Turns meetings, documents, and project ideas into grounded decisions, safe tasks, practical plans, and factual status updates.",
+  "icon": "checklist",
+  "installable": false,
+  "requires": [],
+  "modules": [
+    { "id": "project-assistant", "name": "Project planning", "role": "core", "source": "base" },
+    { "id": "meeting-analysis", "name": "Meeting analysis", "role": "core", "source": "base" },
+    { "id": "task-capture", "name": "Safe task capture", "role": "core", "source": "base" },
+    { "id": "weekly-status", "name": "Weekly status", "role": "core", "source": "base" }
+  ]
+}

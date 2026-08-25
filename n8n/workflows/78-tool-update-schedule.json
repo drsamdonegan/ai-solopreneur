@@ -1,0 +1,567 @@
+{
+  "name": "78 - TOOL - update_schedule",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Pause, resume, or delete one schedule\n\nThree things only. Changing what a schedule does, or when, is\n`create_schedule` again with the same name \u2014 it replaces the row rather\nthan adding a second one.\n\nPause keeps the row and stops it firing. Resume works the next run out\nfrom now, so a schedule left off for a fortnight does not go off the\nmoment it comes back. Delete cannot be undone.",
+        "height": 340,
+        "width": 480,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -660,
+        -300
+      ],
+      "id": "95830000-0000-4000-8000-000000000001",
+      "name": "Change tool explanation"
+    },
+    {
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "sessionId",
+              "type": "string"
+            },
+            {
+              "name": "requestId",
+              "type": "string"
+            },
+            {
+              "name": "scheduleId",
+              "type": "string"
+            },
+            {
+              "name": "name",
+              "type": "string"
+            },
+            {
+              "name": "action",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -520,
+        60
+      ],
+      "id": "95830000-0000-4000-8000-000000000010",
+      "name": "Tool Input"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "scheduled_runs",
+          "mode": "name"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": []
+        },
+        "returnAll": false,
+        "limit": 100,
+        "orderBy": false
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -280,
+        60
+      ],
+      "id": "95830000-0000-4000-8000-000000000011",
+      "name": "Read Schedules",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// --- working out when a schedule next comes round --------------------------\n// The clock inside this agent is UTC unless somebody set GENERIC_TIMEZONE, and\n// in the cloud it usually is. So \"8am\" has to be pinned to a named zone or a\n// Melbourne morning fires at six in the evening. Every schedule carries its own\n// timezone, and everything below converts between that zone's wall clock and a\n// real instant.\nconst DAY_NAMES = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];\n\nconst zoneIsReal = (zone) => {\n  try {\n    new Intl.DateTimeFormat('en-US', { timeZone: zone });\n    return true;\n  } catch {\n    return false;\n  }\n};\n\nconst zoneParts = (instant, zone) => {\n  const read = {};\n  for (const part of new Intl.DateTimeFormat('en-US', {\n    timeZone: zone, hour12: false,\n    year: 'numeric', month: '2-digit', day: '2-digit',\n    hour: '2-digit', minute: '2-digit', second: '2-digit',\n  }).formatToParts(instant)) {\n    read[part.type] = part.value;\n  }\n  return {\n    year: Number(read.year), month: Number(read.month), day: Number(read.day),\n    // Some environments render midnight as hour 24 rather than 0.\n    hour: Number(read.hour) % 24, minute: Number(read.minute), second: Number(read.second),\n  };\n};\n\n// How far that zone sits from UTC at that moment, daylight saving included.\nconst zoneOffsetMinutes = (instant, zone) => {\n  const at = zoneParts(instant, zone);\n  return (Date.UTC(at.year, at.month - 1, at.day, at.hour, at.minute, at.second) - instant.getTime()) / 60000;\n};\n\n// A wall-clock time in that zone, back to a real instant. The offset depends on\n// the answer, so it is applied twice: once against a guess, then again against\n// the offset that guess actually landed in. That second pass is what keeps the\n// hour right on the two days a year the clocks move.\nconst instantAt = (year, month, day, hour, minute, zone) => {\n  const wall = Date.UTC(year, month - 1, day, hour, minute, 0);\n  const guess = new Date(wall - zoneOffsetMinutes(new Date(wall), zone) * 60000);\n  return new Date(wall - zoneOffsetMinutes(guess, zone) * 60000);\n};\n\n// The first moment strictly after `after` that matches the rule, or null.\nconst nextRunAfter = (rule, after) => {\n  const zone = rule.timezone;\n  if (!zoneIsReal(zone)) return null;\n  const clock = String(rule.timeOfDay ?? '').split(':').map(Number);\n  const hour = clock[0];\n  const minute = clock[1];\n  if (!Number.isInteger(hour) || !Number.isInteger(minute)) return null;\n\n  if (rule.frequency === 'once') {\n    if (rule.onDate) {\n      const parts = String(rule.onDate).split('-').map(Number);\n      const once = instantAt(parts[0], parts[1], parts[2], hour, minute, zone);\n      return once.getTime() > after.getTime() ? once : null;\n    }\n  }\n\n  const from = zoneParts(after, zone);\n  for (let step = 0; step <= 400; step += 1) {\n    // Adding to the day number rolls months and years over on its own.\n    const day = new Date(Date.UTC(from.year, from.month - 1, from.day + step));\n    const year = day.getUTCFullYear();\n    const month = day.getUTCMonth() + 1;\n    const date = day.getUTCDate();\n    const weekday = DAY_NAMES[day.getUTCDay()];\n    if (rule.frequency === 'weekdays' && (weekday === 'saturday' || weekday === 'sunday')) continue;\n    if (rule.frequency === 'weekly' && weekday !== rule.dayOfWeek) continue;\n    if (rule.frequency === 'monthly' && date !== Number(rule.dayOfMonth)) continue;\n    const candidate = instantAt(year, month, date, hour, minute, zone);\n    if (candidate.getTime() > after.getTime()) return candidate;\n  }\n  return null;\n};\n\n// What the agent reads back to the owner, in their own timezone.\nconst inWords = (instant, zone) => {\n  if (!instant || !zoneIsReal(zone)) return '';\n  return new Intl.DateTimeFormat('en-GB', {\n    timeZone: zone, weekday: 'short', day: 'numeric', month: 'short',\n    year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true,\n  }).format(instant) + ' (' + zone + ')';\n};\n\nconst clockInWords = (timeOfDay) => {\n  const clock = String(timeOfDay ?? '').split(':').map(Number);\n  const hour = clock[0];\n  const minute = clock[1];\n  if (!Number.isInteger(hour) || !Number.isInteger(minute)) return String(timeOfDay ?? '');\n  const suffix = hour < 12 ? 'am' : 'pm';\n  const shown = hour % 12 === 0 ? 12 : hour % 12;\n  return shown + ':' + String(minute).padStart(2, '0') + ' ' + suffix;\n};\n\nconst patternInWords = (rule) => {\n  const at = 'at ' + clockInWords(rule.timeOfDay);\n  if (rule.frequency === 'daily') return 'every day ' + at;\n  if (rule.frequency === 'weekdays') return 'every weekday ' + at;\n  if (rule.frequency === 'weekly') {\n    const day = String(rule.dayOfWeek ?? '');\n    return 'every ' + day.charAt(0).toUpperCase() + day.slice(1) + ' ' + at;\n  }\n  if (rule.frequency === 'monthly') return 'on day ' + rule.dayOfMonth + ' of each month ' + at;\n  return 'once, ' + at;\n};\n\n\nconst input = $('Tool Input').first().json;\nconst rows = $input.all()\n  .map((item) => item.json)\n  .filter((row) => row && typeof row.scheduleId === 'string' && row.scheduleId !== '');\n\nconst text = (value, limit) => {\n  const raw = typeof value === 'string' ? value.trim() : '';\n  return raw.slice(0, limit ?? 200);\n};\nconst normalise = (value) => String(value).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();\n\nconst sessionId = text(input.sessionId, 60);\nconst requestId = text(input.requestId, 60);\nconst proposedInput = {\n  sessionId,\n  requestId,\n  scheduleId: text(input.scheduleId, 40),\n  name: text(input.name, 80),\n  action: text(input.action, 20),\n};\nconst fail = (code, message) => ({ json: {\n  valid: false, sessionId, requestId, proposedInput,\n  response: { ok: false, error: { code, message } },\n} });\n\nconst uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;\nif (!uuidPattern.test(sessionId) || !uuidPattern.test(requestId)) {\n  return [fail('INVALID_SESSION', 'Changing a schedule needs a valid conversation and request ID.')];\n}\n\nconst ACTIONS = {\n  pause: 'pause', paused: 'pause', off: 'pause', stop: 'pause', disable: 'pause',\n  hold: 'pause', suspend: 'pause', snooze: 'pause',\n  resume: 'resume', on: 'resume', start: 'resume', enable: 'resume',\n  unpause: 'resume', restart: 'resume',\n  delete: 'delete', remove: 'delete', cancel: 'delete', drop: 'delete', 'delete-it': 'delete',\n};\nconst action = ACTIONS[proposedInput.action.toLowerCase().replace(/[\\s_]+/g, '-')]\n  ?? ACTIONS[proposedInput.action.toLowerCase().replace(/[\\s_-]+/g, '')];\nif (!action) {\n  return [fail('ACTION_REQUIRED', 'Say what to do with the schedule: pause to stop it running for now, resume to start it again, or delete to remove it for good. Ask the user which they mean rather than choosing for them, because delete cannot be undone.')];\n}\n\nif (rows.length === 0) {\n  return [fail('NOTHING_SCHEDULED', 'There are no schedules saved, so there is nothing to change.')];\n}\n\nlet row = null;\nif (proposedInput.scheduleId !== '') {\n  row = rows.find((entry) => entry.scheduleId === proposedInput.scheduleId) ?? null;\n}\nif (!row && proposedInput.name !== '') {\n  const asked = normalise(proposedInput.name);\n  row = rows.find((entry) => normalise(entry.name ?? '') === asked)\n    ?? rows.find((entry) => normalise(entry.name ?? '').includes(asked))\n    ?? null;\n}\nif (!row) {\n  const known = rows.map((entry) => entry.scheduleId + ' (' + String(entry.name ?? '') + ')').join(', ');\n  return [fail('SCHEDULE_NOT_FOUND', 'No saved schedule matches that. These exist: ' + known + '. Read them back to the user and ask which one they mean, then call this again with that scheduleId.')];\n}\n\nconst rule = {\n  frequency: row.frequency, timeOfDay: row.timeOfDay, dayOfWeek: row.dayOfWeek,\n  dayOfMonth: row.dayOfMonth, onDate: row.onDate, timezone: row.timezone,\n};\nconst runsWhen = patternInWords(rule);\n\n// Resuming works out the next run from now, so a schedule paused for a\n// fortnight does not fire the moment it is switched back on.\nlet nextRunAt = '';\nlet nextRun = '';\nif (action === 'resume') {\n  const next = nextRunAfter(rule, new Date());\n  if (next === null) {\n    return [fail('CANNOT_RESUME', 'This was a one-off and its time has already gone by, so there is nothing left to resume. Offer to create a new schedule instead.')];\n  }\n  nextRunAt = next.toISOString();\n  nextRun = inWords(next, row.timezone);\n}\n\nreturn [{ json: {\n  valid: true,\n  sessionId,\n  requestId,\n  proposedInput,\n  deleting: action === 'delete',\n  action,\n  scheduleId: row.scheduleId,\n  name: String(row.name ?? ''),\n  agentId: String(row.agentId ?? ''),\n  runsWhen,\n  timezone: String(row.timezone ?? ''),\n  enabled: action === 'resume' ? 'yes' : 'no',\n  nextRunAt,\n  nextRun,\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -40,
+        60
+      ],
+      "id": "95830000-0000-4000-8000-000000000012",
+      "name": "Validate Change"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "95830000-0000-4000-8000-000000000013-c1",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        200,
+        60
+      ],
+      "id": "95830000-0000-4000-8000-000000000013",
+      "name": "Change Is Valid?"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "95830000-0000-4000-8000-000000000014-c1",
+              "leftValue": "={{ $json.deleting }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        440,
+        -60
+      ],
+      "id": "95830000-0000-4000-8000-000000000014",
+      "name": "Deleting It?"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "deleteRows",
+        "dataTableId": {
+          "__rl": true,
+          "value": "scheduled_runs",
+          "mode": "name"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "scheduleId",
+              "condition": "eq",
+              "keyValue": "={{ $json.scheduleId }}"
+            }
+          ]
+        },
+        "options": {
+          "dryRun": false
+        }
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        680,
+        -180
+      ],
+      "id": "95830000-0000-4000-8000-000000000015",
+      "name": "Delete Schedule",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "value": "scheduled_runs",
+          "mode": "name"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "scheduleId",
+              "condition": "eq",
+              "keyValue": "={{ $json.scheduleId }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "enabled": "={{ $json.enabled }}",
+            "nextRunAt": "={{ $json.nextRunAt }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "enabled",
+              "displayName": "enabled",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "nextRunAt",
+              "displayName": "nextRunAt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "dryRun": false
+        }
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        680,
+        40
+      ],
+      "id": "95830000-0000-4000-8000-000000000016",
+      "name": "Update Schedule",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const plan = $('Validate Change').first().json;\nconst changed = $json.id !== undefined || $json.scheduleId === plan.scheduleId;\n\nif (!changed) {\n  return [{ json: { ...plan, response: { ok: false, error: {\n    code: 'CHANGE_FAILED',\n    message: 'The schedule could not be changed. Nothing was altered. Say so plainly rather than reporting it as done.',\n  } } } }];\n}\n\nconst done = {\n  pause: 'Paused. It stays saved and will not run until the user asks for it back.',\n  resume: 'Switched back on.',\n  delete: 'Deleted. It is gone for good; a new one would have to be created from scratch.',\n}[plan.action];\n\nreturn [{ json: { ...plan, response: {\n  ok: true,\n  action: plan.action,\n  schedule: {\n    scheduleId: plan.scheduleId,\n    name: plan.name,\n    agent: plan.agentId,\n    runsWhen: plan.runsWhen,\n    timezone: plan.timezone,\n    status: plan.action === 'delete' ? 'deleted' : (plan.action === 'resume' ? 'on' : 'paused'),\n    nextRun: plan.nextRun,\n  },\n  message: done + ' Name the schedule back to the user so they know which one changed'\n    + (plan.action === 'resume' ? ', and tell them when it next runs.' : '.'),\n} } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        920,
+        -60
+      ],
+      "id": "95830000-0000-4000-8000-000000000017",
+      "name": "Shape Change Result"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const input = $('Validate Change').first().json;\nconst response = $json.response ?? { ok: false, error: { code: 'TOOL_FAILED', message: 'The tool did not return a result.' } };\nreturn { json: {\n  occurredAt: new Date().toISOString(),\n  sessionId: input.sessionId,\n  requestId: input.requestId,\n  toolName: 'update_schedule',\n  proposedInput: JSON.stringify(input.proposedInput ?? {}),\n  result: JSON.stringify(response),\n  error: response.ok === false ? String(response.error?.message ?? 'Tool failed') : '',\n  response\n} };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1160,
+        60
+      ],
+      "id": "95830000-0000-4000-8000-000000000090",
+      "name": "Prepare Audit"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "value": "tool_audit",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "occurredAt": "={{ $json.occurredAt }}",
+            "sessionId": "={{ $json.sessionId }}",
+            "requestId": "={{ $json.requestId }}",
+            "toolName": "={{ $json.toolName }}",
+            "proposedInput": "={{ $json.proposedInput }}",
+            "result": "={{ $json.result }}",
+            "error": "={{ $json.error }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "occurredAt",
+              "displayName": "occurredAt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "sessionId",
+              "displayName": "sessionId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "requestId",
+              "displayName": "requestId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "toolName",
+              "displayName": "toolName",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "proposedInput",
+              "displayName": "proposedInput",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "result",
+              "displayName": "result",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "error",
+              "displayName": "error",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1400,
+        60
+      ],
+      "id": "95830000-0000-4000-8000-000000000091",
+      "name": "Write Tool Audit",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const prepared = $('Prepare Audit').first().json;\nconst response = { ...prepared.response };\nif (!Number.isInteger($json.id)) {\n  response.auditWarning = 'The tool result could not be written to the local audit table.';\n}\nreturn { json: response };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1640,
+        60
+      ],
+      "id": "95830000-0000-4000-8000-000000000092",
+      "name": "Return Tool Result"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Tool Input": {
+      "main": [
+        [
+          {
+            "node": "Read Schedules",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Schedules": {
+      "main": [
+        [
+          {
+            "node": "Validate Change",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Change": {
+      "main": [
+        [
+          {
+            "node": "Change Is Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Change Is Valid?": {
+      "main": [
+        [
+          {
+            "node": "Deleting It?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Deleting It?": {
+      "main": [
+        [
+          {
+            "node": "Delete Schedule",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update Schedule",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete Schedule": {
+      "main": [
+        [
+          {
+            "node": "Shape Change Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Schedule": {
+      "main": [
+        [
+          {
+            "node": "Shape Change Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shape Change Result": {
+      "main": [
+        [
+          {
+            "node": "Prepare Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Audit": {
+      "main": [
+        [
+          {
+            "node": "Write Tool Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Tool Audit": {
+      "main": [
+        [
+          {
+            "node": "Return Tool Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "executionTimeout": 30
+  },
+  "versionId": "95830000-0000-4000-8000-0000000000100",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "phase": 18,
+    "testedWithN8n": "2.30.5",
+    "toolRisk": "bounded_local_write",
+    "authorization": "explicit-current-user-request",
+    "externalWrite": "none",
+    "localWrite": "one-scheduled-run-row"
+  },
+  "id": "phase18UpdateSchedule",
+  "tags": [
+    {
+      "id": "tagAgentCanDo",
+      "name": "What your agent can do"
+    }
+  ]
+}

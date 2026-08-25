@@ -46,7 +46,19 @@
         "52-tool-get-business-memory.json",
         "53-tool-start-paid-domain-research.json",
         "54-tool-complete-paid-domain-research.json",
-        "55-tool-get-paid-domain-research.json"
+        "55-tool-get-paid-domain-research.json",
+        "56-tool-start-seo-article.json",
+        "57-internal-write-seo-article.json",
+        "58-tool-get-seo-article.json"
+      ]
+    },
+    {
+      "id": "skill-finding-customers",
+      "name": "4. Finding customers",
+      "description": "Matching one named person to a likely public professional profile after the user explicitly requests a paid lookup.",
+      "workflows": [
+        "61-tool-lookup-linkedin-profile.json",
+        "59-tool-search-linkedin-prospects.json"
       ]
     },
     {
@@ -57,7 +69,8 @@
         "10-setup-local-task-data.json",
         "11-setup-sync-enabled-skills.json",
         "90-debug-agent-health.json",
-        "14-setup-funding-data.json"
+        "14-setup-funding-data.json",
+        "16-setup-schedule-data.json"
       ]
     },
     {
@@ -75,9 +88,23 @@
       "workflows": [
         "63-tool-get-funding-report.json",
         "64-tool-set-funding-profile.json",
+        "65-internal-funding-progress.json",
         "68-tool-start-funding-scan.json",
         "71-run-funding-scan.json",
-        "72-run-funding-beat.json"
+        "72-run-funding-beat.json",
+        "76-trigger-daily-funding-scan.json"
+      ]
+    },
+    {
+      "id": "skill-scheduling",
+      "name": "7. Work that runs on a schedule",
+      "description": "Things your agent does on its own at a set time: saving a schedule, reading back what the schedules have turned up, changing one, and the clock that sets them off.",
+      "workflows": [
+        "76-tool-create-schedule.json",
+        "77-tool-list-schedules.json",
+        "78-tool-update-schedule.json",
+        "79-trigger-scheduled-runs.json",
+        "80-internal-schedule-results.json"
       ]
     }
   ]

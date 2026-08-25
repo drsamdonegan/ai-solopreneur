@@ -9,10 +9,9 @@ The starter agent includes:
 | Skill | What it changes |
 | --- | --- |
 | `project-assistant` | How the agent turns uncertainty into practical next steps |
+| `meeting-analysis` | How the agent grounds meeting summaries and action items |
 | `task-capture` | How the agent prepares a confirmation-gated task proposal |
 | `weekly-status` | How the agent summarises factual task progress |
-| `domain-research` | How the free website-only business research path behaves |
-| `paid-domain-research` | How the default paid-first search and simple SEO advice behave |
 
 ## Change one skill
 
@@ -39,6 +38,7 @@ Open `skills/enabled.txt`. It contains one skill ID per line:
 
 ```text
 project-assistant
+meeting-analysis
 task-capture
 weekly-status
 ```
@@ -53,9 +53,14 @@ Run the skill-sync helper after every change. Only IDs in this file are compiled
 
 At least one skill must remain enabled.
 
-## Optional extra skills
+## Optional skill packages
 
-Six further skills ship with the project, all switched **off**. They live in [`optional-skills/`](../optional-skills/), one folder each, and none of them exists in your agent until you add it.
+The agent card deliberately groups the internal modules into one Project
+Manager package, two Sales packages, two Marketing packages, one Investment
+package, and no Bookkeeping package. A full repository checkout keeps nine
+optional modules in [`optional-skills/`](../optional-skills/). A generated
+learner base omits that large catalogue but retains the small `skill-packs/`
+contracts, so it can fetch only the requested modules from GitHub.
 
 Open [`optional-skills/README.md`](../optional-skills/README.md) for the full list, what each one costs, and what it needs.
 
@@ -64,22 +69,27 @@ Open [`optional-skills/README.md`](../optional-skills/README.md) for the full li
 Ask Claude Code, in plain English:
 
 ```text
-Add the funding-radar optional skill to my agent.
+Add the funding-and-investor-updates package to my agent.
 ```
 
 Or run it yourself from the top of your project folder:
 
 ```bash
-npm run add-skill -- funding-radar
+npm run add-skill -- funding-and-investor-updates
 ```
 
 Then sync the skills and restart the services, exactly as you would after editing a skill by hand.
 
-The installer copies the skill's files in, wires up any workflows it needs, and adds its line to `skills/enabled.txt` for you. It never overwrites anything you have already changed, and running it twice does nothing the second time.
+The installer resolves package dependencies, copies each core module, wires up
+its workflows, and adds the module IDs to `skills/enabled.txt`. It preflights
+the cumulative shared-file changes, never overwrites customised files, and is
+idempotent. Add optional extensions such as Monthly Update with
+`--with-extensions`. Direct legacy module IDs remain supported.
 
-### Two rules make these work well
+### One rule makes these work well
 
-- **Add one at a time.** Every enabled skill sits in the prompt for every message, so three competing reply formats make the agent answer an ordinary project question as though it were a sales enquiry.
+- **Add one package at a time.** Every enabled module is loaded only for its
+  owning agent; the package boundary keeps related modules and formats together.
 
 Remove a skill's line from `skills/enabled.txt` to switch it off again without deleting anything.
 

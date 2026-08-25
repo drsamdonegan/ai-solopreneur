@@ -140,7 +140,8 @@ The terminal window will:
 - install the exact document-reader packages with npm;
 - build the chat app;
 - start n8n, the document reader, and the chat in the background;
-- import twenty reviewed workflows;
+- import the eleven reviewed base workflows plus any optional workflows already
+  installed in this copy;
 - create three sample project tasks;
 - load the enabled Markdown skills.
 

@@ -1,13 +1,13 @@
 ---
 name: domain-research
-description: Provide the free website-only fallback for domain research and recall saved business memory. Use when paid DataForSEO research is unavailable, returns no useful SEO evidence, or the user explicitly asks for a free or website-only scan; normal domain-research requests should use paid-domain-research first.
+description: Provide the default no-cost public business-domain research path and recall saved business memory. Use for ordinary domain-research requests; paid DataForSEO research is an optional upgrade that requires an explicit paid request.
 ---
 
 # Domain Research Memory
 
-Use this skill as the no-cost fallback for a public business-domain scan, or to recall previously saved business research.
+Use this skill as the default no-cost path for a public business-domain scan, or to recall previously saved business research.
 
-Normal domain-research requests use `paid-domain-research` first. Use this website-only path when the paid tool is unavailable, a paid run fails without useful SEO evidence, or the user explicitly asks for free research. Do not retry a failed paid call before falling back.
+Use this website-only path for a normal request such as “Research example.com”. `paid-domain-research` is an optional installed upgrade. Use it only when the current user explicitly asks for paid DataForSEO evidence or chooses a named paid mode. Never assume that tool is installed. If an explicitly requested paid run fails without useful evidence, use this free tool once and do not retry the paid call.
 
 ## Before starting research
 

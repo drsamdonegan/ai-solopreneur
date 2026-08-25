@@ -93,6 +93,8 @@ The report is saved on your own agent, and your agent reads it back when you ask
 
 ## Running it on a schedule
 
-Not yet. This skill searches when you ask it to.
+The optional workflow **76 - TRIGGER - Daily Funding Scan** runs at 8am in n8n's configured timezone. It ships switched off.
 
-The searching itself is a separate workflow (`71 - RUN - Funding Scan`), and anything can start it — so when the scheduler skill arrives, it will be able to run this on a clock without changing anything here.
+Run a search in the chat first, check its result and recorded cost, then enable workflow 76 only if you are comfortable running that spend every day. Chat and scheduled starts share the guarded **71 - RUN - Funding Scan** workflow, so an in-flight run blocks another for 20 minutes.
+
+If an older `funding_runs` table does not have a text column named `runId`, add it before enabling the trigger. The setup workflow does not alter an existing table.
