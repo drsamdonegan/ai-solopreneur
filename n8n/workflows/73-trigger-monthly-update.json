@@ -1,0 +1,185 @@
+{
+  "name": "73 - TRIGGER - Monthly Update",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Read this first\n\nThis ships **switched off**. Turn it on with the toggle at the top right\nonly once you have seen an update you are happy with.\n\nOn the 1st of each month at 9am it reads the month that just ended and\nsaves an update, the same as asking for one in the chat. Ask your agent\nfor it whenever you like; it reads what this already produced.",
+        "height": 280,
+        "width": 520,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -900,
+        -300
+      ],
+      "id": "95640000-0000-4000-8000-000000000001",
+      "name": "Read this first"
+    },
+    {
+      "parameters": {
+        "content": "## Cost note\n\nOne run is roughly $1.50 to $2.50 of Anthropic usage, so leaving this on\ncosts about that much a month. Every run records its own token counts in\nthe `update_runs` table, so you can read your real number rather than\ntrusting the estimate.",
+        "height": 220,
+        "width": 520,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -900,
+        20
+      ],
+      "id": "95640000-0000-4000-8000-000000000002",
+      "name": "Cost note"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "months",
+              "monthsInterval": 1,
+              "triggerAtDayOfMonth": 1,
+              "triggerAtHour": 9,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -340,
+        -80
+      ],
+      "id": "95640000-0000-4000-8000-000000000010",
+      "name": "First Of The Month At 9"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const now = new Date();\nconst previous = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));\nconst pad = (value) => String(value).padStart(2, '0');\nconst monthKey = `${previous.getUTCFullYear()}-${pad(previous.getUTCMonth() + 1)}`;\n\nreturn [{ json: {\n  runId: `mu-${monthKey}-scheduled-${Date.now().toString(36)}`,\n  month: monthKey,\n  audience: '',\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -100,
+        -80
+      ],
+      "id": "95640000-0000-4000-8000-000000000011",
+      "name": "Build Scheduled Run"
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "phase16RunMonthlyUpdate",
+          "mode": "list",
+          "cachedResultName": "74 - RUN - Monthly Update"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "runId": "={{ $json.runId }}",
+            "month": "={{ $json.month }}",
+            "audience": "={{ $json.audience }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "runId",
+              "displayName": "runId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "month",
+              "displayName": "month",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "audience",
+              "displayName": "audience",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        140,
+        -80
+      ],
+      "id": "95640000-0000-4000-8000-000000000012",
+      "name": "Run Monthly Update",
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "First Of The Month At 9": {
+      "main": [
+        [
+          {
+            "node": "Build Scheduled Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Scheduled Run": {
+      "main": [
+        [
+          {
+            "node": "Run Monthly Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "executionTimeout": 3600
+  },
+  "versionId": "95640000-0000-4000-8000-0000000000100",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "phase": 16,
+    "testedWithN8n": "2.30.5",
+    "toolRisk": "bounded_external_read_and_local_write",
+    "authorization": "scheduled-run-only",
+    "externalWrite": "none",
+    "externalRead": "gmail-readonly-and-anthropic-api"
+  },
+  "id": "phase16MonthlyUpdateTrigger",
+  "tags": []
+}

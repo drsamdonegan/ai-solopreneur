@@ -1,0 +1,588 @@
+{
+  "name": "100 - TOOL - check_xero_connection",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Is Xero connected?\n\nAsks Xero which organisations this connection can see. It reads nothing\nbut the organisation name, calls no model, and writes nothing.\n\nConnecting Xero is a one-off job in n8n's own credential screen, in\nanother window. The agent cannot do it, and cannot make Xero's sign-in\nwindow appear. It can only say what it found and read out the steps.\n\nThe second probe checks the optional `Xero (read-write)` credential,\nwhich is only needed to prepare transactions for the user to click OK on.",
+        "height": 380,
+        "width": 460,
+        "color": 6
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -900,
+        -320
+      ],
+      "id": "97900100-0000-4000-8000-000000000001",
+      "name": "Sticky 1"
+    },
+    {
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "sessionId",
+              "type": "string"
+            },
+            {
+              "name": "requestId",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -880,
+        0
+      ],
+      "id": "97900100-0000-4000-8000-000000000010",
+      "name": "Tool Input"
+    },
+    {
+      "parameters": {
+        "jsCode": "const sessionId = typeof $json.sessionId === 'string' ? $json.sessionId.trim() : '';\nconst requestId = typeof $json.requestId === 'string' ? $json.requestId.trim() : '';\nconst uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;\nconst error = (uuidPattern.test(sessionId) && uuidPattern.test(requestId))\n  ? null\n  : { code: 'INVALID_SESSION', message: 'Checking the Xero connection needs a valid conversation and request ID.' };\nreturn [{ json: {\n  valid: error === null, sessionId, requestId,\n  proposedInput: { sessionId, requestId },\n  ...(error ? { response: { ok: false, error } } : {}),\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -660,
+        0
+      ],
+      "id": "97900100-0000-4000-8000-000000000011",
+      "name": "Validate Connection Input"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "97900100-0000-4000-8000-000000000012-c1",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -440,
+        0
+      ],
+      "id": "97900100-0000-4000-8000-000000000012",
+      "name": "Input Is Valid?"
+    },
+    {
+      "parameters": {
+        "url": "https://api.xero.com/connections",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "options": {
+          "timeout": 15000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -220,
+        -260
+      ],
+      "id": "97900100-0000-4000-8000-000000000014",
+      "name": "Probe Xero",
+      "credentials": {
+        "oAuth2Api": {
+          "id": "phase19XeroReadonly",
+          "name": "Xero (read-only)"
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json ?? {};\nconst status = Number(raw.statusCode ?? 0);\nconst body = raw.body ?? {};\nconst nodeError = String(raw.error?.message ?? raw.error ?? '');\nconst CONNECT_STEPS = \"Open n8n at http://localhost:5678 | Open the credential named Xero (read-only). It may use either a standard Web app (Authorization Code) or a single-organisation Custom Connection (Client Credentials); docs/XERO_RECONCILIATION.md has both sets of fields. | For a standard connection, the permission screen must say view, never create, update, or delete. Complete Xero's own authorisation step. Never send a Xero password, verification code, or client secret through chat.\";\nconst orgs = Array.isArray(body) ? body : [];\nlet state = 'unknown';\nlet message = '';\nif (status === 200 && orgs.length > 0) { state = 'connected'; message = 'Xero is connected to ' + String(orgs[0].tenantName ?? 'the authorised organisation') + '.'; }\nelse if (status === 200) { state = 'not_connected'; message = 'The standard connection list is empty; checking whether this credential is a Custom Connection.'; }\nelse if (status === 401 || status === 403) { state = 'needs_reauth'; message = 'The standard Xero connection refused access; checking whether this credential is a Custom Connection. Standard refresh tokens can expire after 60 days without use.'; }\nelse if (!status || /credential/i.test(nodeError)) { state = 'not_connected'; message = 'There is no working Xero read-only credential yet.'; }\nelse { state = 'unknown'; message = 'The standard Xero connection check did not answer as expected (' + (status || 'no response') + ').'; }\nreturn [{ json: { connected: state === 'connected', state, message, connectionType: state === 'connected' ? 'standard' : '', organisationName: state === 'connected' ? String(orgs[0].tenantName ?? '') : '', tenantId: state === 'connected' ? String(orgs[0].tenantId ?? '') : '', organisationCount: orgs.length, n8nUrl: 'http://localhost:5678', connectSteps: CONNECT_STEPS, scope: 'accounting.banktransactions.read accounting.invoices.read accounting.contacts.read accounting.settings.read' } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -220,
+        -120
+      ],
+      "id": "97900100-0000-4000-8000-000000000013",
+      "name": "Read Xero Probe"
+    },
+    {
+      "parameters": {
+        "url": "https://api.xero.com/connections",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "options": {
+          "timeout": 15000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        220,
+        -260
+      ],
+      "id": "97900100-0000-4000-8000-000000000016",
+      "name": "Probe Xero Write",
+      "credentials": {
+        "oAuth2Api": {
+          "id": "phase19XeroReadWrite",
+          "name": "Xero (read-write)"
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json ?? {};\nconst status = Number(raw.statusCode ?? 0);\nconst body = raw.body ?? {};\nconst nodeError = String(raw.error?.message ?? raw.error ?? '');\nconst WRITE_CONNECT_STEPS = \"This one is optional. Everything except preparing transactions works without it. | In n8n, Credentials, create a second credential of type OAuth2 API named exactly \\\"Xero (read-write)\\\", using the same Xero app as the first. | Set the Scope field to: offline_access accounting.banktransactions | Select Connect my account. This permission screen will say view AND update your business transactions. That difference is the whole point of the second credential, and you should never see those words on the read-only one.\";\n\nconst orgs = Array.isArray(body) ? body : [];\nlet writeState = 'unknown';\nif (status === 200 && orgs.length > 0) writeState = 'connected';\nelse if (status === 401 || status === 403) writeState = 'needs_reauth';\nelse if (!status || /credential/i.test(nodeError)) writeState = 'not_connected';\n\nreturn [{ json: {\n  writeState,\n  writeConnected: writeState === 'connected',\n  writeConnectSteps: WRITE_CONNECT_STEPS,\n  writeScope: 'offline_access accounting.banktransactions',\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        -120
+      ],
+      "id": "97900100-0000-4000-8000-000000000015",
+      "name": "Read Write Probe"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $('Validate Connection Input').first().json;\nconst fromNode = (name) => { try { return $(name).first().json; } catch { return null; } };\nconst probe = fromNode('Read Custom Probe') ?? fromNode('Read Xero Probe') ?? {};\nconst writeProbe = $input.first().json;\nconst NEXT = {\n  connected: 'Tell the user which organisation it is connected to and whether it is a standard or Custom Connection. Nothing more is needed to start a review.',\n  not_connected: 'Guide the user through the matching setup in docs/XERO_RECONCILIATION.md. The agent cannot complete the credential or authorisation steps for them. Never ask for a Xero password, verification code, or client secret.',\n  needs_reauth: 'For a standard connection, reconnect the Xero (read-only) credential. For a Custom Connection, check that the app is authorised and regenerate its n8n credential only if the user chooses to.',\n  unknown: 'Say it could not be checked right now and offer to try again. Do not reconfigure anything from one failed check.',\n};\nconst WRITE_NEXT = { connected: 'The separate write credential is connected. Use it only after exact suggestions are accepted.', not_connected: 'The optional write credential is not set up. Mention it only if the user asks to create prepared transactions.', needs_reauth: 'The optional write credential needs reconnecting. Mention it only for preparation.', unknown: '' };\nreturn [{ json: { ...input, response: { ok: true, connected: probe.connected, state: probe.state, connectionType: probe.connectionType || '', organisationName: probe.organisationName, tenantId: probe.tenantId, organisationCount: probe.organisationCount, multipleOrganisations: probe.organisationCount > 1, n8nUrl: probe.n8nUrl, connectSteps: probe.connectSteps, requiredScope: probe.scope, message: probe.message + (probe.organisationCount > 1 ? ' More than one organisation is authorised; reviews use the first one.' : ''), nextStep: NEXT[probe.state] ?? NEXT.unknown, writeConnected: writeProbe.writeConnected, writeState: writeProbe.writeState, writeConnectSteps: writeProbe.writeConnectSteps, writeScope: writeProbe.writeScope, writeNextStep: WRITE_NEXT[writeProbe.writeState] ?? '' } } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ],
+      "id": "97900100-0000-4000-8000-000000000017",
+      "name": "Shape Connection Result"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $('Validate Connection Input').first().json;\nconst response = $json.response ?? { ok: false, error: { code: 'TOOL_FAILED', message: 'The tool did not return a result.' } };\nreturn { json: {\n  occurredAt: new Date().toISOString(),\n  sessionId: input.sessionId,\n  requestId: input.requestId,\n  toolName: 'check_xero_connection',\n  proposedInput: JSON.stringify(input.proposedInput ?? {}),\n  result: JSON.stringify(response),\n  error: response.ok === false ? String(response.error?.message ?? 'Tool failed') : '',\n  response\n} };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        0
+      ],
+      "id": "97900100-0000-4000-8000-000000000090",
+      "name": "Prepare Audit"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "value": "tool_audit",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "occurredAt": "={{ $json.occurredAt }}",
+            "sessionId": "={{ $json.sessionId }}",
+            "requestId": "={{ $json.requestId }}",
+            "toolName": "={{ $json.toolName }}",
+            "proposedInput": "={{ $json.proposedInput }}",
+            "result": "={{ $json.result }}",
+            "error": "={{ $json.error }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "occurredAt",
+              "displayName": "occurredAt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "sessionId",
+              "displayName": "sessionId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "requestId",
+              "displayName": "requestId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "toolName",
+              "displayName": "toolName",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "proposedInput",
+              "displayName": "proposedInput",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "result",
+              "displayName": "result",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "error",
+              "displayName": "error",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        880,
+        0
+      ],
+      "id": "97900100-0000-4000-8000-000000000091",
+      "name": "Write Tool Audit",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const prepared = $('Prepare Audit').first().json;\nconst response = { ...prepared.response };\nif (!Number.isInteger($json.id)) {\n  response.auditWarning = 'The tool result could not be written to the local audit table.';\n}\nreturn { json: response };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        0
+      ],
+      "id": "97900100-0000-4000-8000-000000000092",
+      "name": "Return Tool Result"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "97900100-0000-4000-8000-000000000020-c1",
+              "leftValue": "={{ $json.connected }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        0,
+        -120
+      ],
+      "id": "97900100-0000-4000-8000-000000000020",
+      "name": "Standard Read Connected?"
+    },
+    {
+      "parameters": {
+        "url": "https://api.xero.com/api.xro/2.0/Organisation",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "options": {
+          "timeout": 15000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        0,
+        80
+      ],
+      "id": "97900100-0000-4000-8000-000000000021",
+      "name": "Probe Custom Organisation",
+      "credentials": {
+        "oAuth2Api": {
+          "id": "phase19XeroReadonly",
+          "name": "Xero (read-only)"
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const standard = $('Read Xero Probe').first().json;\nconst raw = $input.first().json ?? {};\nconst status = Number(raw.statusCode ?? 0);\nconst organisations = Array.isArray(raw.body?.Organisations) ? raw.body.Organisations : [];\nif (status !== 200 || organisations.length === 0) return [{ json: standard }];\nconst organisation = organisations[0];\nreturn [{ json: { ...standard, connected: true, state: 'connected', connectionType: 'custom', organisationName: String(organisation.Name ?? organisation.LegalName ?? ''), tenantId: String(organisation.OrganisationID ?? ''), organisationCount: 1, message: 'Xero Custom Connection is connected to ' + String(organisation.Name ?? organisation.LegalName ?? 'the authorised organisation') + '.' } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        80
+      ],
+      "id": "97900100-0000-4000-8000-000000000022",
+      "name": "Read Custom Probe"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Tool Input": {
+      "main": [
+        [
+          {
+            "node": "Validate Connection Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Connection Input": {
+      "main": [
+        [
+          {
+            "node": "Input Is Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Input Is Valid?": {
+      "main": [
+        [
+          {
+            "node": "Probe Xero",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Probe Xero": {
+      "main": [
+        [
+          {
+            "node": "Read Xero Probe",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Xero Probe": {
+      "main": [
+        [
+          {
+            "node": "Standard Read Connected?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Probe Xero Write": {
+      "main": [
+        [
+          {
+            "node": "Read Write Probe",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Write Probe": {
+      "main": [
+        [
+          {
+            "node": "Shape Connection Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shape Connection Result": {
+      "main": [
+        [
+          {
+            "node": "Prepare Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Audit": {
+      "main": [
+        [
+          {
+            "node": "Write Tool Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Tool Audit": {
+      "main": [
+        [
+          {
+            "node": "Return Tool Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Standard Read Connected?": {
+      "main": [
+        [
+          {
+            "node": "Probe Xero Write",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Probe Custom Organisation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Probe Custom Organisation": {
+      "main": [
+        [
+          {
+            "node": "Read Custom Probe",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Custom Probe": {
+      "main": [
+        [
+          {
+            "node": "Probe Xero Write",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "executionTimeout": 30
+  },
+  "versionId": "97900100-0000-4000-8000-000000000900",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "phase": 19,
+    "testedWithN8n": "2.30.5",
+    "toolRisk": "read",
+    "authorization": "automatic-current-context-read",
+    "externalWrite": "none",
+    "externalRead": "xero-connections-probe-only"
+  },
+  "id": "phase19CheckXeroConnection",
+  "tags": [
+    {
+      "id": "tagAgentCanDo",
+      "name": "What your agent can do"
+    }
+  ]
+}

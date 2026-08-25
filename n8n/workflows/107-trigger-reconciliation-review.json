@@ -1,0 +1,173 @@
+{
+  "name": "107 - TRIGGER - Reconciliation Review",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Read this first\n\nThis is switched **off**, and it stays off until you turn it on with the\ntoggle at the top right.\n\nWhen it is on, it reviews your Xero transactions once a week on Monday\nmorning, so the suggestions are waiting for you rather than you having to\nask. Ask your agent what it found afterwards.\n\nIt still writes nothing to Xero. Turning this on does not let it create\nanything: that always needs you to accept the suggestions in the chat\nfirst.",
+        "height": 380,
+        "width": 460,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -900,
+        -360
+      ],
+      "id": "97900107-0000-4000-8000-000000000001",
+      "name": "Sticky 1"
+    },
+    {
+      "parameters": {
+        "content": "## Cost note\n\nEach review costs a few tens of cents of Anthropic usage, so about a dollar\nor two a month at one a week.\n\nIf your books are quiet, run it by hand instead by asking your agent, and\nleave this off.",
+        "height": 280,
+        "width": 420,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -420,
+        -360
+      ],
+      "id": "97900107-0000-4000-8000-000000000002",
+      "name": "Sticky 2"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "weeksInterval": 1,
+              "triggerAtDay": [
+                1
+              ],
+              "triggerAtHour": 8,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -660,
+        0
+      ],
+      "id": "97900107-0000-4000-8000-000000000010",
+      "name": "Every Monday Morning"
+    },
+    {
+      "parameters": {
+        "jsCode": "// A schedule has no conversation behind it. Rather than mint fake session and\n// request IDs and log a conversation that never happened, this goes straight to\n// the review, which carries its own guard against a second run starting on top\n// of one already going.\nreturn [{ json: { runId: `sched-${Date.now()}`, period: '' } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -220,
+        0
+      ],
+      "id": "97900107-0000-4000-8000-000000000011",
+      "name": "Build Scheduled Run"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "phase19RunReconciliationReview",
+          "mode": "list",
+          "cachedResultName": "105 - RUN - Reconciliation Review"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "runId": "={{ $json.runId }}",
+            "period": "={{ $json.period }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "runId",
+              "displayName": "runId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "period",
+              "displayName": "period",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        0,
+        0
+      ],
+      "id": "97900107-0000-4000-8000-000000000012",
+      "name": "Start Scheduled Review"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Every Monday Morning": {
+      "main": [
+        [
+          {
+            "node": "Build Scheduled Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Scheduled Run": {
+      "main": [
+        [
+          {
+            "node": "Start Scheduled Review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "executionTimeout": 1800
+  },
+  "versionId": "97900107-0000-4000-8000-000000000900",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "phase": 19,
+    "testedWithN8n": "2.30.5",
+    "toolRisk": "bounded_external_read_and_local_write",
+    "authorization": "scheduled-run-only",
+    "externalWrite": "none",
+    "externalRead": "xero-accounting-read-gmail-readonly-and-anthropic-api"
+  },
+  "id": "phase19ReconciliationTrigger",
+  "tags": []
+}

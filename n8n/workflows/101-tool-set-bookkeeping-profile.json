@@ -1,0 +1,580 @@
+{
+  "name": "101 - TOOL - set_bookkeeping_profile",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Saving what the agent knows about your books\n\nStores the facts that decide every suggestion: your usual suppliers, the\ncoding rules you already follow, and the amount above which you always\nwant to decide yourself.\n\nA blank field keeps whatever was saved before. It never means 'erase\nthat'. Nothing here is guessed: an invented account code would produce a\nwrong suggestion on every transaction from that supplier, quietly.",
+        "height": 340,
+        "width": 460,
+        "color": 6
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -900,
+        -320
+      ],
+      "id": "97900101-0000-4000-8000-000000000001",
+      "name": "Sticky 1"
+    },
+    {
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "sessionId",
+              "type": "string"
+            },
+            {
+              "name": "requestId",
+              "type": "string"
+            },
+            {
+              "name": "organisationName",
+              "type": "string"
+            },
+            {
+              "name": "baseCurrency",
+              "type": "string"
+            },
+            {
+              "name": "financialYearEnd",
+              "type": "string"
+            },
+            {
+              "name": "commonSuppliers",
+              "type": "string"
+            },
+            {
+              "name": "commonCustomers",
+              "type": "string"
+            },
+            {
+              "name": "accountCodeNotes",
+              "type": "string"
+            },
+            {
+              "name": "gstTreatmentNotes",
+              "type": "string"
+            },
+            {
+              "name": "neverGuessAbove",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -880,
+        0
+      ],
+      "id": "97900101-0000-4000-8000-000000000010",
+      "name": "Tool Input"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "bookkeeping_profile",
+          "mode": "name"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "profileId",
+              "condition": "eq",
+              "keyValue": "default"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 1,
+        "orderBy": false
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -660,
+        0
+      ],
+      "id": "97900101-0000-4000-8000-000000000015",
+      "name": "Read Existing Profile"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $('Tool Input').first().json;\nconst existingRows = $input.all().map((item) => item.json).filter((row) => row && row.profileId === 'default');\nconst existing = existingRows[0] ?? {};\n\nconst sessionId = typeof input.sessionId === 'string' ? input.sessionId.trim() : '';\nconst requestId = typeof input.requestId === 'string' ? input.requestId.trim() : '';\nconst uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;\nlet error = null;\nif (!uuidPattern.test(sessionId) || !uuidPattern.test(requestId)) {\n  error = { code: 'INVALID_SESSION', message: 'Saving a bookkeeping profile needs a valid conversation and request ID.' };\n}\n\nconst text = (value, limit) => {\n  const raw = typeof value === 'string' ? value.trim() : '';\n  return raw.slice(0, limit ?? 300);\n};\n\n// A blank field means 'not mentioned this time', never 'erase what I said before'.\nconst keep = (next, previous) => (next === '' || next === null ? (previous ?? '') : next);\n\n// The threshold above which a suggestion is always handed to a person, however\n// obvious it looks. A guessed one is worse than none: it silently decides how\n// much money the agent is willing to be confident about.\nlet neverGuessAbove = existing.neverGuessAbove ?? 0;\nconst rawThreshold = text(input.neverGuessAbove, 20).replace(/[$,\\s]/g, '');\nif (rawThreshold !== '' && !error) {\n  const parsed = Number(rawThreshold);\n  if (!Number.isFinite(parsed) || parsed < 0) {\n    error = { code: 'INVALID_THRESHOLD', message: 'The always-check-with-me amount has to be a positive number of dollars, or left out entirely.' };\n  } else {\n    neverGuessAbove = Math.round(parsed * 100) / 100;\n  }\n}\n\nconst merged = {\n  profileId: 'default',\n  profileSavedAt: new Date().toISOString(),\n  organisationName: keep(text(input.organisationName, 120), existing.organisationName),\n  baseCurrency: keep(text(input.baseCurrency, 8).toUpperCase(), existing.baseCurrency),\n  financialYearEnd: keep(text(input.financialYearEnd, 40), existing.financialYearEnd),\n  commonSuppliers: keep(text(input.commonSuppliers, 1500), existing.commonSuppliers),\n  commonCustomers: keep(text(input.commonCustomers, 1500), existing.commonCustomers),\n  accountCodeNotes: keep(text(input.accountCodeNotes, 2000), existing.accountCodeNotes),\n  gstTreatmentNotes: keep(text(input.gstTreatmentNotes, 1500), existing.gstTreatmentNotes),\n  neverGuessAbove,\n  // Discovered by the review from Xero itself, never typed by a person.\n  tenantId: existing.tenantId ?? '',\n  queueMode: existing.queueMode ?? '',\n};\n\nreturn [{ json: {\n  valid: error === null,\n  sessionId, requestId,\n  proposedInput: { sessionId, requestId, ...Object.fromEntries([\"organisationName\", \"baseCurrency\", \"financialYearEnd\", \"commonSuppliers\", \"commonCustomers\", \"accountCodeNotes\", \"gstTreatmentNotes\", \"neverGuessAbove\"].map((k) => [k, text(input[k], 200)])) },\n  ...merged,\n  ...(error ? { response: { ok: false, error } } : {}),\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -440,
+        0
+      ],
+      "id": "97900101-0000-4000-8000-000000000011",
+      "name": "Validate And Merge"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "97900101-0000-4000-8000-000000000012-c1",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -220,
+        0
+      ],
+      "id": "97900101-0000-4000-8000-000000000012",
+      "name": "Input Is Valid?"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "upsert",
+        "dataTableId": {
+          "__rl": true,
+          "value": "bookkeeping_profile",
+          "mode": "name"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "profileId",
+              "condition": "eq",
+              "keyValue": "default"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "profileId": "default",
+            "profileSavedAt": "={{ $json.profileSavedAt }}",
+            "tenantId": "={{ $json.tenantId }}",
+            "queueMode": "={{ $json.queueMode }}",
+            "organisationName": "={{ $json.organisationName }}",
+            "baseCurrency": "={{ $json.baseCurrency }}",
+            "financialYearEnd": "={{ $json.financialYearEnd }}",
+            "commonSuppliers": "={{ $json.commonSuppliers }}",
+            "commonCustomers": "={{ $json.commonCustomers }}",
+            "accountCodeNotes": "={{ $json.accountCodeNotes }}",
+            "gstTreatmentNotes": "={{ $json.gstTreatmentNotes }}",
+            "neverGuessAbove": "={{ $json.neverGuessAbove }}"
+          },
+          "matchingColumns": [
+            "profileId"
+          ],
+          "schema": [
+            {
+              "id": "profileId",
+              "displayName": "profileId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "profileSavedAt",
+              "displayName": "profileSavedAt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "tenantId",
+              "displayName": "tenantId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "queueMode",
+              "displayName": "queueMode",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "organisationName",
+              "displayName": "organisationName",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "baseCurrency",
+              "displayName": "baseCurrency",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "financialYearEnd",
+              "displayName": "financialYearEnd",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "commonSuppliers",
+              "displayName": "commonSuppliers",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "commonCustomers",
+              "displayName": "commonCustomers",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "accountCodeNotes",
+              "displayName": "accountCodeNotes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "gstTreatmentNotes",
+              "displayName": "gstTreatmentNotes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "neverGuessAbove",
+              "displayName": "neverGuessAbove",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -220,
+        -200
+      ],
+      "id": "97900101-0000-4000-8000-000000000013",
+      "name": "Upsert Profile"
+    },
+    {
+      "parameters": {
+        "jsCode": "const merged = $('Validate And Merge').first().json;\n\nconst missing = [];\nif (!merged.neverGuessAbove) missing.push('the dollar amount above which you always want to decide yourself, rather than have a code suggested');\nif (!merged.accountCodeNotes) missing.push('any coding rules you already follow, in your own words, such as \"Uber is always 429 Travel\"');\nif (!merged.commonSuppliers) missing.push('the suppliers you pay regularly, and what each spend is for');\nif (!merged.financialYearEnd) missing.push('when your financial year ends');\n\nreturn [{ json: { ...merged, response: {\n  ok: true,\n  saved: true,\n  savedProfile: {\n    organisationName: merged.organisationName,\n    baseCurrency: merged.baseCurrency,\n    financialYearEnd: merged.financialYearEnd,\n    commonSuppliers: merged.commonSuppliers,\n    commonCustomers: merged.commonCustomers,\n    accountCodeNotes: merged.accountCodeNotes,\n    gstTreatmentNotes: merged.gstTreatmentNotes,\n    neverGuessAbove: merged.neverGuessAbove,\n  },\n  stillMissing: missing,\n  message: missing.length\n    ? 'Saved. Read the saved values back to the user so they can correct anything you misheard, then ask for the missing ones. These facts decide every suggestion a review makes, so a thin profile produces thin suggestions.'\n    : 'Saved. Read the saved values back to the user so they can correct anything you misheard.'\n} } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "97900101-0000-4000-8000-000000000014",
+      "name": "Shape Profile Result"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $('Validate And Merge').first().json;\nconst response = $json.response ?? { ok: false, error: { code: 'TOOL_FAILED', message: 'The tool did not return a result.' } };\nreturn { json: {\n  occurredAt: new Date().toISOString(),\n  sessionId: input.sessionId,\n  requestId: input.requestId,\n  toolName: 'set_bookkeeping_profile',\n  proposedInput: JSON.stringify(input.proposedInput ?? {}),\n  result: JSON.stringify(response),\n  error: response.ok === false ? String(response.error?.message ?? 'Tool failed') : '',\n  response\n} };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ],
+      "id": "97900101-0000-4000-8000-000000000090",
+      "name": "Prepare Audit"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "value": "tool_audit",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "occurredAt": "={{ $json.occurredAt }}",
+            "sessionId": "={{ $json.sessionId }}",
+            "requestId": "={{ $json.requestId }}",
+            "toolName": "={{ $json.toolName }}",
+            "proposedInput": "={{ $json.proposedInput }}",
+            "result": "={{ $json.result }}",
+            "error": "={{ $json.error }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "occurredAt",
+              "displayName": "occurredAt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "sessionId",
+              "displayName": "sessionId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "requestId",
+              "displayName": "requestId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "toolName",
+              "displayName": "toolName",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "proposedInput",
+              "displayName": "proposedInput",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "result",
+              "displayName": "result",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "error",
+              "displayName": "error",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        440,
+        0
+      ],
+      "id": "97900101-0000-4000-8000-000000000091",
+      "name": "Write Tool Audit",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const prepared = $('Prepare Audit').first().json;\nconst response = { ...prepared.response };\nif (!Number.isInteger($json.id)) {\n  response.auditWarning = 'The tool result could not be written to the local audit table.';\n}\nreturn { json: response };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        0
+      ],
+      "id": "97900101-0000-4000-8000-000000000092",
+      "name": "Return Tool Result"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Tool Input": {
+      "main": [
+        [
+          {
+            "node": "Read Existing Profile",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Existing Profile": {
+      "main": [
+        [
+          {
+            "node": "Validate And Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate And Merge": {
+      "main": [
+        [
+          {
+            "node": "Input Is Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Input Is Valid?": {
+      "main": [
+        [
+          {
+            "node": "Upsert Profile",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert Profile": {
+      "main": [
+        [
+          {
+            "node": "Shape Profile Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shape Profile Result": {
+      "main": [
+        [
+          {
+            "node": "Prepare Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Audit": {
+      "main": [
+        [
+          {
+            "node": "Write Tool Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Tool Audit": {
+      "main": [
+        [
+          {
+            "node": "Return Tool Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "executionTimeout": 30
+  },
+  "versionId": "97900101-0000-4000-8000-000000000900",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "phase": 19,
+    "testedWithN8n": "2.30.5",
+    "toolRisk": "bounded_local_write",
+    "authorization": "explicit-current-user-statement",
+    "externalWrite": "none",
+    "externalRead": "none"
+  },
+  "id": "phase19SetBookkeepingProfile",
+  "tags": [
+    {
+      "id": "tagAgentCanDo",
+      "name": "What your agent can do"
+    }
+  ]
+}

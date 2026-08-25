@@ -1,0 +1,640 @@
+{
+  "name": "65 - TOOL - start_monthly_update",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Start a monthly update\n\nReading a month of mail takes minutes, and the agent has 110 seconds. So\nthis registers the run, fires the background worker without waiting, and\nreturns straight away. `66 - TOOL - get_monthly_update` reads the result.\n\nIt refuses to start a second run over a month that is already in flight,\nwhich would read the same mail twice and bill for it twice.",
+        "height": 280,
+        "width": 520,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -900,
+        -280
+      ],
+      "id": "95610000-0000-4000-8000-000000000001",
+      "name": "Start tool explanation"
+    },
+    {
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "sessionId",
+              "type": "string"
+            },
+            {
+              "name": "requestId",
+              "type": "string"
+            },
+            {
+              "name": "month",
+              "type": "string"
+            },
+            {
+              "name": "audience",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -660,
+        40
+      ],
+      "id": "95610000-0000-4000-8000-000000000010",
+      "name": "Tool Input"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const MONTH_NAMES = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];\nconst now = new Date();\n\n// Resolves 'July', 'July 2026', '2026-07', 'last month', and '' to one month.\n// Anything it cannot read becomes null, so the caller asks rather than\n// silently reporting on the wrong month.\nconst resolveMonth = (value) => {\n  const raw = String(value ?? '').trim().toLowerCase();\n  const previous = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));\n  if (!raw || raw === 'last month' || raw === 'previous month') {\n    return { year: previous.getUTCFullYear(), monthIndex: previous.getUTCMonth() };\n  }\n  if (raw === 'this month' || raw === 'current month') {\n    return { year: now.getUTCFullYear(), monthIndex: now.getUTCMonth() };\n  }\n  const explicit = /^(\\d{4})-(\\d{1,2})$/.exec(raw);\n  if (explicit) {\n    const monthIndex = Number(explicit[2]) - 1;\n    if (monthIndex < 0 || monthIndex > 11) return null;\n    return { year: Number(explicit[1]), monthIndex };\n  }\n  const named = /^([a-z]+)\\s*(\\d{4})?$/.exec(raw);\n  if (named) {\n    const monthIndex = MONTH_NAMES.findIndex((name) => name.startsWith(named[1]) && named[1].length >= 3);\n    if (monthIndex === -1) return null;\n    if (named[2]) return { year: Number(named[2]), monthIndex };\n    // A bare month name means the most recent one that has already happened.\n    const year = monthIndex > now.getUTCMonth() ? now.getUTCFullYear() - 1 : now.getUTCFullYear();\n    return { year, monthIndex };\n  }\n  return null;\n};\n\nconst sessionId = typeof $json.sessionId === 'string' ? $json.sessionId.trim() : '';\nconst requestId = typeof $json.requestId === 'string' ? $json.requestId.trim() : '';\nconst uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;\n\nconst AUDIENCES = ['investor', 'team', 'community'];\nconst rawAudience = String($json.audience ?? '').trim().toLowerCase();\nconst audience = AUDIENCES.includes(rawAudience) ? rawAudience : '';\n\nlet error = null;\nif (!uuidPattern.test(sessionId) || !uuidPattern.test(requestId)) {\n  error = { code: 'INVALID_SESSION', message: 'Starting a monthly update needs a valid conversation and request ID.' };\n}\n\nconst resolved = resolveMonth($json.month);\nif (!error && !resolved) {\n  error = { code: 'MONTH_NOT_UNDERSTOOD', message: 'Ask the user which month they mean, and pass it as a month name or as 2026-07.' };\n}\n\nif (error) {\n  return [{ json: { valid: false, shouldQueue: false, sessionId, requestId, proposedInput: { sessionId, requestId, month: String($json.month ?? ''), audience }, response: { ok: false, error } } }];\n}\n\nconst start = new Date(Date.UTC(resolved.year, resolved.monthIndex, 1));\nif (start.getTime() > now.getTime()) {\n  return [{ json: { valid: false, shouldQueue: false, sessionId, requestId, proposedInput: { sessionId, requestId }, response: { ok: false, error: { code: 'FUTURE_MONTH', message: 'That month has not started yet.' } } } }];\n}\n\nconst pad = (value) => String(value).padStart(2, '0');\nconst monthKey = `${resolved.year}-${pad(resolved.monthIndex + 1)}`;\nconst monthBucket = `${monthKey}-01`;\nconst MONTH_LABELS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];\nconst monthLabel = `${MONTH_LABELS[resolved.monthIndex]} ${resolved.year}`;\nconst isCurrentMonth = resolved.year === now.getUTCFullYear() && resolved.monthIndex === now.getUTCMonth();\n\nreturn [{ json: {\n  valid: true,\n  sessionId,\n  requestId,\n  monthKey,\n  monthBucket,\n  monthLabel,\n  audience,\n  isCurrentMonth,\n  runId: `mu-${monthKey}-${Date.now().toString(36)}`,\n  proposedInput: { sessionId, requestId, month: monthKey, audience },\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -420,
+        40
+      ],
+      "id": "95610000-0000-4000-8000-000000000011",
+      "name": "Validate Start Input"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "update_runs",
+          "mode": "name"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": []
+        },
+        "returnAll": false,
+        "limit": 12,
+        "orderBy": true,
+        "orderByColumn": "startedAt",
+        "orderByDirection": "DESC"
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -180,
+        40
+      ],
+      "id": "95610000-0000-4000-8000-000000000012",
+      "name": "Read Recent Runs",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const input = $('Validate Start Input').first().json;\nconst rows = $input.all().map((item) => item.json).filter((row) => row && row.runId);\n\nif (!input.valid) {\n  return [{ json: { ...input, shouldQueue: false } }];\n}\n\nconst forMonth = rows.filter((row) => String(row.monthBucket ?? '') === input.monthBucket);\nconst running = forMonth.find((row) => ['queued', 'running'].includes(String(row.status ?? '')));\n\n// Two runs over the same month would read the same mail twice and bill for\n// it twice, so an in-flight run is reported rather than duplicated.\nif (running) {\n  return [{ json: { ...input, shouldQueue: false, runId: running.runId, response: {\n    ok: true,\n    status: running.status,\n    runId: running.runId,\n    monthLabel: input.monthLabel,\n    message: `I am already working through ${input.monthLabel}. Ask me for it again in a few minutes.`,\n  } } }];\n}\n\nconst finished = forMonth\n  .filter((row) => ['completed', 'partial'].includes(String(row.status ?? '')))\n  .sort((a, b) => String(b.startedAt ?? '').localeCompare(String(a.startedAt ?? '')))[0];\n\nreturn [{ json: {\n  ...input,\n  shouldQueue: true,\n  previousRunId: finished?.runId ?? '',\n  replacedEarlier: Boolean(finished),\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        60,
+        40
+      ],
+      "id": "95610000-0000-4000-8000-000000000013",
+      "name": "Decide Run"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "95610000-0000-4000-8000-000000000014-c1",
+              "leftValue": "={{ $json.shouldQueue }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        300,
+        40
+      ],
+      "id": "95610000-0000-4000-8000-000000000014",
+      "name": "Should Queue?"
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "phase16RunMonthlyUpdate",
+          "mode": "list",
+          "cachedResultName": "74 - RUN - Monthly Update"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "runId": "={{ $json.runId }}",
+            "month": "={{ $json.monthKey }}",
+            "audience": "={{ $json.audience }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "runId",
+              "displayName": "runId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "month",
+              "displayName": "month",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "audience",
+              "displayName": "audience",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": false
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1060,
+        -260
+      ],
+      "id": "95610000-0000-4000-8000-000000000015",
+      "name": "Queue Background Run",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const input = $('Decide Run').first().json;\n\nreturn [{ json: { ...input, response: {\n  ok: true,\n  status: 'queued',\n  runId: input.runId,\n  monthLabel: input.monthLabel,\n  audience: input.audience || 'the audience saved on the profile',\n  message: [\n    `I am reading ${input.monthLabel} now. It takes a few minutes: I list the month's mail, filter it against your company profile, read the threads that survive, and then write the update.`,\n    input.isCurrentMonth ? 'That month is not finished yet, so this covers what has happened so far.' : '',\n    input.replacedEarlier ? 'There was already an update for that month; this run writes a fresh one.' : '',\n    'Ask me for it again in a few minutes and I will read it back.',\n  ].filter(Boolean).join(' '),\n} } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        -260
+      ],
+      "id": "95610000-0000-4000-8000-000000000016",
+      "name": "Shape Start Result"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const input = $('Decide Run').first().json;\nconst response = $json.response ?? { ok: false, error: { code: 'TOOL_FAILED', message: 'The tool did not return a result.' } };\nreturn { json: {\n  occurredAt: new Date().toISOString(),\n  sessionId: input.sessionId,\n  requestId: input.requestId,\n  toolName: 'start_monthly_update',\n  proposedInput: JSON.stringify(input.proposedInput ?? {}),\n  result: JSON.stringify(response),\n  error: response.ok === false ? String(response.error?.message ?? 'Tool failed') : '',\n  response\n} };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        40
+      ],
+      "id": "95610000-0000-4000-8000-000000000090",
+      "name": "Prepare Audit"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "value": "tool_audit",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "occurredAt": "={{ $json.occurredAt }}",
+            "sessionId": "={{ $json.sessionId }}",
+            "requestId": "={{ $json.requestId }}",
+            "toolName": "={{ $json.toolName }}",
+            "proposedInput": "={{ $json.proposedInput }}",
+            "result": "={{ $json.result }}",
+            "error": "={{ $json.error }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "occurredAt",
+              "displayName": "occurredAt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "sessionId",
+              "displayName": "sessionId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "requestId",
+              "displayName": "requestId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "toolName",
+              "displayName": "toolName",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "proposedInput",
+              "displayName": "proposedInput",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "result",
+              "displayName": "result",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "error",
+              "displayName": "error",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1780,
+        40
+      ],
+      "id": "95610000-0000-4000-8000-000000000091",
+      "name": "Write Tool Audit",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const prepared = $('Prepare Audit').item.json;\nconst response = { ...prepared.response };\nif (!Number.isInteger($json.id)) {\n  response.auditWarning = 'The tool result could not be written to the local audit table.';\n}\nreturn { json: response };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2020,
+        40
+      ],
+      "id": "95610000-0000-4000-8000-000000000092",
+      "name": "Return Tool Result"
+    },
+    {
+      "parameters": {
+        "url": "https://gmail.googleapis.com/gmail/v1/users/me/profile",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleOAuth2Api",
+        "options": {
+          "timeout": 15000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        540,
+        -160
+      ],
+      "id": "95610000-0000-4000-8000-000000000020",
+      "name": "Probe Gmail",
+      "credentials": {
+        "googleOAuth2Api": {
+          "id": "phase16GmailReadonly",
+          "name": "Gmail (read-only)"
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const raw = $input.first().json ?? {};\nconst status = Number(raw.statusCode ?? 0);\nconst body = raw.body ?? {};\n// When no credential is selected at all, n8n fails the node rather than\n// returning a status, and onError passes the item through with `error` set.\nconst nodeError = String(raw.error?.message ?? raw.error ?? '');\n\nconst googleError = body?.error ?? {};\nconst googleMessage = String(googleError.message ?? '');\nconst reasons = (googleError.errors ?? []).map((entry) => String(entry?.reason ?? ''));\n\nconst CONNECT_STEPS = [\n  'Select the Connect Gmail button in the chat.',\n  'n8n opens on the credential named \"Gmail (read-only)\". Select Connect my account.',\n  'Google opens its own sign-in and permission window. Grant access.',\n  'The permission screen should say the app wants to view your email. If it mentions sending or deleting, the Scope field is wrong.',\n].join(' | ');\n\nlet state = 'unknown';\nlet message = '';\nlet fixUrl = '';\n\nif (status === 200 && body.emailAddress) {\n  state = 'connected';\n  message = `Gmail is connected as ${body.emailAddress}.`;\n} else if (reasons.includes('accessNotConfigured') || /has not been used in project|is disabled/i.test(googleMessage)) {\n  // Signing in again cannot fix this, so it must never be described as a\n  // lapsed connection. The sign-in worked; the project simply has the Gmail\n  // API switched off, and only the Google Cloud console can switch it on.\n  state = 'api_not_enabled';\n  const link = /https:\\/\\/console\\.[^\\s]*?gmail\\.googleapis\\.com[^\\s]*/.exec(googleMessage);\n  fixUrl = link ? link[0].replace(/[.,)]+$/, '') : 'https://console.cloud.google.com/apis/library/gmail.googleapis.com';\n  message = 'Gmail signed in correctly, but the Gmail API is switched off for this Google Cloud project, so Google refuses every read. This is a one-off setting in the Google Cloud console and reconnecting will not change it.';\n} else if (reasons.includes('ACCESS_TOKEN_SCOPE_INSUFFICIENT') || /insufficient/i.test(googleMessage)) {\n  state = 'wrong_scope';\n  message = 'Gmail is connected but was not granted permission to read mail. The credential Scope field has to be exactly https://www.googleapis.com/auth/gmail.readonly, and the account has to be connected again after fixing it.';\n} else if (status === 401 || status === 403 || /unauthor/i.test(googleMessage)) {\n  state = 'needs_reauth';\n  message = 'Gmail is set up but Google is refusing the connection. It usually needs reconnecting: this happens about a week after setup if the Google consent screen is still in Testing rather than published.';\n} else if (!status || /credential/i.test(nodeError)) {\n  state = 'not_connected';\n  message = 'There is no working Gmail connection yet. It has to be created once in n8n; it cannot be done from this chat.';\n} else {\n  state = 'unknown';\n  message = `Gmail did not answer as expected (${status || 'no response'}). It may be a temporary network problem.`;\n}\n\nreturn [{ json: {\n  connected: state === 'connected',\n  state,\n  message,\n  fixUrl,\n  emailAddress: state === 'connected' ? String(body.emailAddress) : '',\n  messagesTotal: state === 'connected' ? Number(body.messagesTotal ?? 0) : 0,\n  credentialUrl: '/api/gmail/connect',\n  connectSteps: CONNECT_STEPS,\n  scope: 'https://www.googleapis.com/auth/gmail.readonly',\n  // The chat turns this one exact path into a button. Any other wording,\n  // including a markdown link, renders as plain text and the learner has\n  // nothing to click.\n  linkInstruction: 'Include the exact text /api/gmail/connect in your reply. The chat turns it into a button that connects Gmail. Do not rewrite it, wrap it in markdown, or describe it instead.',\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        780,
+        -160
+      ],
+      "id": "95610000-0000-4000-8000-000000000021",
+      "name": "Read Gmail Probe"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "95610000-0000-4000-8000-000000000022-c1",
+              "leftValue": "={{ $json.connected }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1020,
+        -160
+      ],
+      "id": "95610000-0000-4000-8000-000000000022",
+      "name": "Gmail Ready?"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const input = $('Decide Run').first().json;\nconst probe = $('Read Gmail Probe').first().json;\n\n// Refusing here costs two seconds. Queueing anyway would spend several\n// minutes and a couple of dollars before failing at the first Gmail call.\nconst NEXT = {\n  not_connected: 'Do not start the run. Say you need to read their email first, and include the exact text /api/gmail/connect so the chat shows a Connect Gmail button. Tell them to select Connect my account and grant access. When Gmail answers, the update starts on its own.',\n  needs_reauth: 'Do not start the run. Say the connection has lapsed and include the exact text /api/gmail/connect so they can reconnect. When Gmail answers, the update starts on its own.',\n  api_not_enabled: 'Do not start the run, and do not offer the connect button: signing in again cannot fix this. Say the Gmail API is switched off for their Google Cloud project, and give them the address in fixUrl to open, where they select Enable and then wait a minute before asking again.',\n  wrong_scope: 'Do not start the run. Say the connection was granted without permission to read mail, and include the exact text /api/gmail/connect so they can set the Scope field to exactly https://www.googleapis.com/auth/gmail.readonly and connect the account again.',\n  unknown: 'Do not start the run. Say the connection could not be checked right now and offer to try again in a moment.',\n};\n\nconst CODES = {\n  needs_reauth: 'GMAIL_NEEDS_RECONNECT',\n  api_not_enabled: 'GMAIL_API_NOT_ENABLED',\n  wrong_scope: 'GMAIL_WRONG_SCOPE',\n};\n\nreturn [{ json: { ...input, response: {\n  ok: false,\n  error: {\n    code: CODES[probe.state] ?? 'GMAIL_NOT_CONNECTED',\n    message: probe.message,\n  },\n  state: probe.state,\n  credentialUrl: probe.credentialUrl,\n  connectSteps: probe.connectSteps,\n  linkInstruction: probe.linkInstruction,\n  requiredScope: probe.scope,\n  fixUrl: probe.fixUrl,\n  nextStep: NEXT[probe.state] ?? NEXT.unknown,\n} } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1060,
+        -40
+      ],
+      "id": "95610000-0000-4000-8000-000000000023",
+      "name": "Shape Auth Needed"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Tool Input": {
+      "main": [
+        [
+          {
+            "node": "Validate Start Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Start Input": {
+      "main": [
+        [
+          {
+            "node": "Read Recent Runs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Recent Runs": {
+      "main": [
+        [
+          {
+            "node": "Decide Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decide Run": {
+      "main": [
+        [
+          {
+            "node": "Should Queue?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Should Queue?": {
+      "main": [
+        [
+          {
+            "node": "Probe Gmail",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Queue Background Run": {
+      "main": [
+        [
+          {
+            "node": "Shape Start Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shape Start Result": {
+      "main": [
+        [
+          {
+            "node": "Prepare Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Audit": {
+      "main": [
+        [
+          {
+            "node": "Write Tool Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Tool Audit": {
+      "main": [
+        [
+          {
+            "node": "Return Tool Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Probe Gmail": {
+      "main": [
+        [
+          {
+            "node": "Read Gmail Probe",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Gmail Probe": {
+      "main": [
+        [
+          {
+            "node": "Gmail Ready?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gmail Ready?": {
+      "main": [
+        [
+          {
+            "node": "Queue Background Run",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Shape Auth Needed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shape Auth Needed": {
+      "main": [
+        [
+          {
+            "node": "Prepare Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "executionTimeout": 60
+  },
+  "versionId": "95610000-0000-4000-8000-0000000000100",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "phase": 16,
+    "testedWithN8n": "2.30.5",
+    "toolRisk": "bounded_external_read_and_local_write",
+    "authorization": "explicit-request-required",
+    "externalWrite": "none",
+    "externalRead": "queues-the-gmail-readonly-background-run"
+  },
+  "id": "phase16StartMonthlyUpdate",
+  "tags": [
+    {
+      "id": "tagAgentCanDo",
+      "name": "What your agent can do"
+    }
+  ]
+}

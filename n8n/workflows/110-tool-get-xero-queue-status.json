@@ -1,0 +1,317 @@
+{
+  "name": "110 - TOOL - get_xero_queue_status",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Is the browser queue ready?\n\nReads only local capture metadata. A usable queue is complete, source-hashed, and no more than thirty minutes old.",
+        "height": 300,
+        "width": 520,
+        "color": 6
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -760,
+        -260
+      ],
+      "id": "98000110-0000-4000-8000-000000000001",
+      "name": "Sticky"
+    },
+    {
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "sessionId",
+              "type": "string"
+            },
+            {
+              "name": "requestId",
+              "type": "string"
+            },
+            {
+              "name": "bankAccountId",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -740,
+        0
+      ],
+      "id": "98000110-0000-4000-8000-000000000010",
+      "name": "Tool Input"
+    },
+    {
+      "parameters": {
+        "jsCode": "const sessionId=String($json.sessionId||'').trim();const requestId=String($json.requestId||'').trim();const p=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;const bankAccountId=String($json.bankAccountId||'').trim();return [{json:{valid:p.test(sessionId)&&p.test(requestId),sessionId,requestId,bankAccountId,proposedInput:{sessionId,requestId,bankAccountId}}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -520,
+        0
+      ],
+      "id": "98000110-0000-4000-8000-000000000011",
+      "name": "Validate Status Input"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "xero_statement_scans",
+          "mode": "name"
+        },
+        "returnAll": true
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -300,
+        0
+      ],
+      "id": "98000110-0000-4000-8000-000000000012",
+      "name": "Read Captures",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const input=$('Validate Status Input').first().json;\nif (!input.valid) return [{json:{...input,response:{ok:false,error:{code:'INVALID_SESSION',message:'Queue status needs a valid conversation and request ID.'}}}}];\nconst scans=$input.all().map((item)=>item.json).filter((row)=>row&&row.scanId&&(!input.bankAccountId||String(row.bankAccountId)===input.bankAccountId));\nscans.sort((a,b)=>Date.parse(String(b.completedAt||0))-Date.parse(String(a.completedAt||0)));\nconst scan=scans[0];\nif (!scan) return [{json:{...input,response:{ok:true,hasCapture:false,usable:false,state:'missing',message:'No browser-observed Xero queue has been captured yet.',nextStep:'Ask the user to run the one-shot Xero capture helper on the relevant reconciliation page.'}}}];\nconst ageMinutes=Math.max(0,(Date.now()-Date.parse(String(scan.completedAt||0)))/60000);\nconst complete=String(scan.complete)==='yes'||scan.complete===true;\nconst reasons=(()=>{try{return JSON.parse(String(scan.blockingReasonsJson||'[]'));}catch{return ['saved blocker details could not be read'];}})();\nconst usable=complete&&ageMinutes<=30&&reasons.length===0;\nconst state=!complete?'incomplete':ageMinutes>30?'stale':'ready';\nreturn [{json:{...input,response:{ok:true,hasCapture:true,usable,state,scanId:String(scan.scanId),bankAccountId:String(scan.bankAccountId),completedAt:String(scan.completedAt),ageMinutes:Number(ageMinutes.toFixed(1)),expectedCount:Number(scan.expectedCount),observedCount:Number(scan.observedCount),captureSourceHash:String(scan.captureSourceHash||''),blockingReasons:reasons,message:usable?'A complete, fresh Xero reconciliation queue is ready for review.':state==='stale'?'The last complete Xero queue capture is more than 30 minutes old.':'The latest Xero queue capture is incomplete and cannot be reviewed.',nextStep:usable?'The review may use only statement lines carrying this scan ID and their saved source hashes.':'Ask the user to start a new one-shot helper and recapture the full queue.'}}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -80,
+        0
+      ],
+      "id": "98000110-0000-4000-8000-000000000013",
+      "name": "Shape Queue Status"
+    },
+    {
+      "parameters": {
+        "jsCode": "const shaped=$input.first().json; const response=shaped.response||{ok:false,error:{message:'No result'}}; return [{json:{occurredAt:new Date().toISOString(),sessionId:shaped.sessionId,requestId:shaped.requestId,toolName:'get_xero_queue_status',proposedInput:JSON.stringify(shaped.proposedInput||{}),result:JSON.stringify(response),error:response.ok===false?String(response.error?.message||'Tool failed'):'',response}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        120,
+        0
+      ],
+      "id": "98000110-0000-4000-8000-000000000015",
+      "name": "Prepare Audit"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "value": "tool_audit",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "occurredAt": "={{ $json.occurredAt }}",
+            "sessionId": "={{ $json.sessionId }}",
+            "requestId": "={{ $json.requestId }}",
+            "toolName": "={{ $json.toolName }}",
+            "proposedInput": "={{ $json.proposedInput }}",
+            "result": "={{ $json.result }}",
+            "error": "={{ $json.error }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "occurredAt",
+              "displayName": "occurredAt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "sessionId",
+              "displayName": "sessionId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "requestId",
+              "displayName": "requestId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "toolName",
+              "displayName": "toolName",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "proposedInput",
+              "displayName": "proposedInput",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "result",
+              "displayName": "result",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "error",
+              "displayName": "error",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        220,
+        0
+      ],
+      "id": "98000110-0000-4000-8000-000000000014",
+      "name": "Write Tool Audit",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const prepared=$('Prepare Audit').first().json;const response={...(prepared.response||{ok:false,error:{code:'TOOL_FAILED',message:'Queue status did not return a result.'}})};if(!Number.isInteger($json.id))response.auditWarning='The queue-status audit could not be saved locally.';return [{json:response}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ],
+      "id": "98000110-0000-4000-8000-000000000016",
+      "name": "Return Tool Result"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Tool Input": {
+      "main": [
+        [
+          {
+            "node": "Validate Status Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Status Input": {
+      "main": [
+        [
+          {
+            "node": "Read Captures",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Captures": {
+      "main": [
+        [
+          {
+            "node": "Shape Queue Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shape Queue Status": {
+      "main": [
+        [
+          {
+            "node": "Prepare Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Audit": {
+      "main": [
+        [
+          {
+            "node": "Write Tool Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Tool Audit": {
+      "main": [
+        [
+          {
+            "node": "Return Tool Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "executionTimeout": 30
+  },
+  "versionId": "98000110-0000-4000-8000-000000000900",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "phase": 20,
+    "testedWithN8n": "2.30.5",
+    "toolRisk": "read",
+    "authorization": "automatic-current-context-read",
+    "externalWrite": "none",
+    "dataSource": "local-xero-capture-tables"
+  },
+  "id": "phase20GetXeroQueueStatus",
+  "tags": [
+    {
+      "id": "tagAgentCanDo",
+      "name": "What your agent can do"
+    }
+  ]
+}

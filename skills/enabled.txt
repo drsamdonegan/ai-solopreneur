@@ -11,3 +11,6 @@ scheduler
 linkedin-profile-lookup
 linkedin-prospect-search
 seo-article-writer
+monthly-update
+xero-statement-capture
+xero-reconciliation

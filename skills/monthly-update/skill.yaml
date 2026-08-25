@@ -1,0 +1,5 @@
+id: monthly-update
+agent: investment
+name: Monthly Update
+version: 1.0.0
+description: Read a month of your email and write the company update that comes out of it — what worked, what was hard, what you learned, and what is next — in your own voice, with every line traceable to a real email.

@@ -1,0 +1,412 @@
+{
+  "name": "69 - TOOL - check_gmail_connection",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Is Gmail connected?\n\nAsks Gmail who it is connected as. It reads nothing but the mailbox\naddress and the message count, calls no model, and writes nothing.\n\nConnecting Gmail is a one-off job in n8n's own credential screen: that is\nwhere Google's sign-in window comes from. Nothing here, and nothing in the\nchat, can open that window on the user's behalf.",
+        "height": 300,
+        "width": 520,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -900,
+        -280
+      ],
+      "id": "95670000-0000-4000-8000-000000000001",
+      "name": "Connection tool explanation"
+    },
+    {
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "sessionId",
+              "type": "string"
+            },
+            {
+              "name": "requestId",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -660,
+        40
+      ],
+      "id": "95670000-0000-4000-8000-000000000010",
+      "name": "Tool Input"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const sessionId = typeof $json.sessionId === 'string' ? $json.sessionId.trim() : '';\nconst requestId = typeof $json.requestId === 'string' ? $json.requestId.trim() : '';\nconst uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;\nconst error = (uuidPattern.test(sessionId) && uuidPattern.test(requestId))\n  ? null\n  : { code: 'INVALID_SESSION', message: 'Checking the Gmail connection needs a valid conversation and request ID.' };\nreturn [{ json: {\n  valid: error === null, sessionId, requestId,\n  proposedInput: { sessionId, requestId },\n  ...(error ? { response: { ok: false, error } } : {}),\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -420,
+        40
+      ],
+      "id": "95670000-0000-4000-8000-000000000011",
+      "name": "Validate Connection Input"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "95670000-0000-4000-8000-000000000012-c1",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -180,
+        40
+      ],
+      "id": "95670000-0000-4000-8000-000000000012",
+      "name": "Input Is Valid?"
+    },
+    {
+      "parameters": {
+        "url": "https://gmail.googleapis.com/gmail/v1/users/me/profile",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleOAuth2Api",
+        "options": {
+          "timeout": 15000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        60,
+        -60
+      ],
+      "id": "95670000-0000-4000-8000-000000000013",
+      "name": "Probe Gmail",
+      "credentials": {
+        "googleOAuth2Api": {
+          "id": "phase16GmailReadonly",
+          "name": "Gmail (read-only)"
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const raw = $input.first().json ?? {};\nconst status = Number(raw.statusCode ?? 0);\nconst body = raw.body ?? {};\n// When no credential is selected at all, n8n fails the node rather than\n// returning a status, and onError passes the item through with `error` set.\nconst nodeError = String(raw.error?.message ?? raw.error ?? '');\n\nconst googleError = body?.error ?? {};\nconst googleMessage = String(googleError.message ?? '');\nconst reasons = (googleError.errors ?? []).map((entry) => String(entry?.reason ?? ''));\n\nconst CONNECT_STEPS = [\n  'Select the Connect Gmail button in the chat.',\n  'n8n opens on the credential named \"Gmail (read-only)\". Select Connect my account.',\n  'Google opens its own sign-in and permission window. Grant access.',\n  'The permission screen should say the app wants to view your email. If it mentions sending or deleting, the Scope field is wrong.',\n].join(' | ');\n\nlet state = 'unknown';\nlet message = '';\nlet fixUrl = '';\n\nif (status === 200 && body.emailAddress) {\n  state = 'connected';\n  message = `Gmail is connected as ${body.emailAddress}.`;\n} else if (reasons.includes('accessNotConfigured') || /has not been used in project|is disabled/i.test(googleMessage)) {\n  // Signing in again cannot fix this, so it must never be described as a\n  // lapsed connection. The sign-in worked; the project simply has the Gmail\n  // API switched off, and only the Google Cloud console can switch it on.\n  state = 'api_not_enabled';\n  const link = /https:\\/\\/console\\.[^\\s]*?gmail\\.googleapis\\.com[^\\s]*/.exec(googleMessage);\n  fixUrl = link ? link[0].replace(/[.,)]+$/, '') : 'https://console.cloud.google.com/apis/library/gmail.googleapis.com';\n  message = 'Gmail signed in correctly, but the Gmail API is switched off for this Google Cloud project, so Google refuses every read. This is a one-off setting in the Google Cloud console and reconnecting will not change it.';\n} else if (reasons.includes('ACCESS_TOKEN_SCOPE_INSUFFICIENT') || /insufficient/i.test(googleMessage)) {\n  state = 'wrong_scope';\n  message = 'Gmail is connected but was not granted permission to read mail. The credential Scope field has to be exactly https://www.googleapis.com/auth/gmail.readonly, and the account has to be connected again after fixing it.';\n} else if (status === 401 || status === 403 || /unauthor/i.test(googleMessage)) {\n  state = 'needs_reauth';\n  message = 'Gmail is set up but Google is refusing the connection. It usually needs reconnecting: this happens about a week after setup if the Google consent screen is still in Testing rather than published.';\n} else if (!status || /credential/i.test(nodeError)) {\n  state = 'not_connected';\n  message = 'There is no working Gmail connection yet. It has to be created once in n8n; it cannot be done from this chat.';\n} else {\n  state = 'unknown';\n  message = `Gmail did not answer as expected (${status || 'no response'}). It may be a temporary network problem.`;\n}\n\nreturn [{ json: {\n  connected: state === 'connected',\n  state,\n  message,\n  fixUrl,\n  emailAddress: state === 'connected' ? String(body.emailAddress) : '',\n  messagesTotal: state === 'connected' ? Number(body.messagesTotal ?? 0) : 0,\n  credentialUrl: '/api/gmail/connect',\n  connectSteps: CONNECT_STEPS,\n  scope: 'https://www.googleapis.com/auth/gmail.readonly',\n  // The chat turns this one exact path into a button. Any other wording,\n  // including a markdown link, renders as plain text and the learner has\n  // nothing to click.\n  linkInstruction: 'Include the exact text /api/gmail/connect in your reply. The chat turns it into a button that connects Gmail. Do not rewrite it, wrap it in markdown, or describe it instead.',\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        300,
+        -60
+      ],
+      "id": "95670000-0000-4000-8000-000000000014",
+      "name": "Read Gmail Probe"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const input = $('Validate Connection Input').first().json;\nconst probe = $input.first().json;\n\nconst NEXT = {\n  connected: 'Tell the user which mailbox it is connected to. Nothing more is needed.',\n  not_connected: 'Include the exact text /api/gmail/connect in your reply so the chat shows a Connect Gmail button. Then tell them, briefly: select Connect my account in n8n and grant access when Google asks. Say the permission screen should mention viewing email and nothing about sending or deleting. They do not need to report back; the update carries on by itself once Gmail answers. If they say they have already connected it, do not send them back to Google: this same check also fails when the credential exists but the workflows were imported before it did. Tell them to run import-workflows.command once (import-workflows-windows.cmd on Windows) and publish the main agent again, which is written up in docs/MONTHLY_UPDATE.md under the heading about Gmail reading as not connected straight after they connected it.',\n  api_not_enabled: 'Do not offer the connect button and do not suggest signing in again: the sign-in worked and repeating it will fail in exactly the same way. Say the Gmail API is switched off for their Google Cloud project, and give them the address in fixUrl to open, where they select Enable and then wait a minute before trying again. This is the one Gmail problem the chat cannot help with, because it lives in the Google Cloud console.',\n  wrong_scope: 'Say the connection was granted without permission to read mail. Include the exact text /api/gmail/connect so they can reopen the credential, and tell them to set the Scope field to exactly https://www.googleapis.com/auth/gmail.readonly and then select Connect my account again. A connection made with the wrong scope has to be redone, not repaired.',\n  needs_reauth: 'The connection has lapsed. Include the exact text /api/gmail/connect so they can reconnect and select Connect my account again. If this is about a week after they set it up, add that publishing the Google consent screen stops it expiring every seven days.',\n  unknown: 'Say it could not be checked right now and offer to try again. Do not tell the user to reconfigure anything on the strength of one failed check.',\n};\n\nreturn [{ json: { ...input, response: {\n  ok: true,\n  connected: probe.connected,\n  state: probe.state,\n  emailAddress: probe.emailAddress,\n  mailboxSize: probe.messagesTotal,\n  credentialUrl: probe.credentialUrl,\n  connectSteps: probe.connectSteps,\n  linkInstruction: probe.linkInstruction,\n  requiredScope: probe.scope,\n  fixUrl: probe.fixUrl,\n  message: probe.message,\n  nextStep: NEXT[probe.state] ?? NEXT.unknown,\n} } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        540,
+        -60
+      ],
+      "id": "95670000-0000-4000-8000-000000000015",
+      "name": "Shape Connection Result"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const input = $('Validate Connection Input').first().json;\nconst response = $json.response ?? { ok: false, error: { code: 'TOOL_FAILED', message: 'The tool did not return a result.' } };\nreturn { json: {\n  occurredAt: new Date().toISOString(),\n  sessionId: input.sessionId,\n  requestId: input.requestId,\n  toolName: 'check_gmail_connection',\n  proposedInput: JSON.stringify(input.proposedInput ?? {}),\n  result: JSON.stringify(response),\n  error: response.ok === false ? String(response.error?.message ?? 'Tool failed') : '',\n  response\n} };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        780,
+        40
+      ],
+      "id": "95670000-0000-4000-8000-000000000090",
+      "name": "Prepare Audit"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "value": "tool_audit",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "occurredAt": "={{ $json.occurredAt }}",
+            "sessionId": "={{ $json.sessionId }}",
+            "requestId": "={{ $json.requestId }}",
+            "toolName": "={{ $json.toolName }}",
+            "proposedInput": "={{ $json.proposedInput }}",
+            "result": "={{ $json.result }}",
+            "error": "={{ $json.error }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "occurredAt",
+              "displayName": "occurredAt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "sessionId",
+              "displayName": "sessionId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "requestId",
+              "displayName": "requestId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "toolName",
+              "displayName": "toolName",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "proposedInput",
+              "displayName": "proposedInput",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "result",
+              "displayName": "result",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "error",
+              "displayName": "error",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1020,
+        40
+      ],
+      "id": "95670000-0000-4000-8000-000000000091",
+      "name": "Write Tool Audit",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const prepared = $('Prepare Audit').item.json;\nconst response = { ...prepared.response };\nif (!Number.isInteger($json.id)) {\n  response.auditWarning = 'The tool result could not be written to the local audit table.';\n}\nreturn { json: response };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1260,
+        40
+      ],
+      "id": "95670000-0000-4000-8000-000000000092",
+      "name": "Return Tool Result"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Tool Input": {
+      "main": [
+        [
+          {
+            "node": "Validate Connection Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Connection Input": {
+      "main": [
+        [
+          {
+            "node": "Input Is Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Input Is Valid?": {
+      "main": [
+        [
+          {
+            "node": "Probe Gmail",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Probe Gmail": {
+      "main": [
+        [
+          {
+            "node": "Read Gmail Probe",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Gmail Probe": {
+      "main": [
+        [
+          {
+            "node": "Shape Connection Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shape Connection Result": {
+      "main": [
+        [
+          {
+            "node": "Prepare Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Audit": {
+      "main": [
+        [
+          {
+            "node": "Write Tool Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Tool Audit": {
+      "main": [
+        [
+          {
+            "node": "Return Tool Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "executionTimeout": 30
+  },
+  "versionId": "95670000-0000-4000-8000-0000000000100",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "phase": 16,
+    "testedWithN8n": "2.30.5",
+    "toolRisk": "read",
+    "authorization": "automatic-current-context-read",
+    "externalWrite": "none",
+    "externalRead": "gmail-readonly-profile-only"
+  },
+  "id": "phase16CheckGmailConnection",
+  "tags": [
+    {
+      "id": "tagAgentCanDo",
+      "name": "What your agent can do"
+    }
+  ]
+}

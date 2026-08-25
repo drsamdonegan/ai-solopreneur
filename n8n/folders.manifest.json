@@ -75,7 +75,11 @@
         "11-setup-sync-enabled-skills.json",
         "90-debug-agent-health.json",
         "14-setup-funding-data.json",
-        "16-setup-schedule-data.json"
+        "16-setup-schedule-data.json",
+        "62-internal-gmail-status.json",
+        "15-setup-monthly-update-data.json",
+        "18-setup-xero-capture-data.json",
+        "17-setup-bookkeeping-data.json"
       ]
     },
     {
@@ -83,7 +87,9 @@
       "name": "5. Ways your agent gets started",
       "description": "Entry points that let something outside your computer start your agent: a Telegram message today, an inbox or a schedule later.",
       "workflows": [
-        "70-trigger-telegram-message.json"
+        "70-trigger-telegram-message.json",
+        "73-trigger-monthly-update.json",
+        "107-trigger-reconciliation-review.json"
       ]
     },
     {
@@ -110,6 +116,38 @@
         "78-tool-update-schedule.json",
         "79-trigger-scheduled-runs.json",
         "80-internal-schedule-results.json"
+      ]
+    },
+    {
+      "id": "skill-company-update",
+      "name": "7. Your monthly update",
+      "description": "Reading a month of your email and writing the update that comes out of it: starting a run, reading the result, and saving the company facts that decide which email counts.",
+      "workflows": [
+        "65-tool-start-monthly-update.json",
+        "66-tool-get-monthly-update.json",
+        "69-tool-check-gmail-connection.json",
+        "67-tool-set-company-profile.json",
+        "74-run-monthly-update.json",
+        "75-run-thread-extraction.json"
+      ]
+    },
+    {
+      "id": "skill-bookkeeping",
+      "name": "8. Your bookkeeping",
+      "description": "Reading the transactions waiting in Xero, with complete browser evidence and fail-closed queue status.",
+      "workflows": [
+        "110-tool-get-xero-queue-status.json",
+        "111-webhook-import-xero-statement-scan.json",
+        "112-webhook-get-xero-annotations.json",
+        "100-tool-check-xero-connection.json",
+        "101-tool-set-bookkeeping-profile.json",
+        "102-tool-start-reconciliation-review.json",
+        "103-tool-get-reconciliation-suggestions.json",
+        "104-tool-record-reconciliation-decision.json",
+        "105-run-reconciliation-review.json",
+        "106-run-transaction-matching.json",
+        "108-tool-prepare-green-matches.json",
+        "109-run-receipt-lookup.json"
       ]
     }
   ]

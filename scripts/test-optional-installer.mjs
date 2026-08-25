@@ -130,6 +130,33 @@ try {
   assert.deepEqual(await snapshot(xeroPackageRoot), xeroBeforeSecondInstall, "the Xero package must be idempotent");
 
   const xeroDependencyRoot = await makeScratch("xero-dependency");
+  // The release checkout can itself have Xero installed for production. This
+  // fixture needs both installed copies absent so a direct review-module add
+  // still proves that capture is a hard dependency.
+  for (const id of ["xero-statement-capture", "xero-reconciliation"]) {
+    await rm(join(xeroDependencyRoot, "skills", id), {
+      recursive: true,
+      force: true,
+    });
+  }
+  const xeroDependencyEnabledPath = join(
+    xeroDependencyRoot,
+    "skills",
+    "enabled.txt",
+  );
+  const xeroDependencyEnabled = (
+    await readFile(xeroDependencyEnabledPath, "utf8")
+  )
+    .split(/\r?\n/)
+    .filter(
+      (line) =>
+        !["xero-statement-capture", "xero-reconciliation"].includes(line),
+    )
+    .join("\n");
+  await writeFile(
+    xeroDependencyEnabledPath,
+    `${xeroDependencyEnabled.replace(/\n+$/, "")}\n`,
+  );
   const rejectedXero = install(xeroDependencyRoot, "xero-reconciliation", false);
   assert.match(
     `${rejectedXero.stdout}\n${rejectedXero.stderr}`,
