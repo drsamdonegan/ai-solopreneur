@@ -354,6 +354,9 @@ function chatEnv(cfg) {
     // container, so it stays on loopback and out of the public address.
     DOCUMENT_WORKER_URL: `http://127.0.0.1:${cfg.documentWorkerPort}`,
     N8N_CHAT_WEBHOOK_URL: `http://127.0.0.1:${cfg.n8nPort}/webhook/chat`,
+    // The learner's browser cannot reach the loopback address above, so the
+    // Gmail connect link has to be sent to the public one.
+    N8N_PUBLIC_URL: cfg.n8nPublicUrl,
   };
 }
 

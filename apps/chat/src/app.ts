@@ -74,6 +74,9 @@ const MAX_PAID_RESEARCH_REQUEST_BYTES = 1_024 * 1_024;
 const MAX_SEO_ARTICLE_REQUEST_BYTES = 1_024 * 1_024;
 const MAX_REQUEST_BYTES = 65_536;
 const MAX_UPSTREAM_BYTES = 65_536;
+// Where a learner's own browser finds n8n when nothing says otherwise, which
+// is the case on their own computer. A hosted kit passes its real address in.
+const DEFAULT_N8N_PUBLIC_URL = "http://localhost:5678";
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -153,6 +156,13 @@ interface ChatResponse {
 export interface ChatGatewayOptions {
   publicDirectory: string;
   upstreamUrl: string;
+  /**
+   * Where n8n is in a browser, which is not where the gateway reaches it: the
+   * gateway talks to loopback, while the learner has to be sent somewhere
+   * their own browser can open. Locally those differ only by hostname; on a
+   * hosted kit they are entirely different addresses.
+   */
+  n8nPublicUrl?: string;
   timeoutMs?: number;
   fetchImplementation?: typeof fetch;
   logError?: (message: string, error?: unknown) => void;
@@ -2934,6 +2944,87 @@ export function createChatHandler(options: ChatGatewayOptions): RequestListener 
           });
         } catch {
           sendJson(response, 200, { schemaVersion: 1, available: false });
+        }
+        return;
+      }
+
+      // Connecting Gmail happens in n8n, because the Google client secret
+      // lives in its encrypted credential store and nothing can read it back
+      // out. The chat cannot do the connecting, but it can be the one address
+      // the learner and the agent both know, so neither has to be told where
+      // n8n is running.
+      if (url.pathname === "/api/gmail/connect") {
+        if (request.method !== "GET") {
+          sendJson(
+            response,
+            405,
+            {
+              error: {
+                code: "INVALID_REQUEST",
+                message: "Open the Gmail connection with GET.",
+              },
+            },
+            { Allow: "GET" },
+          );
+          return;
+        }
+        const target = new URL(
+          "/home/credentials",
+          options.n8nPublicUrl ?? DEFAULT_N8N_PUBLIC_URL,
+        );
+        response.writeHead(302, {
+          Location: target.toString(),
+          "Cache-Control": "no-store",
+        });
+        response.end();
+        return;
+      }
+
+      // Polled by the page while the learner is away in Google's window, so
+      // the conversation can carry on by itself the moment Gmail answers. It
+      // costs nothing: n8n reads the mailbox address and no message content.
+      // A chat page has to keep working when n8n is down or mid-restart, so
+      // every failure here is a quiet "not yet" rather than an error.
+      if (url.pathname === "/api/gmail/status") {
+        if (request.method !== "GET") {
+          sendJson(
+            response,
+            405,
+            {
+              error: {
+                code: "INVALID_REQUEST",
+                message: "Read the Gmail status with GET.",
+              },
+            },
+            { Allow: "GET" },
+          );
+          return;
+        }
+        try {
+          const statusUrl = new URL("/webhook/gmail-status", options.upstreamUrl);
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 5_000);
+          let upstream: Response;
+          try {
+            upstream = await fetchImplementation(statusUrl, {
+              signal: controller.signal,
+            });
+          } finally {
+            clearTimeout(timer);
+          }
+          if (!upstream.ok) {
+            sendJson(response, 200, { schemaVersion: 1, connected: false });
+            return;
+          }
+          const body = (await upstream.json()) as Record<string, unknown>;
+          sendJson(response, 200, {
+            schemaVersion: 1,
+            connected: body.connected === true,
+            emailAddress:
+              typeof body.emailAddress === "string" ? body.emailAddress : "",
+          });
+        } catch {
+          sendJson(response, 200, { schemaVersion: 1, connected: false });
         }
         return;
       }

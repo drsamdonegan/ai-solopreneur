@@ -503,6 +503,7 @@
       "name": "5. Setup and health",
       "description": "Run-once plumbing and the health check. A learner rarely opens these, but they should be able to find them.",
       "workflows": [
+        "62-internal-gmail-status.json",
         "15-setup-monthly-update-data.json"
       ]
     }

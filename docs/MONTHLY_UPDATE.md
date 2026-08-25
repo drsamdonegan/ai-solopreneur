@@ -93,7 +93,9 @@ It checks and tells you which mailbox it is connected to. It will also refuse to
 
 ### Reconnecting later, without hunting for the screen
 
-When the connection is missing or has lapsed, your agent gives you a button straight to `http://localhost:5678/home/credentials`. Open **Gmail (read-only)**, select **Connect my account**, and grant access. You do not need to come back and say so — when you return to the chat tab, the agent checks again and carries on.
+When the connection is missing or has lapsed, your agent gives you a **Connect Gmail** button that opens n8n on the right credential. Select **Connect my account** and grant access. You do not need to come back and say so — the chat watches for Gmail to start answering and carries on by itself.
+
+The button goes through the chat rather than to a fixed n8n address, so it is correct whether you run this on your own computer or against a hosted n8n.
 
 Your agent cannot connect Gmail for you and cannot make Google's sign-in window appear. The Google client secret lives in n8n's encrypted credential store, and nothing can read it back out, so n8n is the only thing that can run the sign-in. That is also why the secret is not in a `.env` file. Your agent will never ask you for a Google password or a verification code; if anything ever does, something is wrong.
 
@@ -204,7 +206,9 @@ on the placeholder. Run step 15 — `import-workflows.command`, or `import-workf
 on Windows — then publish the main agent again and ask once more. Reconnecting in Google a
 second time will not help, because Google is not the thing that is refusing.
 
-**"Gmail refused the request."** The credential needs reconnecting. Ask your agent "is my email connected?" for the specific diagnosis, or open **Gmail (read-only)** in n8n and select **Connect my account** again. If this happens about a week after setup, the Google consent screen is still in Testing — go back to step 2 and publish the app.
+**"Gmail refused the request."** Ask your agent "is my email connected?" — it separates the three causes, which need three different fixes. If it says the connection has lapsed, reconnect; about a week after setup that means the consent screen is still in Testing, so go back to step 2 and publish the app. If it says the permission was granted without read access, the Scope field is wrong: fix it and connect the account again.
+
+**"The Gmail API is switched off for this project."** Signing in again cannot fix this one, and the agent will say so rather than send you round in a circle. It means step 2's *enable the Gmail API* was missed, or was done on a different Google Cloud project. Your agent gives you the exact address to open; select **Enable** there, wait a minute for Google to catch up, and ask again. A newly enabled API takes a few minutes to start working, so one more refusal straight afterwards is normal.
 
 **"Nothing looked like company news."** Almost always a thin profile. If the scan does not know your customers, investors, or product names, it cannot tell their email apart from everything else. Add more and run it again.
 

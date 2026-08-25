@@ -328,14 +328,62 @@ const flaky = probe({ statusCode: 503, body: {} });
 check(flaky.connected === false && flaky.state === "unknown", `a 503 gave "${flaky.state}"`);
 check(!/reconfigure/i.test(flaky.message), "a transient failure told the user to reconfigure");
 
-// The chat linkifies exactly one address. Every state has to carry it, and the
-// agent has to be told to reproduce it verbatim or the learner gets plain text.
-const CREDENTIAL_URL = "http://localhost:5678/home/credentials";
-for (const result of [live, expired, absent, flaky]) {
+// A 403 from Google is two completely different problems wearing the same
+// number. An unenabled Gmail API is not a lapsed connection, and telling the
+// learner to sign in again sends them round a loop that cannot ever fix it:
+// the sign-in already worked.
+const apiOff = probe({
+  statusCode: 403,
+  body: {
+    error: {
+      code: 403,
+      message:
+        "Gmail API has not been used in project 241792255360 before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/gmail.googleapis.com/overview?project=241792255360 then retry.",
+      errors: [{ reason: "accessNotConfigured", domain: "usageLimits" }],
+    },
+  },
+});
+check(apiOff.state === "api_not_enabled", `an unenabled Gmail API gave "${apiOff.state}"`);
+check(apiOff.fixUrl.includes("gmail.googleapis.com"), "the unenabled API did not carry the address that fixes it");
+check(/switched off|disabled|not been used/i.test(apiOff.message),
+  "the unenabled API was not named as the cause");
+check(!/lapsed|expired|needs reconnecting/i.test(apiOff.message),
+  "an unenabled API was described as a lapsed connection");
+
+const badScope = probe({
+  statusCode: 403,
+  body: {
+    error: {
+      code: 403,
+      message: "Request had insufficient authentication scopes.",
+      errors: [{ reason: "ACCESS_TOKEN_SCOPE_INSUFFICIENT" }],
+    },
+  },
+});
+check(badScope.state === "wrong_scope", `an insufficient scope gave "${badScope.state}"`);
+
+// The chat linkifies exactly one address. Every state that the learner can act
+// on has to carry it, and the agent has to be told to reproduce it verbatim or
+// the learner gets plain text. It is a route on the chat rather than an n8n
+// address, so it is right on a hosted kit as well as a local one.
+const CREDENTIAL_URL = "/api/gmail/connect";
+for (const result of [live, expired, absent, flaky, apiOff, badScope]) {
   check(result.credentialUrl === CREDENTIAL_URL, "the probe lost the credential address");
   check(result.linkInstruction.includes(CREDENTIAL_URL), "the probe lost the link instruction");
   check(result.scope === "https://www.googleapis.com/auth/gmail.readonly", "the probe reports the wrong scope");
 }
+check(!/localhost:5678/.test(JSON.stringify([live, expired, absent, flaky, apiOff, badScope])),
+  "the probe still hardcodes a local n8n address, which is wrong on a hosted kit");
+
+// The one Gmail problem the chat cannot help with must not offer the button.
+const shapedApiOff = runNode(connection, "Shape Connection Result", {
+  input: [apiOff],
+  nodes: { "Validate Connection Input": [{ sessionId: "s", requestId: "r", proposedInput: {} }] },
+})[0];
+check(!shapedApiOff.response.nextStep.includes(CREDENTIAL_URL),
+  "an unenabled Gmail API still offered the connect button");
+check(shapedApiOff.response.fixUrl.includes("gmail.googleapis.com"),
+  "the unenabled API refusal did not pass on the address that fixes it");
 
 const shaped69 = runNode(connection, "Shape Connection Result", {
   input: [absent],
