@@ -173,6 +173,8 @@
     grant: "M12 3 4 7v5c0 4.6 3.3 8.3 8 9 4.7-.7 8-4.4 8-9V7l-8-4Zm-2.6 8.6 2 2 3.8-4",
     calendar: "M5 6h14v14H5V6Zm0 4h14M9 3v4m6-4v4m-4 8h4",
     ledger: "M5 4h11l3 3v13H5V4Zm3 5h6M8 13h8M8 17h5",
+    // A month of email, and the one written thing that comes out of it.
+    mailUpdate: "M3 5h18v11H3V5Zm0 0 9 6.5L21 5M7 20h10",
   };
   const SKILL_ICON_BY_ID = {
     "meeting-to-actions": "checklist",
@@ -188,7 +190,7 @@
     "seo-aeo-article-writer": "article",
     "funding-radar": "grant",
     "funding-and-investor-updates": "grant",
-    "monthly-update": "calendar",
+    "monthly-update": "mailUpdate",
     "xero-coding-review": "ledger",
   };
   const STORAGE_KEY = "ai-solopreneur-chat-session";
