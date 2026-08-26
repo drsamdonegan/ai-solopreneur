@@ -568,8 +568,8 @@
     }, 2_500);
   }
 
-  // Agent replies are plain text. Two local paths, and only these two, become
-  // links: an article download, and the Gmail connect route. Nothing else is
+  // Agent replies are plain text. Only these local paths become links: an
+  // article download and the two provider connection routes. Nothing else is
   // linkified — an agent that reads a stranger's email must never be able to
   // turn a URL from that email into something clickable.
   const SAFE_LINKS = [
@@ -596,6 +596,18 @@
         link.textContent = "Connect Gmail (read-only)";
         gmailConnectOffered = true;
         startGmailConnectionWatch();
+        return link;
+      },
+    },
+    {
+      pattern: /(?:http:\/\/localhost:\d{2,5})?\/api\/xero\/connect\b/g,
+      build() {
+        const link = document.createElement("a");
+        link.className = "message__connect";
+        link.href = "/api/xero/connect";
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        link.textContent = "Open Xero credentials";
         return link;
       },
     },

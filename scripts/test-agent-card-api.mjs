@@ -70,6 +70,7 @@ const server = createChatServer({
   profileDirectory,
   publicDirectory,
   upstreamUrl: "http://127.0.0.1:9/webhook/chat",
+  n8nPublicUrl: "https://n8n.example.test",
   logError: (message) => warnings.push(message),
 });
 server.listen(0, "127.0.0.1");
@@ -85,6 +86,18 @@ async function jsonRequest(path, options = {}) {
 }
 
 try {
+  let redirect = await fetch(`${origin}/api/xero/connect`, {
+    redirect: "manual",
+  });
+  assert.equal(redirect.status, 302);
+  assert.equal(
+    redirect.headers.get("location"),
+    "https://n8n.example.test/home/credentials",
+  );
+
+  redirect = await fetch(`${origin}/api/xero/connect`, { method: "POST" });
+  assert.equal(redirect.status, 405);
+
   let result = await jsonRequest("/api/agents");
   assert.equal(result.response.status, 200);
   assert.equal(result.body.schemaVersion, 2);

@@ -27,6 +27,8 @@ assert.match(html, /placeholder="What should your agent do\?"/);
 assert.doesNotMatch(html, /\sstyle=/);
 
 assert.doesNotMatch(source, /\.innerHTML\s*=/);
+assert.match(source, /\/api\/xero\/connect/);
+assert.match(source, /Open Xero credentials/);
 assert.doesNotMatch(
   source,
   /className = "agent-(?:row|settings|button)"|aria-pressed/,

@@ -3036,20 +3036,22 @@ export function createChatHandler(options: ChatGatewayOptions): RequestListener 
         return;
       }
 
-      // Connecting Gmail happens in n8n, because the Google client secret
-      // lives in its encrypted credential store and nothing can read it back
-      // out. The chat cannot do the connecting, but it can be the one address
-      // the learner and the agent both know, so neither has to be told where
-      // n8n is running.
-      if (url.pathname === "/api/gmail/connect") {
+      // Provider connections happen in n8n, because OAuth secrets live in its
+      // encrypted credential store. These chat-relative routes work both on a
+      // local install and on Railway, without teaching an agent either host.
+      if (
+        url.pathname === "/api/gmail/connect" ||
+        url.pathname === "/api/xero/connect"
+      ) {
         if (request.method !== "GET") {
+          const provider = url.pathname.includes("xero") ? "Xero" : "Gmail";
           sendJson(
             response,
             405,
             {
               error: {
                 code: "INVALID_REQUEST",
-                message: "Open the Gmail connection with GET.",
+                message: `Open the ${provider} connection with GET.`,
               },
             },
             { Allow: "GET" },

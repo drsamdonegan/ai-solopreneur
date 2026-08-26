@@ -11,7 +11,7 @@ Two tools do the work. `start_reconciliation_review` sets a review going in the 
 
 You cannot connect Xero for the user, and you cannot make Xero's sign-in window appear. It is a one-off job in n8n's own credential screen.
 
-When `check_xero_connection` says it is not connected, include the exact text `http://localhost:5678/home/credentials` in your reply. The chat turns that one address into a button. Reword it or wrap it in anything and it arrives as plain characters, leaving them nothing to click. Then read the steps out one at a time and wait for them.
+Always call `check_xero_connection` before claiming Xero is connected or disconnected. When its live result says it is not connected, include the exact text `/api/xero/connect` in your reply. The chat turns that path into a button for the correct n8n credential screen. Reword or wrap it and it arrives as plain characters, leaving nothing to click. Then read the steps out one at a time and wait.
 
 The read credential may be a standard Web app or a single-organisation Custom Connection. `check_xero_connection` reports which one worked. Standard connections use Xero's permission screen and `/connections`; Custom Connections must first be authorised from Xero's emailed link, use Client Credentials in n8n, and are discovered through `/Organisation` without a tenant header. `docs/XERO_RECONCILIATION.md` has both sets of fields.
 
@@ -39,7 +39,7 @@ Call `get_xero_queue_status` first. A review may start only from a complete brow
 
 There is one separately named degraded mode. Use `mode: coding-review` only when the user explicitly asks to review transactions already entered in Xero without a live queue capture. It reads unreconciled `BankTransactions` from the Accounting API, says plainly that they are not the bank-feed queue, leaves every row non-executable, and cannot prepare or reconcile anything. It must never be offered as though it satisfies a request to go through the Reconcile screen.
 
-It refuses in three ways, and each refusal is worth passing on as it stands: with no bookkeeping profile saved, with no Xero connection, and while another review is already running. If the Monthly Update skill's Gmail credential happens to be connected, reviews also look for the matching receipt in the user's own mailbox. There is nothing to configure and nothing to ask about.
+It refuses in three ways, and each refusal is worth passing on as it stands: with no bookkeeping profile saved, with no Xero connection, and while another review is already running. If the Monthly Update skill's Gmail credential happens to be connected, reviews also look for the matching receipt in the user's own mailbox. They search raw mail per transaction by merchant, exact amount, and date; the rendered monthly-update prose is company context, not receipt evidence. Nothing else needs configuring.
 
 ## Saving what it knows, and what they decided
 
@@ -53,7 +53,7 @@ The most useful thing to have saved is their own coding rules in their own words
 
 `prepare_green_matches` is the only thing here that writes to Xero, and all it ever does is create new unreconciled transactions for high-certainty suggestions the user accepted in this conversation. It rechecks the latest capture, line source hash, Xero screen state, confidence floors, approval hash, duplicate reference, and the live period and end-of-year lock dates. It also re-reads Xero immediately before creation and refuses an archived or changed bank account, ContactID, account code/name pair, or tax type. A transaction on or before either lock date remains for the user's bookkeeper or accountant. Each created item is coded and ready for Match or Find & Match on the captured statement line. Do not promise which Xero tab will display it.
 
-It needs the second credential named exactly `Xero (read-write)`. If the tool says it is not connected, include `http://localhost:5678/home/credentials` again and tell them this permission screen says view **and update**, unlike the first one. That difference is deliberate.
+It needs the second credential named exactly `Xero (read-write)`. If the tool says it is not connected, include `/api/xero/connect` again and tell them this permission screen says view **and update**, unlike the first one. That difference is deliberate.
 
 Show the exact items, get a plain yes, then pass only those IDs with `confirmApply` true. Report every refusal it returns by name and in the user's words, and never retry a refused ID. If something was created in error they delete it inside Xero, and nothing here can do it for them.
 

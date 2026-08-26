@@ -104,7 +104,8 @@ check("a saved profile lets the run proceed", withProfile.shouldQueue !== false)
 const authSrc = codeOf(start, "Shape Auth Needed");
 const auth = runCode(authSrc, { nodes: { "Read Start Probe": [{ xeroProblem: "not_connected" }] }, input: [{}] })[0].response;
 check("no Xero connection refuses before spending", auth.ok === false && auth.error.code === "XERO_NOT_CONNECTED");
-check("the refusal carries the clickable address", auth.credentialUrl === "http://localhost:5678/home/credentials");
+check("the refusal carries the deployment-safe connection path", auth.credentialUrl === "/api/xero/connect");
+check("the refusal tells the agent to emit that exact path", /\/api\/xero\/connect/.test(auth.linkInstruction));
 check("the refusal forbids asking for a password", /never ask the user for a xero password/i.test(auth.nextStep));
 
 const customStartSrc = codeOf(start, "Read Custom Start Probe");
