@@ -43,53 +43,104 @@ assert.deepEqual(validated.jobTitles, ["Head of Operations", "COO"]);
 assert.match(JSON.stringify(validated.searchBody.filters), /current\.title/);
 assert.match(JSON.stringify(validated.searchBody.filters), /company_industries/);
 assert.match(JSON.stringify(validated.searchBody.filters), /full_location/);
+assert.deepEqual(
+  validated.searchBody.filters.conditions.filter(
+    (condition) => condition.field === "experience.employment_details.current.company_headcount_latest",
+  ),
+  [
+    {
+      field: "experience.employment_details.current.company_headcount_latest",
+      type: "=>",
+      value: 51,
+    },
+    {
+      field: "experience.employment_details.current.company_headcount_latest",
+      type: "=<",
+      value: 200,
+    },
+  ],
+);
+
+const minimumSize = validate({
+  session_id: "session",
+  request_id: "request",
+  job_titles: "Engineering Manager",
+  sector: "Technology",
+  location: "Australia",
+  company_size: "101+",
+  result_limit: 10,
+  paid_search_confirmed: true,
+}).json;
+assert.equal(minimumSize.valid, true);
+assert.deepEqual(
+  minimumSize.searchBody.filters.conditions.filter(
+    (condition) => condition.field === "experience.employment_details.current.company_headcount_latest",
+  ),
+  [
+    {
+      field: "experience.employment_details.current.company_headcount_latest",
+      type: "=>",
+      value: 101,
+    },
+  ],
+);
 
 const rank = new Function("$json", "$", code("Rank Safe Prospects"));
-const ranked = rank(
-  {
-    statusCode: 200,
-    headers: { "x-credits-used": "0.03" },
-    body: {
-      total_count: 1,
-      profiles: [
-        {
-          basic_profile: {
-            name: "Alex Morgan",
-            headline: "Operations leader in logistics",
-            current_title: "Head of Operations",
-            location: { full_location: "Melbourne, Australia" },
-            email: "must-not-leak@example.com",
-          },
-          experience: {
-            employment_details: {
-              current: [
-                {
-                  is_default: true,
-                  title: "Head of Operations",
-                  name: "Example Logistics",
-                  company_industries: ["Logistics"],
-                  company_headcount: 120,
-                  phone: "+61 400 000 000",
-                },
-              ],
+const originalUrl = globalThis.URL;
+let ranked;
+try {
+  // n8n Code nodes do not expose the URL constructor. Keep this test aligned
+  // with production instead of accidentally exercising Node's richer global.
+  globalThis.URL = undefined;
+  ranked = rank(
+    {
+      statusCode: 200,
+      headers: { "x-credits-used": "0.03" },
+      body: {
+        total_count: 1,
+        profiles: [
+          {
+            basic_profile: {
+              name: "Alex Morgan",
+              headline: "Operations leader in logistics",
+              current_title: "Head of Operations",
+              location: { full_location: "Melbourne, Australia" },
+              email: "must-not-leak@example.com",
+            },
+            experience: {
+              employment_details: {
+                current: [
+                  {
+                    is_default: true,
+                    title: "Head of Operations",
+                    name: "Example Logistics",
+                    company_industries: ["Logistics"],
+                    company_headcount_latest: 120,
+                    phone: "+61 400 000 000",
+                  },
+                ],
+              },
+            },
+            social_handles: {
+              professional_network_identifier: {
+                profile_url: "https://www.linkedin.com/in/alex-morgan-example",
+              },
             },
           },
-          social_handles: {
-            professional_network_identifier: {
-              profile_url: "https://www.linkedin.com/in/alex-morgan-example",
-            },
-          },
-        },
-      ],
+        ],
+      },
     },
-  },
-  (name) => ({ first: () => ({ json: name === "Validate Prospect Input" ? validated : {} }) }),
-).json.response;
+    (name) => ({ first: () => ({ json: name === "Validate Prospect Input" ? validated : {} }) }),
+  ).json.response;
+} finally {
+  globalThis.URL = originalUrl;
+}
 
 assert.equal(ranked.ok, true);
 assert.equal(ranked.search_status, "complete");
 assert.equal(ranked.credits_used, 0.03);
 assert.equal(ranked.prospects.length, 1);
+assert.equal(ranked.returned_matches, 1);
 assert.deepEqual(ranked.prospects[0].evidence, [
   "current role",
   "sector",
@@ -98,6 +149,32 @@ assert.deepEqual(ranked.prospects[0].evidence, [
 ]);
 assert.equal(ranked.prospects[0].company_headcount, 120);
 assert.doesNotMatch(JSON.stringify(ranked), /must-not-leak|400 000/);
+
+const unreadable = rank(
+  {
+    statusCode: 200,
+    headers: { "x-credits-used": "0.03" },
+    body: {
+      total_count: 1,
+      profiles: [
+        {
+          basic_profile: { name: "Unsafe URL" },
+          social_handles: {
+            professional_network_identifier: {
+              profile_url: "https://example.com/in/not-linkedin",
+            },
+          },
+        },
+      ],
+    },
+  },
+  (name) => ({ first: () => ({ json: name === "Validate Prospect Input" ? validated : {} }) }),
+).json.response;
+assert.equal(unreadable.ok, false);
+assert.equal(unreadable.search_status, "unavailable");
+assert.equal(unreadable.returned_matches, 1);
+assert.equal(unreadable.error.code, "PROFILE_URLS_UNREADABLE");
+assert.equal(unreadable.prospects.length, 0);
 
 assert.equal(manifest.policyEntries[0].risk, "paid_external_read");
 assert.equal(manifest.policyEntries[0].mode, "explicit_per_search_credit_approval");

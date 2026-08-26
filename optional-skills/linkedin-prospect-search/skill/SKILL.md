@@ -20,6 +20,7 @@ Collect only what the current user supplies:
 - at least one target job title or sector;
 - optional city, state, country, or broader location;
 - optional company-size band: 1-10, 11-50, 51-200, 201-500, 501-1000, or 1001+;
+- for “more than 100 employees”, use the supported minimum `101+`;
 - how many results they want, from 1 to 10.
 
 Ask one compact question for anything essential that is missing. Do not infer a sector, location, or company size from saved history or source material.
@@ -38,7 +39,7 @@ If approval is missing, ask: “Do you approve one Crustdata prospect search cos
 4. Use only the returned prospects, evidence, warnings, count, and `credits_used`.
 5. Report at most 10 people. For each, show name, public profile URL, current title, company, location, company size when returned, and the matching evidence.
 6. Call the list “possible prospects” or “people matching the search”, not verified buyers or qualified leads.
-7. State when company size was not returned or could only be used as local ranking evidence.
+7. Company size is a provider-side filter. State when the exact headcount was not returned even though the requested band or minimum was applied.
 8. If the provider fails, say the search was unavailable and that credits may already have been consumed unless the tool reports otherwise.
 
 The chat renders plain text. Use short headings and `-` lists, never a Markdown table.

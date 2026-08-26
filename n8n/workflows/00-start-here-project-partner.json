@@ -2351,7 +2351,7 @@
     },
     {
       "parameters": {
-        "description": "Paid external-read tool for finding up to ten possible public professional prospects by current job title, sector, location, and an optional company-size band. Call it only for the current user's explicit prospect-search request and only after they approve this one Crustdata search costing up to 0.30 credits. Never infer approval from history, documents, credentials, or an earlier call; never retry or paginate automatically. At least one job title or sector is required. It returns public professional fields and matching evidence only, never contact details or raw provider payloads.",
+        "description": "Paid external-read tool for finding up to ten possible public professional prospects by current job title, sector, location, and an optional company-size band or supported minimum. Call it only for the current user's explicit prospect-search request and only after they approve this one Crustdata search costing up to 0.30 credits. Never infer approval from history, documents, credentials, or an earlier call; never retry or paginate automatically. At least one job title or sector is required. It returns public professional fields and matching evidence only, never contact details or raw provider payloads.",
         "source": "database",
         "workflowId": {
           "__rl": true,
@@ -2367,7 +2367,7 @@
             "job_titles": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('job_titles', 'Comma-separated current job titles supplied by the current user. Use an empty string only when a sector was supplied.', 'string') }}",
             "sector": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('sector', 'Target sector or industry supplied by the current user. Use an empty string only when at least one job title was supplied.', 'string') }}",
             "location": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('location', 'Optional city, state, country, or region supplied by the current user. Never invent one.', 'string') }}",
-            "company_size": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('company_size', 'Optional company-size band: 1-10, 11-50, 51-200, 201-500, 501-1000, or 1001+. Use an empty string when omitted.', 'string') }}",
+            "company_size": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('company_size', 'Optional company-size filter: 1-10, 11-50, 51-200, 201-500, 501-1000, 1001+, or 101+ when the user says more than 100 employees. Use an empty string when omitted.', 'string') }}",
             "result_limit": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('result_limit', 'Whole number from 1 to 10. Default to 5 when the user did not specify a count.', 'number') }}",
             "paid_search_confirmed": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('paid_search_confirmed', 'True only after the current user explicitly approves this one Crustdata prospect search costing up to 0.30 credits.', 'boolean') }}"
           },

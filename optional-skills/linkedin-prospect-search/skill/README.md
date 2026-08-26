@@ -24,4 +24,6 @@ Find up to five operations leaders at Australian logistics companies with 51-200
 
 A correct result names the search criteria, reports credits used, gives evidence for each possible prospect, and does not expose contact details or claim anyone is a qualified buyer.
 
+Use `101+` when the requested minimum is “more than 100 employees.”
+
 Without the credential or tool, the agent must say live prospect search is unavailable. There is no Python, browser, public-search, or query-generation fallback.
