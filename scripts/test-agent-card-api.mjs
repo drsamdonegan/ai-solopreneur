@@ -20,6 +20,9 @@ const skillPacksDirectory = join(process.cwd(), "skill-packs");
 await mkdir(skillsDirectory, { recursive: true });
 await mkdir(publicDirectory, { recursive: true });
 await writeFile(join(publicDirectory, "index.html"), "<!doctype html><title>test</title>");
+await writeFile(join(publicDirectory, "app.js"), "globalThis.agentLoaded = true;\n");
+await writeFile(join(publicDirectory, "agent.config.js"), "globalThis.agentConfigLoaded = true;\n");
+await writeFile(join(publicDirectory, "styles.css"), "body { color: rebeccapurple; }\n");
 
 async function addSkill(id, agent, name) {
   const directory = join(skillsDirectory, id);
@@ -86,6 +89,44 @@ async function jsonRequest(path, options = {}) {
 }
 
 try {
+  for (const assetPath of ["/app.js", "/agent.config.js", "/styles.css"]) {
+    const documentNavigation = await fetch(`${origin}${assetPath}`, {
+      headers: {
+        accept: "text/html,application/xhtml+xml",
+        "sec-fetch-dest": "document",
+      },
+      redirect: "manual",
+    });
+    assert.equal(documentNavigation.status, 302);
+    assert.equal(documentNavigation.headers.get("location"), "/");
+    assert.equal(documentNavigation.headers.get("cache-control"), "no-store");
+  }
+
+  const legacyDocumentNavigation = await fetch(`${origin}/app.js`, {
+    headers: { accept: "text/html" },
+    redirect: "manual",
+  });
+  assert.equal(legacyDocumentNavigation.status, 302);
+  assert.equal(legacyDocumentNavigation.headers.get("location"), "/");
+
+  const scriptAsset = await fetch(`${origin}/app.js`, {
+    headers: {
+      accept: "*/*",
+      "sec-fetch-dest": "script",
+    },
+  });
+  assert.equal(scriptAsset.status, 200);
+  assert.match(scriptAsset.headers.get("content-type") ?? "", /^text\/javascript/);
+  assert.match(await scriptAsset.text(), /agentLoaded/);
+
+  const missingPage = await fetch(`${origin}/missing`, {
+    headers: {
+      accept: "text/html",
+      "sec-fetch-dest": "document",
+    },
+  });
+  assert.equal(missingPage.status, 404);
+
   let redirect = await fetch(`${origin}/api/xero/connect`, {
     redirect: "manual",
   });

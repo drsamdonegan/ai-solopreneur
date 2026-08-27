@@ -89,6 +89,12 @@ const MIME_TYPES: Readonly<Record<string, string>> = {
   ".svg": "image/svg+xml",
 };
 
+const FRONTEND_ASSET_PATHS = new Set([
+  "/agent.config.js",
+  "/app.js",
+  "/styles.css",
+]);
+
 const SECURITY_HEADERS: Readonly<Record<string, string>> = {
   "Content-Security-Policy":
     "default-src 'self'; base-uri 'none'; connect-src 'self'; font-src 'self'; form-action 'self'; frame-ancestors 'none'; img-src 'self' data:; object-src 'none'; script-src 'self'; style-src 'self'",
@@ -1366,6 +1372,29 @@ async function serveStaticFile(
     });
     response.end("Not found");
   }
+}
+
+function isFrontendAssetDocumentNavigation(
+  request: IncomingMessage,
+  pathname: string,
+): boolean {
+  if (!FRONTEND_ASSET_PATHS.has(pathname)) {
+    return false;
+  }
+
+  const fetchDestination = request.headers["sec-fetch-dest"];
+  if (fetchDestination === "document") {
+    return true;
+  }
+
+  const accept = request.headers.accept;
+  return (
+    fetchDestination === undefined &&
+    typeof accept === "string" &&
+    accept
+      .split(",")
+      .some((mediaType) => mediaType.trim().startsWith("text/html"))
+  );
 }
 
 function queryLimit(
@@ -3361,6 +3390,20 @@ export function createChatHandler(options: ChatGatewayOptions): RequestListener 
           Allow: "GET, HEAD",
         });
         response.end("Method not allowed");
+        return;
+      }
+
+      // A copied asset URL is not a useful page. Browsers identify top-level
+      // navigation separately from the script and stylesheet requests made by
+      // index.html, so send accidental visits back to the actual frontend
+      // without changing how its assets load.
+      if (isFrontendAssetDocumentNavigation(request, url.pathname)) {
+        response.writeHead(302, {
+          ...SECURITY_HEADERS,
+          "Cache-Control": "no-store",
+          Location: "/",
+        });
+        response.end();
         return;
       }
 
