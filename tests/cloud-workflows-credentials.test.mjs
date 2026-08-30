@@ -113,6 +113,34 @@ const headerCredentialOn = (nodes, name) =>
       "httpHeaderAuth",
     );
   }
+  db.prepare("INSERT INTO credentials_entity VALUES (?, ?, ?)").run(
+    "connected-xero-readonly",
+    "Xero (read-only)",
+    "oAuth2Api",
+  );
+  const sourceNodes = [
+    {
+      name: "Probe Xero",
+      type: "n8n-nodes-base.httpRequest",
+      credentials: {
+        oAuth2Api: {
+          id: "connected-xero-readonly",
+          name: "Xero (read-only)",
+        },
+      },
+    },
+  ];
+  db.prepare("INSERT INTO workflow_entity VALUES (?, ?, ?, ?)").run(
+    "phase19CheckXeroConnection",
+    JSON.stringify(sourceNodes),
+    "check-live",
+    "check-live",
+  );
+  db.prepare("INSERT INTO workflow_history VALUES (?, ?, ?)").run(
+    "check-live",
+    "phase19CheckXeroConnection",
+    JSON.stringify(sourceNodes),
+  );
   const entityNodes = [
     {
       name: "Authenticated Claim",
@@ -124,6 +152,10 @@ const headerCredentialOn = (nodes, name) =>
     {
       name: "Authenticated Progress",
       type: "n8n-nodes-base.webhook",
+    },
+    {
+      name: "Read Claim Organisation Details",
+      type: "n8n-nodes-base.httpRequest",
     },
   ];
   db.prepare("INSERT INTO workflow_entity VALUES (?, ?, ?, ?)").run(
@@ -154,7 +186,7 @@ const headerCredentialOn = (nodes, name) =>
   const live = nodesOf(after, "workflow_history", "versionId", "xero-live");
   after.close();
 
-  check(fixed === 2, `fixed capture bindings count each node once (got ${fixed})`);
+  check(fixed === 3, `fixed capture bindings count each node once (got ${fixed})`);
   for (const nodes of [entity, live]) {
     check(
       headerCredentialOn(nodes, "Authenticated Claim")?.id
@@ -165,6 +197,11 @@ const headerCredentialOn = (nodes, name) =>
       headerCredentialOn(nodes, "Authenticated Progress")?.id
         === "phase20XeroCaptureBridge",
       "an empty capture-progress binding heals despite same-type ambiguity",
+    );
+    check(
+      nodes.find((node) => node.name === "Read Claim Organisation Details")
+        ?.credentials?.oAuth2Api?.id === "connected-xero-readonly",
+      "the capture organisation probe inherits the already-connected Xero read-only credential",
     );
   }
 }

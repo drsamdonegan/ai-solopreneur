@@ -338,6 +338,20 @@ const SHIPPED_CREDENTIAL_FOR_NODE = new Map([
   ]),
 ]);
 
+// Some repository workflows need the same learner-connected credential as an
+// existing, working node. The credential's actual ID can differ between
+// installations, so inherit that exact saved choice rather than hard-coding
+// an ID or guessing between OAuth credentials of the same n8n type.
+const INHERITED_CREDENTIAL_FOR_NODE = new Map([
+  [
+    "phase20XeroExportCompanion::Read Claim Organisation Details",
+    {
+      type: "oAuth2Api",
+      source: "phase19CheckXeroConnection::Probe Xero",
+    },
+  ],
+]);
+
 /**
  * Puts one workflow's credential choices back into one stored copy of its
  * nodes. Returns the "workflowId::nodeName" keys it filled, so that a fix
@@ -362,6 +376,29 @@ function fillNodeCredentials(workflowId, nodes, saved, byType) {
       ) {
         node.credentials = {
           [shipped.type]: { ...shipped.credential },
+        };
+        filled.push(key);
+      }
+      continue;
+    }
+    const inherited = INHERITED_CREDENTIAL_FOR_NODE.get(key);
+    const inheritedCredential = inherited
+      ? saved.get(inherited.source)?.[inherited.type]
+      : null;
+    const inheritedExists = inheritedCredential
+      ? (byType.get(inherited.type) ?? []).some(
+          ({ id }) => id === inheritedCredential.id,
+        )
+      : false;
+    if (inherited && inheritedCredential && inheritedExists) {
+      const current = node?.credentials?.[inherited.type];
+      if (
+        current?.id !== inheritedCredential.id
+        || current?.name !== inheritedCredential.name
+        || Object.keys(node.credentials ?? {}).length !== 1
+      ) {
+        node.credentials = {
+          [inherited.type]: { ...inheritedCredential },
         };
         filled.push(key);
       }
