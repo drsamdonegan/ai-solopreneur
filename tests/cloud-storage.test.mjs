@@ -84,6 +84,21 @@ check(
   "an ephemeral cache configured inside the persistent volume is rejected",
 );
 
+const cloudSupervisor = readFileSync(
+  new URL("../scripts/cloud.mjs", import.meta.url),
+  "utf8",
+);
+for (const variable of [
+  "EXECUTIONS_DATA_PRUNE_SOFT_DELETE_INTERVAL",
+  "EXECUTIONS_DATA_PRUNE_HARD_DELETE_INTERVAL",
+  "EXECUTIONS_DATA_HARD_DELETE_BUFFER",
+]) {
+  check(
+    cloudSupervisor.includes(variable),
+    `${variable} is explicitly bounded for small cloud volumes`,
+  );
+}
+
 rmSync(fixture, { recursive: true, force: true });
 
 if (failures.length > 0) {

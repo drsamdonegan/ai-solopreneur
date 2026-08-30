@@ -325,6 +325,15 @@ function n8nEnv(cfg) {
     EXECUTIONS_DATA_MAX_AGE: process.env.EXECUTIONS_DATA_MAX_AGE || "336",
     EXECUTIONS_DATA_PRUNE_MAX_COUNT:
       process.env.EXECUTIONS_DATA_PRUNE_MAX_COUNT || "5000",
+    // n8n otherwise waits an hour before marking over-limit history and keeps
+    // marked rows for another hour. On a small cloud volume that delay is long
+    // enough to fill SQLite before the configured cap can protect it.
+    EXECUTIONS_DATA_PRUNE_SOFT_DELETE_INTERVAL:
+      process.env.EXECUTIONS_DATA_PRUNE_SOFT_DELETE_INTERVAL || "1",
+    EXECUTIONS_DATA_PRUNE_HARD_DELETE_INTERVAL:
+      process.env.EXECUTIONS_DATA_PRUNE_HARD_DELETE_INTERVAL || "1",
+    EXECUTIONS_DATA_HARD_DELETE_BUFFER:
+      process.env.EXECUTIONS_DATA_HARD_DELETE_BUFFER || "0",
     EXECUTIONS_DATA_SAVE_MANUAL_EXECUTIONS: "false",
     N8N_DEFAULT_BINARY_DATA_MODE: "filesystem",
 
