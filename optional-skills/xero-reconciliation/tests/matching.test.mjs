@@ -52,6 +52,10 @@ const startValidateSrc = codeOf(start, "Validate Start Input");
 const readTenantSrc = codeOf(review, "Read Tenant");
 const readCustomOrganisationSrc = codeOf(review, "Read Custom Organisation");
 const effectiveConnectionSrc = codeOf(review, "Effective Xero Connection");
+const saveSuggestions = review.nodes.find((entry) => entry.name === "Save Suggestions");
+check("new suggestions persist unset decision and execution timestamps as null dates",
+  saveSuggestions.parameters.columns.value.decidedAt.includes("|| null")
+    && saveSuggestions.parameters.columns.value.executedAt.includes("|| null"));
 
 const minsAgo = (minutes) => new Date(Date.now() - minutes * 60000).toISOString();
 const hash = "a".repeat(64);
