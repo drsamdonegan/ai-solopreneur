@@ -30,7 +30,10 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runConfigHelp, runSetup, setupIsNeeded } from "./cloud-setup.mjs";
 import { seedCloudSkills } from "./cloud-skills.mjs";
-import { ensureN8nEphemeralCache } from "./cloud-storage.mjs";
+import {
+  compactN8nSqliteDatabase,
+  ensureN8nEphemeralCache,
+} from "./cloud-storage.mjs";
 import {
   ensureXeroCaptureCredentials,
   primeAgent,
@@ -876,6 +879,14 @@ async function main() {
     persistentCacheDir: paths.n8nCacheDir,
     ephemeralCacheDir: paths.n8nEphemeralCacheDir,
   });
+  const databaseCompaction = compactN8nSqliteDatabase({
+    databasePath: join(paths.n8nUserFolder, ".n8n", "database.sqlite"),
+  });
+  if (databaseCompaction.compacted) {
+    const beforeMb = Math.round(databaseCompaction.beforeBytes / 1024 / 1024);
+    const afterMb = Math.round(databaseCompaction.afterBytes / 1024 / 1024);
+    print(`  Compacted n8n history storage from ${beforeMb} MB to ${afterMb} MB.`);
+  }
 
   // Setup can restore an older enabled.txt after the image was built. Seed
   // afterwards so installed source packages become live on the first cloud

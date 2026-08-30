@@ -2,6 +2,7 @@ import {
   lstatSync,
   mkdtempSync,
   mkdirSync,
+  copyFileSync,
   readFileSync,
   readlinkSync,
   rmSync,
@@ -11,11 +12,23 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { ensureN8nEphemeralCache } from "../scripts/cloud-storage.mjs";
+import { DatabaseSync } from "node:sqlite";
+import {
+  compactN8nSqliteDatabase,
+  ensureN8nEphemeralCache,
+} from "../scripts/cloud-storage.mjs";
 
 const failures = [];
 const check = (condition, message) => {
   if (!condition) failures.push(message);
+};
+const lstatIfPresentForTest = (path) => {
+  try {
+    return lstatSync(path);
+  } catch (error) {
+    if (error?.code === "ENOENT") return null;
+    throw error;
+  }
 };
 
 const fixture = mkdtempSync(join(tmpdir(), "cloud-storage-test-"));
@@ -98,6 +111,60 @@ for (const variable of [
     `${variable} is explicitly bounded for small cloud volumes`,
   );
 }
+
+const sqliteDirectory = join(fixture, "sqlite");
+const sqlitePath = join(sqliteDirectory, "database.sqlite");
+mkdirSync(sqliteDirectory, { recursive: true });
+const sqlite = new DatabaseSync(sqlitePath);
+sqlite.exec("CREATE TABLE preserved (id INTEGER PRIMARY KEY, payload TEXT NOT NULL)");
+const insert = sqlite.prepare("INSERT INTO preserved (payload) VALUES (?)");
+for (let index = 0; index < 1_200; index += 1) {
+  insert.run(`${index}:` + "generated history ".repeat(180));
+}
+sqlite.exec("DELETE FROM preserved WHERE id <= 1100");
+sqlite.close();
+const sqliteBefore = lstatSync(sqlitePath).size;
+writeFileSync(join(sqliteDirectory, "n8nEventLog-1.log"), "rotated");
+writeFileSync(join(sqliteDirectory, "n8nEventLog.log"), "current");
+
+const compacted = compactN8nSqliteDatabase({
+  databasePath: sqlitePath,
+  minBytes: 0,
+  minFreeRatio: 0,
+});
+check(compacted.compacted, "a sparse stopped n8n database is compacted");
+check(
+  lstatSync(sqlitePath).size < sqliteBefore,
+  "compaction releases physical database bytes",
+);
+const compactedDb = new DatabaseSync(sqlitePath, { readOnly: true });
+check(
+  compactedDb.prepare("PRAGMA quick_check").get().quick_check === "ok" &&
+    compactedDb.prepare("SELECT COUNT(*) AS count FROM preserved").get().count === 100,
+  "the compacted database is valid and preserves every retained row",
+);
+compactedDb.close();
+check(
+  !lstatIfPresentForTest(join(sqliteDirectory, "n8nEventLog-1.log")) &&
+    readFileSync(join(sqliteDirectory, "n8nEventLog.log"), "utf8") === "current",
+  "only rotated n8n event logs are removed to make compaction headroom",
+);
+check(
+  !lstatIfPresentForTest(`${sqlitePath}.compact`) &&
+    !lstatIfPresentForTest(`${sqlitePath}.precompact`),
+  "successful compaction leaves no swap files behind",
+);
+
+copyFileSync(sqlitePath, `${sqlitePath}.precompact`);
+const recovered = compactN8nSqliteDatabase({
+  databasePath: sqlitePath,
+  minBytes: Number.MAX_SAFE_INTEGER,
+});
+check(
+  recovered.reason === "below-threshold" &&
+    !lstatIfPresentForTest(`${sqlitePath}.precompact`),
+  "startup removes a leftover backup after proving the main database is valid",
+);
 
 rmSync(fixture, { recursive: true, force: true });
 
