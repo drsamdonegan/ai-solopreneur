@@ -723,7 +723,7 @@
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ $json.response }}",
+        "responseBody": "={{ $('Shape Accepted Progress Response').first().json.response }}",
         "options": {
           "responseHeaders": {
             "entries": [
@@ -991,18 +991,18 @@
       "main": [
         [
           {
-            "node": "Respond Accepted Progress",
+            "node": "Update Capture Progress",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Respond Accepted Progress": {
+    "Update Capture Progress": {
       "main": [
         [
           {
-            "node": "Update Capture Progress",
+            "node": "Respond Accepted Progress",
             "type": "main",
             "index": 0
           }
