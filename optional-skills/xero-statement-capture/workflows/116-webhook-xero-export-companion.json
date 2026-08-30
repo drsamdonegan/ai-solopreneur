@@ -181,7 +181,7 @@
         120,
         -300
       ],
-      "id": "98000116-0000-4000-8000-000000000030",
+      "id": "98000116-0000-4000-8000-000000000034",
       "name": "Verify Live Xero Organisation"
     },
     {
@@ -592,6 +592,22 @@
     },
     {
       "parameters": {
+        "resume": "timeInterval",
+        "amount": 0.25,
+        "unit": "seconds"
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        140,
+        300
+      ],
+      "id": "98000116-0000-4000-8000-000000000030",
+      "name": "Wait For Progress Update",
+      "webhookId": "98000116-0000-4000-8000-000000000134"
+    },
+    {
+      "parameters": {
         "resource": "row",
         "operation": "update",
         "dataTableId": {
@@ -747,7 +763,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const planned=$('Plan Progress').first().json;const stored=$input.first().json;if(!Number.isInteger(stored.id)||String(stored.runId)!==planned.runId||String(stored.companionId)!==planned.companionId)return [{json:{response:{ok:false,error:{code:'PROGRESS_UPDATE_UNCONFIRMED',message:'The capture progress update could not be confirmed.'}}}}];const status=String(stored.status||stored.phase||'preflight');return [{json:{response:{ok:true,cancelled:status==='cancelled',run_id:planned.runId,status}}}];"
+        "jsCode": "const planned=$('Plan Progress').first().json;const stored=$input.first().json;const status=String(stored.status||stored.phase||'preflight');if(!Number.isInteger(stored.id)||String(stored.runId)!==planned.runId||String(stored.companionId)!==planned.companionId||(status!==String(planned.status)&&status!=='cancelled'))return [{json:{response:{ok:false,error:{code:'PROGRESS_UPDATE_UNCONFIRMED',message:'The capture progress update could not be confirmed.'}}}}];return [{json:{response:{ok:true,cancelled:status==='cancelled',run_id:planned.runId,status}}}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -979,15 +995,20 @@
         ]
       ]
     },
-    "Progress Accepted?": {
-      "main": [
-        [
-          {
-            "node": "Update Capture Progress",
-            "type": "main",
-            "index": 0
-          }
-        ],
+      "Progress Accepted?": {
+        "main": [
+          [
+            {
+              "node": "Update Capture Progress",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Wait For Progress Update",
+              "type": "main",
+              "index": 0
+            }
+          ],
         [
           {
             "node": "Respond Progress",
@@ -997,10 +1018,10 @@
         ]
       ]
     },
-    "Update Capture Progress": {
-      "main": [
-        [
-          {
+      "Wait For Progress Update": {
+        "main": [
+          [
+            {
             "node": "Read Progress Result",
             "type": "main",
             "index": 0
