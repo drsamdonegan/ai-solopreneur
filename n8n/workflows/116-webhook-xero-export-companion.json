@@ -613,9 +613,9 @@
               "keyValue": "={{ $json.companionId }}"
             },
             {
-              "keyName": "status",
+              "keyName": "cancelRequested",
               "condition": "eq",
-              "keyValue": "={{ $json.previousStatus }}"
+              "keyValue": "no"
             }
           ]
         },
