@@ -1164,7 +1164,10 @@ export async function runExportJob({
   };
   const inbox = await ensureDedicatedInbox(inboxDirectory || defaultInboxDirectory());
   const baseline = await snapshotInbox(inbox);
-  await emit(structuredStatus("preflight", { runId: job.runId, state: "user_export_required", current: 0, total: 4 }));
+  // Claiming already advances the server-side run to `opening`. Keep this
+  // explanatory preflight event local so a backward heartbeat cannot race the
+  // monotonic state machine and make a correctly claimed job look invalid.
+  api.localStatus?.(structuredStatus("preflight", { runId: job.runId, state: "user_export_required", current: 0, total: 4 }));
   await emit(structuredStatus("opening", { runId: job.runId, state: "opening_official_xero_export", current: 1, total: 4 }));
   await openExportPage(job.exportUrl);
   await emit(structuredStatus("awaiting_login", { runId: job.runId, state: "manual_login_or_mfa", message: "Log in to Xero in your normal browser if requested. The companion cannot read or type credentials.", requiresUserLogin: true, current: 1, total: 4 }));

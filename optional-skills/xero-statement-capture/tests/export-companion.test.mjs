@@ -591,7 +591,7 @@ try {
   });
   check(opened === OFFICIAL_UNCODED_LINES_URL, "a run should open only the official report URL");
   check(statuses.join(",") === "preflight,opening,awaiting_login,awaiting_export,discovering,verifying,verifying,uploading,reviewing", "import acceptance should hand off to background review rather than claim suggestions are already ready");
-  check(!remoteStatuses.includes("reviewing"), "the companion must not race n8n's authoritative reviewing or ready transition");
+  check(!remoteStatuses.includes("preflight") && !remoteStatuses.includes("reviewing"), "the companion must not send backward preflight or race n8n's authoritative reviewing or ready transition");
   check(propagatedRunSignals.every((value) => value === runController.signal), "the job-level AbortSignal should propagate through progress, control, and import calls");
   check(imported.runId === "run-user-mediated" && imported.csvText === fixture.toString("utf8"), "the validated raw export should be uploaded exactly once");
   check(run.rowCount === 3 && run.accountCount === 2, "the ready result should report locally verified counts without transaction content");
