@@ -24,6 +24,7 @@ import {
 const here = dirname(fileURLToPath(import.meta.url));
 const fixturePath = join(here, "fixtures", "uncoded-statement-lines.csv");
 const fixture = await readFile(fixturePath);
+const compactFixture = await readFile(join(here, "fixtures", "statement-lines-compact.csv"));
 let checks = 0;
 const check = (condition, message) => { checks += 1; assert.ok(condition, message); };
 const rejects = async (action, pattern, message) => { checks += 1; await assert.rejects(action, pattern, message); };
@@ -37,6 +38,33 @@ check(parsed.accountLabels.join(",") === "Business Everyday,Business Savings", "
 check(parsed.rows[0].combinedNarration.includes("INV-42") && parsed.rows[0].direction === "debit", "the grouped Xero narration and Spent column should remain intact");
 check(parsed.rows[1].comments === "Duplicate bank line" && parsed.rows[1].yourComments === "Owner note", "Xero Discuss comments and offline Your Comments must stay distinct");
 check(parsed.rows[0].occurrence === 1 && parsed.rows[1].occurrence === 2 && parsed.rows[0].sourceHash !== parsed.rows[1].sourceHash, "identical bank lines should remain a scan-scoped multiset");
+const compactParsed = preflightXeroUncodedStatementCsv(compactFixture, {
+  dateOrder: "YMD",
+  organisationNames: ["MLAI"],
+  fileName: "Statement Lines Report For All Orgs 2026-08-30.csv",
+  tenantId: "123e4567-e89b-42d3-a456-426614174000",
+});
+check(compactParsed.reportFormat === "xero-statement-lines-compact-v1", "the current compact Xero export must be recognized explicitly");
+check(compactParsed.accountLabels[0] === "Business Trans Acct" && compactParsed.rows[0].bankAccountIdentifier === "06 3010 1496 6550", "compact exports must retain the account name while preserving the following account identifier");
+await rejects(
+  async () => preflightXeroUncodedStatementCsv(compactFixture, {
+    dateOrder: "YMD",
+    organisationNames: ["MLAI"],
+    fileName: "generic.csv",
+    tenantId: "123e4567-e89b-42d3-a456-426614174000",
+  }),
+  /preamble and filename are not a recognized/i,
+  "compact content must fail closed without Xero's exact current export filename",
+);
+await rejects(
+  async () => preflightXeroUncodedStatementCsv(compactFixture, {
+    dateOrder: "YMD",
+    organisationNames: ["MLAI"],
+    fileName: "Statement Lines Report For All Orgs 2026-08-30.csv",
+  }),
+  /preamble and filename are not a recognized/i,
+  "compact content must fail closed unless the capture is bound to a live Xero tenant",
+);
 const quoted = parseCsv('a,"b,b","line 1\nline 2"\n');
 check(quoted.length === 1 && quoted[0][1] === "b,b" && quoted[0][2] === "line 1\nline 2", "CSV parsing should support quoted commas and newlines");
 check(
@@ -80,7 +108,7 @@ await rejects(
     "Bank Account,Date,Payee,Amount\nEveryday,2026-08-27,Uncoded Statement Lines,-10.00\n",
     { dateOrder: "DMY", organisationNames: ["MLAI"] },
   ),
-  /preamble is not a recognized/i,
+  /preamble and filename are not a recognized/i,
   "a report-title phrase inside transaction data must not spoof the Xero preamble",
 );
 await rejects(

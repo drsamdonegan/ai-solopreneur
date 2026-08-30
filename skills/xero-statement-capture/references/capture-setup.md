@@ -19,7 +19,7 @@ The feature is disabled unless both the flag and a sufficiently long control sec
 
 When upgrading from the retired DOM-capture prototype, remove the unpacked **Xero statement capture** extension from Chrome and stop any old `capture-server.mjs` process. Repository cloud sync unpublishes workflows 110–112; do not reactivate those legacy webhooks.
 
-Before enabling writes for a new Xero locale or report revision, run one genuine export through the read-only flow and confirm the parser accepts every account section and row. Xero does not publish a byte-level CSV schema; the included fixtures are synthetic, evidence-based test fixtures rather than a substitute for that first live validation.
+Before enabling writes for a new Xero locale or report revision, run one genuine export through the read-only flow and confirm the parser accepts every account section and row. Current Xero compact exports use the exact filename `Statement Lines Report For All Orgs YYYY-MM-DD.csv`, followed by an account-name row, an account-identifier row, and the statement header. Because that compact file omits the organisation name, it is accepted only inside the authenticated capture run already bound to the live Xero tenant. Xero does not publish a byte-level CSV schema; the included fixtures are synthetic, evidence-based test fixtures rather than a substitute for that first live validation.
 
 ## Install the local companion on macOS
 
@@ -91,7 +91,7 @@ This replaces reconciliation-page pagination with one server-generated all-accou
 - The user enters passwords and MFA only into Xero. The agent and companion never request or store them.
 - Capture webhooks use separate server and companion secrets, reject redirects, and expose no transaction data to the public browser status API.
 - The helper accepts only one new stable CSV after the run was claimed, rejects symlinks and ambiguous candidates, and limits file size, rows, and accounts.
-- The CSV must name the verified live Xero organisation. Bank-account labels must map uniquely to the current active Xero account catalogue before preparation is possible.
+- A titled grouped CSV must name the verified live Xero organisation. Xero's compact export is instead bound by the authenticated run's API-verified tenant plus its exact filename and account-preamble structure. In both forms, bank-account labels must map uniquely to the current active Xero account catalogue before preparation is possible.
 - Import acceptance starts a review; only n8n may mark that review ready. A failed or cancelled run never changes Xero.
 - The legacy page-capture extension is not part of this supported flow.
 

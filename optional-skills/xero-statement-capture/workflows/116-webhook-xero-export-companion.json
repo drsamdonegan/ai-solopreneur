@@ -186,7 +186,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const plan=$('Plan Claim').first().json,probe=$('Verify Live Xero Organisation').first().json,name=String(probe.organisationName||'').trim(),tenantId=String(probe.tenantId||'').trim();if(probe.connected!==true||!name||!tenantId)return [{json:{...plan,organisationBound:false,response:{ok:false,error:{code:'XERO_ORGANISATION_UNAVAILABLE',message:'The connected Xero tenant could not be verified before export.'}}}}];const dateOrder='YMD',response={ok:true,job:{schema_version:1,mode:'user-mediated-xero-export',source:'csv-export',run_id:plan.runId,claimed_at:plan.claimedAt,date_order:dateOrder,export_url:'https://go.xero.com/Banking/StatementLines/Offline',period:'all',manual_login_only:true,all_bank_accounts_requested:true,organisation_name:name}};return [{json:{...plan,organisationBound:true,tenantId,organisationName:name,organisationLegalName:'',dateOrder,response}}];"
+        "jsCode": "const plan=$('Plan Claim').first().json,probe=$('Verify Live Xero Organisation').first().json,name=String(probe.organisationName||'').trim(),tenantId=String(probe.tenantId||'').trim();if(probe.connected!==true||!name||!tenantId)return [{json:{...plan,organisationBound:false,response:{ok:false,error:{code:'XERO_ORGANISATION_UNAVAILABLE',message:'The connected Xero tenant could not be verified before export.'}}}}];const dateOrder='YMD',response={ok:true,job:{schema_version:1,mode:'user-mediated-xero-export',source:'csv-export',run_id:plan.runId,claimed_at:plan.claimedAt,date_order:dateOrder,export_url:'https://go.xero.com/Banking/StatementLines/Offline',period:'all',manual_login_only:true,all_bank_accounts_requested:true,organisation_name:name,tenant_id:tenantId}};return [{json:{...plan,organisationBound:true,tenantId,organisationName:name,organisationLegalName:'',dateOrder,response}}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -970,14 +970,14 @@
       ]
     },
     "Progress Accepted?": {
-        "main": [
-          [
-            {
-              "node": "Shape Accepted Progress Response",
-              "type": "main",
-              "index": 0
-            }
-          ],
+      "main": [
+        [
+          {
+            "node": "Shape Accepted Progress Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
         [
           {
             "node": "Respond Progress",

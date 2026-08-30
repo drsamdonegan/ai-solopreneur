@@ -10,7 +10,10 @@
       },
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [-1040, -340],
+      "position": [
+        -1040,
+        -340
+      ],
       "id": "98000117-0000-4000-8000-000000000001",
       "name": "Sticky"
     },
@@ -24,7 +27,10 @@
       },
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
-      "position": [-1020, 0],
+      "position": [
+        -1020,
+        0
+      ],
       "id": "98000117-0000-4000-8000-000000000010",
       "name": "Raw Authenticated CSV Import",
       "webhookId": "98000117-0000-4000-8000-000000000110",
@@ -41,7 +47,10 @@
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [-820, 0],
+      "position": [
+        -820,
+        0
+      ],
       "id": "98000117-0000-4000-8000-000000000009",
       "name": "Normalise CSV Shape"
     },
@@ -51,7 +60,10 @@
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [-620, 0],
+      "position": [
+        -620,
+        0
+      ],
       "id": "98000117-0000-4000-8000-000000000008",
       "name": "Validate CSV Preamble"
     },
@@ -84,18 +96,24 @@
       },
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1.1,
-      "position": [-400, 0],
+      "position": [
+        -400,
+        0
+      ],
       "id": "98000117-0000-4000-8000-000000000011",
       "name": "Read Import Run",
       "alwaysOutputData": true
     },
     {
       "parameters": {
-        "jsCode": "const raw=$('Raw Authenticated CSV Import').first().json.body??$('Raw Authenticated CSV Import').first().json;\nconst runId=String(raw.run_id||''),companionId=String(raw.companion_id||''),csv=String(raw.csv_text||'');\nconst rows=$input.all().map((item)=>item.json).filter((row)=>row&&String(row.runId)===runId&&String(row.companionId)===companionId&&String(row.cancelRequested)!=='yes'&&String(row.status)!=='cancelled'&&String(row.organisationName||''));\nif(rows.length!==1)return [{json:{}}];const row=rows[0],configured=String(row.dateOrder||'').toUpperCase();if(['DMY','MDY'].includes(configured))return [{json:row}];const matches=[...csv.matchAll(/(?:^|\\r?\\n)\\s*\"?(\\d{1,2})[\\/-](\\d{1,2})[\\/-](\\d{4})\"?\\s*,/g)];let inferred='';for(const match of matches){const first=Number(match[1]),second=Number(match[2]),candidate=first>12&&second<=12?'DMY':second>12&&first<=12?'MDY':'';if(candidate&&inferred&&candidate!==inferred)return [{json:{}}];if(candidate)inferred=candidate;}const dateOrder=inferred||(!matches.length?'DMY':'');return dateOrder?[{json:{...row,dateOrder}}]:[{json:{}}];"
+        "jsCode": "const raw=$('Raw Authenticated CSV Import').first().json.body??$('Raw Authenticated CSV Import').first().json;\nconst runId=String(raw.run_id||''),companionId=String(raw.companion_id||''),csv=String(raw.csv_text||'');\nconst rows=$input.all().map((item)=>item.json).filter((row)=>row&&String(row.runId)===runId&&String(row.companionId)===companionId&&String(row.cancelRequested)!=='yes'&&String(row.status)!=='cancelled'&&String(row.organisationName||'')&&String(row.tenantId||''));\nif(rows.length!==1)return [{json:{}}];const row=rows[0],configured=String(row.dateOrder||'').toUpperCase();if(['DMY','MDY'].includes(configured))return [{json:row}];const matches=[...csv.matchAll(/(?:^|\\r?\\n)\\s*\"?(\\d{1,2})[\\/-](\\d{1,2})[\\/-](\\d{4})\"?\\s*,/g)];let inferred='';for(const match of matches){const first=Number(match[1]),second=Number(match[2]),candidate=first>12&&second<=12?'DMY':second>12&&first<=12?'MDY':'';if(candidate&&inferred&&candidate!==inferred)return [{json:{}}];if(candidate)inferred=candidate;}const dateOrder=inferred||(!matches.length?'DMY':'');return dateOrder?[{json:{...row,dateOrder}}]:[{json:{}}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [-200, 0],
+      "position": [
+        -200,
+        0
+      ],
       "id": "98000117-0000-4000-8000-000000000007",
       "name": "Verify Export Organisation"
     },
@@ -105,7 +123,10 @@
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [20, 0],
+      "position": [
+        20,
+        0
+      ],
       "id": "98000117-0000-4000-8000-000000000006",
       "name": "Authenticated CSV Import"
     },
@@ -115,7 +136,10 @@
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [120, 0],
+      "position": [
+        120,
+        0
+      ],
       "id": "98000117-0000-4000-8000-000000000005",
       "name": "Merge Verified Import"
     },
@@ -125,17 +149,23 @@
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [-580, 240],
+      "position": [
+        -580,
+        240
+      ],
       "id": "98000117-0000-4000-8000-000000000012",
       "name": "Legacy CSV Parser (disabled)"
     },
     {
       "parameters": {
-        "jsCode": "const webhook=$('Raw Authenticated CSV Import').first().json;\nconst raw=webhook.body??webhook;\nconst run=$('Verify Export Organisation').first().json;\nconst requestHeaders=webhook.headers??{},idempotencyKey=String(requestHeaders['idempotency-key']??requestHeaders['Idempotency-Key']??'').trim();\nconst fail=(code,message)=>[{json:{valid:false,response:{ok:false,error:{code,message}}}}];\nconst allowed=new Set(['schema_version','run_id','companion_id','file_name','csv_text','all_bank_accounts_requested']);\nif(!raw||typeof raw!=='object'||Array.isArray(raw)||Object.keys(raw).some((key)=>!allowed.has(key)))return fail('INVALID_IMPORT','The CSV import envelope contains unsupported fields.');\nconst uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;\nconst runId=String(raw.run_id||''),companionId=String(raw.companion_id||''),fileName=String(raw.file_name||''),rawSource=String(raw.csv_text||''),source=rawSource.replace(/^\\uFEFF/,'');\nif(raw.schema_version!==1||!uuid.test(runId)||!/^[A-Za-z0-9._:-]{8,128}$/.test(companionId)||!/\\.csv$/i.test(fileName)||fileName.length>255||raw.all_bank_accounts_requested!==true)return fail('INVALID_IMPORT','The raw Xero export envelope is invalid.');\nif(String(run.runId)!==runId||String(run.companionId)!==companionId||!String(run.organisationName||''))return fail('RUN_OR_ORGANISATION_MISMATCH','The claimed run and verified Xero organisation do not match this export.');\nif(String(run.cancelRequested)==='yes'||String(run.status)==='cancelled')return fail('CAPTURE_CANCELLED','The Xero export run was cancelled.');\nif(!source||source.length>5242880||/\\u0000/.test(source))return fail('CSV_SIZE_LIMIT','The Xero CSV is empty, binary, or exceeds 5 MB.');\nconst parseCsv=(text)=>{const rows=[];let row=[],field='',quoted=false;for(let index=0;index<text.length;index++){const character=text[index];if(quoted){if(character==='\"'&&text[index+1]==='\"'){field+='\"';index++;}else if(character==='\"')quoted=false;else field+=character;continue;}if(character==='\"'){if(field!=='')throw Error('CSV_QUOTING');quoted=true;}else if(character===','){row.push(field);field='';}else if(character==='\\n'||character==='\\r'){if(character==='\\r'&&text[index+1]==='\\n')index++;row.push(field);field='';if(row.some((value)=>String(value).trim()!==''))rows.push(row);row=[];if(rows.length>5200)throw Error('CSV_ROW_LIMIT');}else field+=character;}if(quoted)throw Error('CSV_QUOTING');row.push(field);if(row.some((value)=>String(value).trim()!==''))rows.push(row);if(!rows.length)throw Error('CSV_EMPTY');return rows;};\nlet rows;try{rows=parseCsv(source);}catch(error){return fail(String(error.message||'CSV_INVALID'),'The Xero CSV is malformed or exceeds the bounded row limit.');}\nconst clean=(value)=>String(value??'').normalize('NFKC').trim().replace(/\\s+/g,' ');\nconst normalized=(value)=>clean(value).toLowerCase();\nconst normalizedHeader=(value)=>normalized(value).replace(/[_-]+/g,' ').replace(/[^a-z0-9 ]+/g,'').replace(/\\s+/g,' ').trim();\nconst aliases={date:['date','statement date'],payee:['payee','contact','name'],particulars:['particulars','description','details'],combinedNarration:['particulars reference code'],reference:['reference','ref'],code:['code'],comments:['comments','comment'],yourComments:['your comments','your comment'],tax:['tax','tax type'],spent:['spent','money out','debit'],received:['received','money in','credit']};\nconst headerIndex=(row,names)=>{const values=row.map(normalizedHeader);for(const name of names){const index=values.indexOf(name);if(index!==-1)return index;}return -1;};\nconst recognizeHeader=(row)=>{const indexes={};for(const [name,names] of Object.entries(aliases))indexes[name]=headerIndex(row,names);const narration=indexes.combinedNarration>=0||indexes.particulars>=0||indexes.reference>=0||indexes.code>=0;return indexes.date>=0&&indexes.payee>=0&&indexes.spent>=0&&indexes.received>=0&&narration?indexes:null;};\nconst firstHeader=rows.findIndex((row)=>recognizeHeader(row));\nif(firstHeader<0)return fail('CSV_HEADERS_INVALID','The CSV does not contain Xero’s repeated DATE, PAYEE, narration, SPENT, and RECEIVED account headers.');\nconst preamble=rows.slice(0,firstHeader);\nconst exactTitle=(row)=>{const cells=row.map(clean).filter(Boolean);return cells.length===1&&/^(?:uncoded statement lines|uncoded bank statement lines)$/i.test(cells[0]);};\nif(preamble.filter(exactTitle).length!==1)return fail('CSV_MARKER_INVALID','The Xero report title is missing from a dedicated preamble row or appears more than once.');\nconst expectedNames=[run.organisationName,run.organisationLegalName].map(clean).filter(Boolean).map(normalized);\nconst organisationRow=(row)=>{const cells=row.map(clean).filter(Boolean);if(cells.length===1&&expectedNames.includes(normalized(cells[0])))return true;if(cells.length===1){const match=/^(?:organisation|organization)\\s*:\\s*(.+)$/i.exec(cells[0]);return Boolean(match&&expectedNames.includes(normalized(match[1])));}return cells.length===2&&/^(?:organisation|organization)$/i.test(cells[0])&&expectedNames.includes(normalized(cells[1]));};\nif(!expectedNames.length||!preamble.some(organisationRow))return fail('CSV_ORGANISATION_MISMATCH','The export preamble is not bound to the live Xero organisation.');\nconst dateOrder=String(run.dateOrder||'').toUpperCase();\nif(!new Set(['DMY','MDY']).has(dateOrder))return fail('DATE_ORDER_REQUIRED','The verified run has no supported Xero date order.');\nconst dateOf=(value)=>{const raw=clean(value);let year,month,day,match=/^(\\d{4})-(\\d{2})-(\\d{2})(?:T.*)?$/.exec(raw);if(match){[,year,month,day]=match;}if(!year){match=/^(\\d{1,2})\\s+([A-Za-z]{3,9})\\s+(\\d{4})$/.exec(raw);if(match){const index=['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'].indexOf(match[2].slice(0,3).toLowerCase());if(index>=0){day=match[1];month=String(index+1);year=match[3];}}}if(!year){match=/^([A-Za-z]{3,9})\\s+(\\d{1,2}),?\\s+(\\d{4})$/.exec(raw);if(match){const index=['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'].indexOf(match[1].slice(0,3).toLowerCase());if(index>=0){month=String(index+1);day=match[2];year=match[3];}}}if(!year){match=/^(\\d{1,2})[\\/-](\\d{1,2})[\\/-](\\d{4})$/.exec(raw);if(match){year=match[3];if(dateOrder==='DMY'){day=match[1];month=match[2];}else{month=match[1];day=match[2];}}}const parsed=new Date(Date.UTC(Number(year),Number(month)-1,Number(day)));if(!year||parsed.getUTCFullYear()!==Number(year)||parsed.getUTCMonth()!==Number(month)-1||parsed.getUTCDate()!==Number(day))throw Error('DATE_INVALID');return String(year).padStart(4,'0')+'-'+String(month).padStart(2,'0')+'-'+String(day).padStart(2,'0');};\nconst money=(value,label)=>{const raw=clean(value);if(!raw)return null;const negative=/^-/.test(raw)||/^\\(.*\\)$/.test(raw),digits=raw.replace(/[,$£€¥\\s()]/g,'').replace(/^[+-]/,'');if(!/^\\d+(?:\\.\\d+)?$/.test(digits))throw Error(label+'_INVALID');const amount=Number(digits);if(!Number.isFinite(amount)||amount<=0||amount>1e12)throw Error(label+'_INVALID');return {amount:Number(amount.toFixed(2)),negative};};\nconst field=(row,index)=>index>=0?clean(row[index]):'';\nconst accountHeading=(row)=>{const cells=row.map(clean).filter(Boolean);if(cells.length===2&&/^(?:bank )?account(?: name)?$/i.test(cells[0]))return cells[1];if(cells.length!==1)return '';const value=cells[0],prefixed=/^(?:bank )?account(?: name)?\\s*[:—-]\\s*(.+)$/i.exec(value);if(prefixed)return clean(prefixed[1]);if(exactTitle(row)||/^xero$/i.test(value)||/^(?:organisation|organization|from|to|date range|generated|report date)\\s*[:,-]/i.test(value)||/^there (?:are|is) no (?:uncoded )?statement lines/i.test(value)||/^(?:total|grand total|closing|opening|balance)\\b/i.test(value))return '';return value;};\nconst sha256Hex=(message)=>{const K=[0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2],bytes=[];for(let i=0;i<message.length;i++){let c=message.charCodeAt(i);if(c<128)bytes.push(c);else if(c<2048)bytes.push(192|(c>>6),128|(c&63));else if(c>=0xd800&&c<=0xdbff&&i+1<message.length){const c2=message.charCodeAt(++i),cp=0x10000+((c-0xd800)<<10)+(c2-0xdc00);bytes.push(240|(cp>>18),128|((cp>>12)&63),128|((cp>>6)&63),128|(cp&63));}else bytes.push(224|(c>>12),128|((c>>6)&63),128|(c&63));}const bitLen=bytes.length*8;bytes.push(128);while(bytes.length%64!==56)bytes.push(0);for(let i=7;i>=0;i--)bytes.push(Math.floor(bitLen/Math.pow(2,i*8))&255);const rotr=(x,n)=>(x>>>n)|(x<<(32-n)),w=new Array(64),h=[0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];for(let chunk=0;chunk<bytes.length;chunk+=64){for(let i=0;i<16;i++)w[i]=((bytes[chunk+i*4]<<24)|(bytes[chunk+i*4+1]<<16)|(bytes[chunk+i*4+2]<<8)|bytes[chunk+i*4+3])>>>0;for(let i=16;i<64;i++){const s0=(rotr(w[i-15],7)^rotr(w[i-15],18)^(w[i-15]>>>3))>>>0,s1=(rotr(w[i-2],17)^rotr(w[i-2],19)^(w[i-2]>>>10))>>>0;w[i]=(((w[i-16]+s0)>>>0)+((w[i-7]+s1)>>>0))>>>0;}let [a,b,c,d,e,f,g,hh]=h;for(let i=0;i<64;i++){const S1=(rotr(e,6)^rotr(e,11)^rotr(e,25))>>>0,ch=((e&f)^(~e&g))>>>0,t1=(hh+S1+ch+K[i]+w[i])>>>0,S0=(rotr(a,2)^rotr(a,13)^rotr(a,22))>>>0,maj=((a&b)^(a&c)^(b&c))>>>0,t2=(S0+maj)>>>0;hh=g;g=f;f=e;e=(d+t1)>>>0;d=c;c=b;b=a;a=(t1+t2)>>>0;}h[0]=(h[0]+a)>>>0;h[1]=(h[1]+b)>>>0;h[2]=(h[2]+c)>>>0;h[3]=(h[3]+d)>>>0;h[4]=(h[4]+e)>>>0;h[5]=(h[5]+f)>>>0;h[6]=(h[6]+g)>>>0;h[7]=(h[7]+hh)>>>0;}return h.map((value)=>value.toString(16).padStart(8,'0')).join('');};\nconst expectedImportKey='xero-import-'+sha256Hex(runId+'\\u0000'+fileName+'\\u0000'+rawSource);\nif(idempotencyKey!==expectedImportKey)return fail('IDEMPOTENCY_KEY_INVALID','The deterministic CSV import identity is missing or does not match the authenticated payload.');\nif(String(run.importKey||'')&&String(run.importKey)!==expectedImportKey)return fail('IMPORT_IDENTITY_CONFLICT','This capture run is already bound to a different CSV import.');\nconst runState=String(run.status||''),storedImportKey=String(run.importKey||''),storedImportClaimId=String(run.importClaimId||'');\nif(storedImportKey===expectedImportKey&&['reviewing','ready','failed'].includes(runState)){const updatedAt=new Date().toISOString();return [{json:{valid:true,replay:true,runId,companionId,idempotencyKey:expectedImportKey,response:{ok:true,replayed:true,run:{runId,source:String(run.source||'agent'),state:runState,note:'This exact Xero export was already accepted; no second scan or review was started.',current:Number(run.progressCurrent||5),total:Number(run.progressTotal||6),accountCount:Number(run.bankAccountsCaptured||0),capturedCount:Number(run.statementLinesObserved||0),expectedCount:Number(run.statementLinesObserved||0),createdAt:String(run.runCreatedAt||''),updatedAt}}}}];}\nconst leaseMs=180000,leaseAt=Date.parse(String(run.lastHeartbeatAt||run.runUpdatedAt||'')),leaseFresh=Number.isFinite(leaseAt)&&Date.now()-leaseAt<leaseMs;\nif(runState==='verifying'&&storedImportKey===expectedImportKey&&leaseFresh)return fail('IMPORT_IN_PROGRESS','This exact authenticated Xero CSV import is still being verified. Retry after the current import lease finishes.');\nconst recoveringStale=runState==='verifying'&&storedImportKey===expectedImportKey&&!leaseFresh;\nif(!recoveringStale&&(runState!=='uploading'||storedImportKey||storedImportClaimId))return fail('IMPORT_STATE_INVALID','The capture run is not awaiting a new or safely recoverable authenticated CSV upload.');\nconst importClaimId='import-'+sha256Hex(expectedImportKey+'|'+Date.now()+'|'+Math.random()).slice(0,32),claimPreviousStatus=recoveringStale?'verifying':'uploading',claimPreviousImportKey=recoveringStale?storedImportKey:'',claimPreviousImportClaimId=recoveringStale?storedImportClaimId:'';\nconst groups=new Map(),occurrences=new Map();let pendingAccount='',currentAccount='',indexes=null,dataCount=0;\ntry{for(let index=0;index<rows.length;index++){const row=rows[index],header=recognizeHeader(row);if(header){if(!pendingAccount)throw Error('ACCOUNT_SECTION_MISSING');currentAccount=pendingAccount;pendingAccount='';indexes=header;const accountKey=normalized(currentAccount);if(!groups.has(accountKey))groups.set(accountKey,{key:accountKey,label:currentAccount,rows:[]});else if(groups.get(accountKey).label!==currentAccount)throw Error('ACCOUNT_LABEL_INCONSISTENT');continue;}const heading=accountHeading(row);if(heading){pendingAccount=heading;indexes=null;currentAccount='';continue;}if(!indexes||!currentAccount)continue;const populated=row.map(clean).filter(Boolean);if(!populated.length)continue;if(populated.length===1&&/^there (?:are|is) no (?:uncoded )?statement lines/i.test(populated[0]))continue;if(/^total\\b/i.test(field(row,0))&&!field(row,indexes.date))continue;const dateRaw=field(row,indexes.date),payee=field(row,indexes.payee),particulars=field(row,indexes.particulars),reference=field(row,indexes.reference),combinedNarration=field(row,indexes.combinedNarration),code=field(row,indexes.code),spent=money(field(row,indexes.spent),'SPENT'),received=money(field(row,indexes.received),'RECEIVED');if(!dateRaw||Boolean(spent)===Boolean(received))throw Error('AMBIGUOUS_ROW');if(spent?.negative||received?.negative)throw Error('NEGATIVE_AMOUNT_UNSUPPORTED');if(!payee&&!particulars&&!reference&&!combinedNarration)throw Error('IDENTITY_FIELDS_MISSING');const date=dateOf(dateRaw),amount=spent||received,direction=spent?'outflow':'inflow',accountKey=normalized(currentAccount),signature=[accountKey,date,payee,particulars,reference,combinedNarration,code,direction,amount.amount.toFixed(2)].map(normalized).join('\\u001f'),occurrence=(occurrences.get(signature)||0)+1;occurrences.set(signature,occurrence);const canonical={bankAccountLabel:currentAccount,date,payee,particulars,reference,combinedNarration,code,direction,amount:amount.amount,tax:field(row,indexes.tax),comments:field(row,indexes.comments),yourComments:field(row,indexes.yourComments),occurrence};canonical.sourceHash=sha256Hex(JSON.stringify(canonical));groups.get(accountKey).rows.push(canonical);dataCount++;if(dataCount>5000)throw Error('CSV_ROW_LIMIT');}}catch(error){return fail(String(error.message||'CSV_ROW_INVALID'),'A grouped Xero export row or account section is invalid; nothing was imported.');}\nif(!groups.size)return fail('NO_ACCOUNT_SECTIONS','The Xero export contains no bank-account sections.');\nif(groups.size>100)return fail('ACCOUNT_LIMIT','The Xero export exceeds the 100-account safety bound.');\nconst now=new Date().toISOString(),scans=[],lines=[];\nfor(const group of groups.values()){const accountKey='csv-label-'+sha256Hex(group.key).slice(0,24),scanId='csv-'+runId+'-'+sha256Hex(group.key).slice(0,12),canonical=group.rows.map((row)=>row.sourceHash).join('\\n');scans.push({scanId,bankAccountId:accountKey,bankAccountLabel:group.label,startedAt:String(run.claimedAt||now),completedAt:now,expectedCount:group.rows.length,observedCount:group.rows.length,complete:'yes',layout:'xero-uncoded-csv-v1',blockingReasonsJson:'[]',captureSourceHash:sha256Hex(runId+'|'+group.key+'|'+canonical)});for(const row of group.rows){const statementLineId='csv-'+row.sourceHash.slice(0,40)+'-'+String(row.occurrence),narration=[row.combinedNarration,row.particulars,row.reference,row.code].filter(Boolean).join(' — '),visible={source:'csv-export',bankAccountLabel:group.label,date:row.date,payee:row.payee,particulars:row.particulars,reference:row.reference,combinedNarration:row.combinedNarration,code:row.code,tax:row.tax,comments:row.comments,yourComments:row.yourComments,amount:row.amount,direction:row.direction,occurrence:row.occurrence};lines.push({lineKey:scanId+'|'+statementLineId,scanId,bankAccountId:accountKey,statementLineId,active:'yes',uiMode:'uncoded_export',date:row.date,payee:row.payee,narration,reference:row.reference,amount:row.amount,currency:'',direction:row.direction,visibleFieldsJson:JSON.stringify(visible),matchedXeroTransactionId:'',sourceHash:row.sourceHash,capturedAt:now});}}\nconst reviewRunId='csv-review-'+runId,accountLabels=[...groups.values()].map((group)=>group.label).sort(),response={ok:true,run:{runId,source:String(run.source||'agent'),state:'reviewing',note:'All accounts requested; '+groups.size+' account labels present in export. The read-only review is starting.',current:5,total:6,accountCount:groups.size,capturedCount:lines.length,expectedCount:lines.length,createdAt:String(run.runCreatedAt||''),updatedAt:now},coverage:{allAccountsRequested:true,accountLabelsPresent:groups.size,verifiedFullOrganisationCoverage:false},reviewRunId};\nreturn [{json:{valid:true,replay:false,idempotencyKey:expectedImportKey,importClaimId,claimPreviousStatus,claimPreviousImportKey,claimPreviousImportClaimId,recoveringStale,runId,companionId,sessionId:String(run.sessionId||''),source:String(run.source||'agent'),period:'all',reviewRunId,now,scans,lines,scanIdsJson:JSON.stringify(scans.map((scan)=>scan.scanId)),accountCount:groups.size,rowCount:lines.length,accountLabels,response}}];"
+        "jsCode": "const webhook=$('Raw Authenticated CSV Import').first().json;\nconst raw=webhook.body??webhook;\nconst run=$('Verify Export Organisation').first().json;\nconst requestHeaders=webhook.headers??{},idempotencyKey=String(requestHeaders['idempotency-key']??requestHeaders['Idempotency-Key']??'').trim();\nconst fail=(code,message)=>[{json:{valid:false,response:{ok:false,error:{code,message}}}}];\nconst allowed=new Set(['schema_version','run_id','companion_id','file_name','csv_text','all_bank_accounts_requested']);\nif(!raw||typeof raw!=='object'||Array.isArray(raw)||Object.keys(raw).some((key)=>!allowed.has(key)))return fail('INVALID_IMPORT','The CSV import envelope contains unsupported fields.');\nconst uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;\nconst runId=String(raw.run_id||''),companionId=String(raw.companion_id||''),fileName=String(raw.file_name||''),rawSource=String(raw.csv_text||''),source=rawSource.replace(/^\\uFEFF/,'');\nif(raw.schema_version!==1||!uuid.test(runId)||!/^[A-Za-z0-9._:-]{8,128}$/.test(companionId)||!/\\.csv$/i.test(fileName)||fileName.length>255||raw.all_bank_accounts_requested!==true)return fail('INVALID_IMPORT','The raw Xero export envelope is invalid.');\nif(String(run.runId)!==runId||String(run.companionId)!==companionId||!String(run.organisationName||'')||!String(run.tenantId||''))return fail('RUN_OR_ORGANISATION_MISMATCH','The claimed run and verified Xero tenant and organisation do not match this export.');\nif(String(run.cancelRequested)==='yes'||String(run.status)==='cancelled')return fail('CAPTURE_CANCELLED','The Xero export run was cancelled.');\nif(!source||source.length>5242880||/\\u0000/.test(source))return fail('CSV_SIZE_LIMIT','The Xero CSV is empty, binary, or exceeds 5 MB.');\nconst parseCsv=(text)=>{const rows=[];let row=[],field='',quoted=false;for(let index=0;index<text.length;index++){const character=text[index];if(quoted){if(character==='\"'&&text[index+1]==='\"'){field+='\"';index++;}else if(character==='\"')quoted=false;else field+=character;continue;}if(character==='\"'){if(field!=='')throw Error('CSV_QUOTING');quoted=true;}else if(character===','){row.push(field);field='';}else if(character==='\\n'||character==='\\r'){if(character==='\\r'&&text[index+1]==='\\n')index++;row.push(field);field='';if(row.some((value)=>String(value).trim()!==''))rows.push(row);row=[];if(rows.length>5200)throw Error('CSV_ROW_LIMIT');}else field+=character;}if(quoted)throw Error('CSV_QUOTING');row.push(field);if(row.some((value)=>String(value).trim()!==''))rows.push(row);if(!rows.length)throw Error('CSV_EMPTY');return rows;};\nlet rows;try{rows=parseCsv(source);}catch(error){return fail(String(error.message||'CSV_INVALID'),'The Xero CSV is malformed or exceeds the bounded row limit.');}\nconst clean=(value)=>String(value??'').normalize('NFKC').trim().replace(/\\s+/g,' ');\nconst normalized=(value)=>clean(value).toLowerCase();\nconst normalizedHeader=(value)=>normalized(value).replace(/[_-]+/g,' ').replace(/[^a-z0-9 ]+/g,'').replace(/\\s+/g,' ').trim();\nconst aliases={date:['date','statement date'],payee:['payee','contact','name'],particulars:['particulars','description','details'],combinedNarration:['particulars reference code'],reference:['reference','ref'],code:['code'],comments:['comments','comment'],yourComments:['your comments','your comment'],tax:['tax','tax type'],spent:['spent','money out','debit'],received:['received','money in','credit']};\nconst headerIndex=(row,names)=>{const values=row.map(normalizedHeader);for(const name of names){const index=values.indexOf(name);if(index!==-1)return index;}return -1;};\nconst recognizeHeader=(row)=>{const indexes={};for(const [name,names] of Object.entries(aliases))indexes[name]=headerIndex(row,names);const narration=indexes.combinedNarration>=0||indexes.particulars>=0||indexes.reference>=0||indexes.code>=0;return indexes.date>=0&&indexes.payee>=0&&indexes.spent>=0&&indexes.received>=0&&narration?indexes:null;};\nconst firstHeader=rows.findIndex((row)=>recognizeHeader(row));\nif(firstHeader<0)return fail('CSV_HEADERS_INVALID','The CSV does not contain Xero’s repeated DATE, PAYEE, narration, SPENT, and RECEIVED account headers.');\nconst preamble=rows.slice(0,firstHeader);\nconst exactTitle=(row)=>{const cells=row.map(clean).filter(Boolean);return cells.length===1&&/^(?:uncoded statement lines|uncoded bank statement lines)$/i.test(cells[0]);};\nconst titledRows=preamble.filter(exactTitle),compactFilename=/^Statement Lines Report For All Orgs \\d{4}-\\d{2}-\\d{2}(?: \\(\\d{1,3}\\))?\\.csv$/i.test(fileName),compactCells=preamble.map((row)=>row.map(clean).filter(Boolean)),compactReport=titledRows.length===0&&compactFilename&&compactCells.length===2&&compactCells.every((row)=>row.length===1&&row[0].length>0&&row[0].length<=200);\nif(titledRows.length!==1&&!compactReport)return fail('CSV_MARKER_INVALID','The export is neither Xero’s titled grouped report nor its tenant-bound compact Statement Lines CSV.');\nconst expectedNames=[run.organisationName,run.organisationLegalName].map(clean).filter(Boolean).map(normalized);\nconst organisationRow=(row)=>{const cells=row.map(clean).filter(Boolean);if(cells.length===1&&expectedNames.includes(normalized(cells[0])))return true;if(cells.length===1){const match=/^(?:organisation|organization)\\s*:\\s*(.+)$/i.exec(cells[0]);return Boolean(match&&expectedNames.includes(normalized(match[1])));}return cells.length===2&&/^(?:organisation|organization)$/i.test(cells[0])&&expectedNames.includes(normalized(cells[1]));};\nif(!expectedNames.length||(titledRows.length===1&&!preamble.some(organisationRow)))return fail('CSV_ORGANISATION_MISMATCH','The export is not bound to the live Xero organisation.');\nconst reportFormat=compactReport?'xero-statement-lines-compact-v1':'xero-uncoded-lines-grouped-v1';\nconst dateOrder=String(run.dateOrder||'').toUpperCase();\nif(!new Set(['DMY','MDY']).has(dateOrder))return fail('DATE_ORDER_REQUIRED','The verified run has no supported Xero date order.');\nconst dateOf=(value)=>{const raw=clean(value);let year,month,day,match=/^(\\d{4})-(\\d{2})-(\\d{2})(?:T.*)?$/.exec(raw);if(match){[,year,month,day]=match;}if(!year){match=/^(\\d{1,2})\\s+([A-Za-z]{3,9})\\s+(\\d{4})$/.exec(raw);if(match){const index=['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'].indexOf(match[2].slice(0,3).toLowerCase());if(index>=0){day=match[1];month=String(index+1);year=match[3];}}}if(!year){match=/^([A-Za-z]{3,9})\\s+(\\d{1,2}),?\\s+(\\d{4})$/.exec(raw);if(match){const index=['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'].indexOf(match[1].slice(0,3).toLowerCase());if(index>=0){month=String(index+1);day=match[2];year=match[3];}}}if(!year){match=/^(\\d{1,2})[\\/-](\\d{1,2})[\\/-](\\d{4})$/.exec(raw);if(match){year=match[3];if(dateOrder==='DMY'){day=match[1];month=match[2];}else{month=match[1];day=match[2];}}}const parsed=new Date(Date.UTC(Number(year),Number(month)-1,Number(day)));if(!year||parsed.getUTCFullYear()!==Number(year)||parsed.getUTCMonth()!==Number(month)-1||parsed.getUTCDate()!==Number(day))throw Error('DATE_INVALID');return String(year).padStart(4,'0')+'-'+String(month).padStart(2,'0')+'-'+String(day).padStart(2,'0');};\nconst money=(value,label)=>{const raw=clean(value);if(!raw)return null;const negative=/^-/.test(raw)||/^\\(.*\\)$/.test(raw),digits=raw.replace(/[,$£€¥\\s()]/g,'').replace(/^[+-]/,'');if(!/^\\d+(?:\\.\\d+)?$/.test(digits))throw Error(label+'_INVALID');const amount=Number(digits);if(!Number.isFinite(amount)||amount<=0||amount>1e12)throw Error(label+'_INVALID');return {amount:Number(amount.toFixed(2)),negative};};\nconst field=(row,index)=>index>=0?clean(row[index]):'';\nconst accountHeading=(row)=>{const cells=row.map(clean).filter(Boolean);if(cells.length===2&&/^(?:bank )?account(?: name)?$/i.test(cells[0]))return cells[1];if(cells.length!==1)return '';const value=cells[0],prefixed=/^(?:bank )?account(?: name)?\\s*[:—-]\\s*(.+)$/i.exec(value);if(prefixed)return clean(prefixed[1]);if(exactTitle(row)||/^xero$/i.test(value)||/^(?:organisation|organization|from|to|date range|generated|report date)\\s*[:,-]/i.test(value)||/^there (?:are|is) no (?:uncoded )?statement lines/i.test(value)||/^(?:total|grand total|closing|opening|balance)\\b/i.test(value))return '';return value;};\nconst sha256Hex=(message)=>{const K=[0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2],bytes=[];for(let i=0;i<message.length;i++){let c=message.charCodeAt(i);if(c<128)bytes.push(c);else if(c<2048)bytes.push(192|(c>>6),128|(c&63));else if(c>=0xd800&&c<=0xdbff&&i+1<message.length){const c2=message.charCodeAt(++i),cp=0x10000+((c-0xd800)<<10)+(c2-0xdc00);bytes.push(240|(cp>>18),128|((cp>>12)&63),128|((cp>>6)&63),128|(cp&63));}else bytes.push(224|(c>>12),128|((c>>6)&63),128|(c&63));}const bitLen=bytes.length*8;bytes.push(128);while(bytes.length%64!==56)bytes.push(0);for(let i=7;i>=0;i--)bytes.push(Math.floor(bitLen/Math.pow(2,i*8))&255);const rotr=(x,n)=>(x>>>n)|(x<<(32-n)),w=new Array(64),h=[0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];for(let chunk=0;chunk<bytes.length;chunk+=64){for(let i=0;i<16;i++)w[i]=((bytes[chunk+i*4]<<24)|(bytes[chunk+i*4+1]<<16)|(bytes[chunk+i*4+2]<<8)|bytes[chunk+i*4+3])>>>0;for(let i=16;i<64;i++){const s0=(rotr(w[i-15],7)^rotr(w[i-15],18)^(w[i-15]>>>3))>>>0,s1=(rotr(w[i-2],17)^rotr(w[i-2],19)^(w[i-2]>>>10))>>>0;w[i]=(((w[i-16]+s0)>>>0)+((w[i-7]+s1)>>>0))>>>0;}let [a,b,c,d,e,f,g,hh]=h;for(let i=0;i<64;i++){const S1=(rotr(e,6)^rotr(e,11)^rotr(e,25))>>>0,ch=((e&f)^(~e&g))>>>0,t1=(hh+S1+ch+K[i]+w[i])>>>0,S0=(rotr(a,2)^rotr(a,13)^rotr(a,22))>>>0,maj=((a&b)^(a&c)^(b&c))>>>0,t2=(S0+maj)>>>0;hh=g;g=f;f=e;e=(d+t1)>>>0;d=c;c=b;b=a;a=(t1+t2)>>>0;}h[0]=(h[0]+a)>>>0;h[1]=(h[1]+b)>>>0;h[2]=(h[2]+c)>>>0;h[3]=(h[3]+d)>>>0;h[4]=(h[4]+e)>>>0;h[5]=(h[5]+f)>>>0;h[6]=(h[6]+g)>>>0;h[7]=(h[7]+hh)>>>0;}return h.map((value)=>value.toString(16).padStart(8,'0')).join('');};\nconst expectedImportKey='xero-import-'+sha256Hex(runId+'\\u0000'+fileName+'\\u0000'+rawSource);\nif(idempotencyKey!==expectedImportKey)return fail('IDEMPOTENCY_KEY_INVALID','The deterministic CSV import identity is missing or does not match the authenticated payload.');\nif(String(run.importKey||'')&&String(run.importKey)!==expectedImportKey)return fail('IMPORT_IDENTITY_CONFLICT','This capture run is already bound to a different CSV import.');\nconst runState=String(run.status||''),storedImportKey=String(run.importKey||''),storedImportClaimId=String(run.importClaimId||'');\nif(storedImportKey===expectedImportKey&&['reviewing','ready','failed'].includes(runState)){const updatedAt=new Date().toISOString();return [{json:{valid:true,replay:true,runId,companionId,idempotencyKey:expectedImportKey,response:{ok:true,replayed:true,run:{runId,source:String(run.source||'agent'),state:runState,note:'This exact Xero export was already accepted; no second scan or review was started.',current:Number(run.progressCurrent||5),total:Number(run.progressTotal||6),accountCount:Number(run.bankAccountsCaptured||0),capturedCount:Number(run.statementLinesObserved||0),expectedCount:Number(run.statementLinesObserved||0),createdAt:String(run.runCreatedAt||''),updatedAt}}}}];}\nconst leaseMs=180000,leaseAt=Date.parse(String(run.lastHeartbeatAt||run.runUpdatedAt||'')),leaseFresh=Number.isFinite(leaseAt)&&Date.now()-leaseAt<leaseMs;\nif(runState==='verifying'&&storedImportKey===expectedImportKey&&leaseFresh)return fail('IMPORT_IN_PROGRESS','This exact authenticated Xero CSV import is still being verified. Retry after the current import lease finishes.');\nconst recoveringStale=runState==='verifying'&&storedImportKey===expectedImportKey&&!leaseFresh;\nif(!recoveringStale&&(runState!=='uploading'||storedImportKey||storedImportClaimId))return fail('IMPORT_STATE_INVALID','The capture run is not awaiting a new or safely recoverable authenticated CSV upload.');\nconst importClaimId='import-'+sha256Hex(expectedImportKey+'|'+Date.now()+'|'+Math.random()).slice(0,32),claimPreviousStatus=recoveringStale?'verifying':'uploading',claimPreviousImportKey=recoveringStale?storedImportKey:'',claimPreviousImportClaimId=recoveringStale?storedImportClaimId:'';\nconst groups=new Map(),occurrences=new Map();let pendingAccount='',pendingAccountIdentifier='',currentAccount='',currentAccountIdentifier='',indexes=null,dataCount=0;\ntry{for(let index=0;index<rows.length;index++){const row=rows[index],header=recognizeHeader(row);if(header){if(!pendingAccount)throw Error('ACCOUNT_SECTION_MISSING');currentAccount=pendingAccount;currentAccountIdentifier=pendingAccountIdentifier;pendingAccount='';pendingAccountIdentifier='';indexes=header;const accountKey=normalized(currentAccount);if(!groups.has(accountKey))groups.set(accountKey,{key:accountKey,label:currentAccount,identifier:currentAccountIdentifier,rows:[]});else if(groups.get(accountKey).label!==currentAccount)throw Error('ACCOUNT_LABEL_INCONSISTENT');continue;}const heading=accountHeading(row);if(heading){if(pendingAccount&&!indexes&&!currentAccount)pendingAccountIdentifier=heading;else{pendingAccount=heading;pendingAccountIdentifier='';}indexes=null;currentAccount='';currentAccountIdentifier='';continue;}if(!indexes||!currentAccount)continue;const populated=row.map(clean).filter(Boolean);if(!populated.length)continue;if(populated.length===1&&/^there (?:are|is) no (?:uncoded )?statement lines/i.test(populated[0]))continue;if(/^total\\b/i.test(field(row,0))&&!field(row,indexes.date))continue;const dateRaw=field(row,indexes.date),payee=field(row,indexes.payee),particulars=field(row,indexes.particulars),reference=field(row,indexes.reference),combinedNarration=field(row,indexes.combinedNarration),code=field(row,indexes.code),spent=money(field(row,indexes.spent),'SPENT'),received=money(field(row,indexes.received),'RECEIVED');if(!dateRaw||Boolean(spent)===Boolean(received))throw Error('AMBIGUOUS_ROW');if(spent?.negative||received?.negative)throw Error('NEGATIVE_AMOUNT_UNSUPPORTED');if(!payee&&!particulars&&!reference&&!combinedNarration)throw Error('IDENTITY_FIELDS_MISSING');const date=dateOf(dateRaw),amount=spent||received,direction=spent?'outflow':'inflow',accountKey=normalized(currentAccount),signature=[accountKey,date,payee,particulars,reference,combinedNarration,code,direction,amount.amount.toFixed(2)].map(normalized).join('\\u001f'),occurrence=(occurrences.get(signature)||0)+1;occurrences.set(signature,occurrence);const canonical={bankAccountLabel:currentAccount,bankAccountIdentifier:currentAccountIdentifier,date,payee,particulars,reference,combinedNarration,code,direction,amount:amount.amount,tax:field(row,indexes.tax),comments:field(row,indexes.comments),yourComments:field(row,indexes.yourComments),occurrence};canonical.sourceHash=sha256Hex(JSON.stringify(canonical));groups.get(accountKey).rows.push(canonical);dataCount++;if(dataCount>5000)throw Error('CSV_ROW_LIMIT');}}catch(error){return fail(String(error.message||'CSV_ROW_INVALID'),'A grouped Xero export row or account section is invalid; nothing was imported.');}\nif(!groups.size)return fail('NO_ACCOUNT_SECTIONS','The Xero export contains no bank-account sections.');\nif(groups.size>100)return fail('ACCOUNT_LIMIT','The Xero export exceeds the 100-account safety bound.');\nconst now=new Date().toISOString(),scans=[],lines=[];\nfor(const group of groups.values()){const accountKey='csv-label-'+sha256Hex(group.key).slice(0,24),scanId='csv-'+runId+'-'+sha256Hex(group.key).slice(0,12),canonical=group.rows.map((row)=>row.sourceHash).join('\\n');scans.push({scanId,bankAccountId:accountKey,bankAccountLabel:group.label,startedAt:String(run.claimedAt||now),completedAt:now,expectedCount:group.rows.length,observedCount:group.rows.length,complete:'yes',layout:'xero-uncoded-csv-v1',blockingReasonsJson:'[]',captureSourceHash:sha256Hex(runId+'|'+group.key+'|'+canonical)});for(const row of group.rows){const statementLineId='csv-'+row.sourceHash.slice(0,40)+'-'+String(row.occurrence),narration=[row.combinedNarration,row.particulars,row.reference,row.code].filter(Boolean).join(' — '),visible={source:'csv-export',bankAccountLabel:group.label,bankAccountIdentifier:group.identifier,date:row.date,payee:row.payee,particulars:row.particulars,reference:row.reference,combinedNarration:row.combinedNarration,code:row.code,tax:row.tax,comments:row.comments,yourComments:row.yourComments,amount:row.amount,direction:row.direction,occurrence:row.occurrence};lines.push({lineKey:scanId+'|'+statementLineId,scanId,bankAccountId:accountKey,statementLineId,active:'yes',uiMode:'uncoded_export',date:row.date,payee:row.payee,narration,reference:row.reference,amount:row.amount,currency:'',direction:row.direction,visibleFieldsJson:JSON.stringify(visible),matchedXeroTransactionId:'',sourceHash:row.sourceHash,capturedAt:now});}}\nconst reviewRunId='csv-review-'+runId,accountLabels=[...groups.values()].map((group)=>group.label).sort(),response={ok:true,run:{runId,source:String(run.source||'agent'),state:'reviewing',note:'All accounts requested; '+groups.size+' account labels present in export. The read-only review is starting.',current:5,total:6,accountCount:groups.size,capturedCount:lines.length,expectedCount:lines.length,createdAt:String(run.runCreatedAt||''),updatedAt:now},coverage:{allAccountsRequested:true,accountLabelsPresent:groups.size,verifiedFullOrganisationCoverage:false,reportFormat},reviewRunId};\nreturn [{json:{valid:true,replay:false,idempotencyKey:expectedImportKey,importClaimId,claimPreviousStatus,claimPreviousImportKey,claimPreviousImportClaimId,recoveringStale,runId,companionId,sessionId:String(run.sessionId||''),source:String(run.source||'agent'),period:'all',reviewRunId,now,scans,lines,scanIdsJson:JSON.stringify(scans.map((scan)=>scan.scanId)),accountCount:groups.size,rowCount:lines.length,accountLabels,reportFormat,response}}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [220, 0],
+      "position": [
+        220,
+        0
+      ],
       "id": "98000117-0000-4000-8000-000000000004",
       "name": "Parse Official CSV"
     },
@@ -145,7 +175,10 @@
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [440, 0],
+      "position": [
+        440,
+        0
+      ],
       "id": "98000117-0000-4000-8000-000000000030",
       "name": "Reject Failed Parse Replay"
     },
@@ -176,7 +209,10 @@
       },
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [-360, 0],
+      "position": [
+        -360,
+        0
+      ],
       "id": "98000117-0000-4000-8000-000000000013",
       "name": "Valid CSV?"
     },
@@ -207,7 +243,10 @@
       },
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [-140, -240],
+      "position": [
+        -140,
+        -240
+      ],
       "id": "98000117-0000-4000-8000-000000000024",
       "name": "Import Replay?"
     },
@@ -318,7 +357,10 @@
       },
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1.1,
-      "position": [80, -240],
+      "position": [
+        80,
+        -240
+      ],
       "id": "98000117-0000-4000-8000-000000000025",
       "name": "Claim CSV Import",
       "alwaysOutputData": true
@@ -352,7 +394,10 @@
       },
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1.1,
-      "position": [300, -240],
+      "position": [
+        300,
+        -240
+      ],
       "id": "98000117-0000-4000-8000-000000000026",
       "name": "Read CSV Import Ownership",
       "alwaysOutputData": true
@@ -363,7 +408,10 @@
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [520, -240],
+      "position": [
+        520,
+        -240
+      ],
       "id": "98000117-0000-4000-8000-000000000027",
       "name": "Verify CSV Import Ownership"
     },
@@ -373,7 +421,10 @@
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [740, -240],
+      "position": [
+        740,
+        -240
+      ],
       "id": "98000117-0000-4000-8000-000000000031",
       "name": "Reject Failed Ownership Replay"
     },
@@ -404,7 +455,10 @@
       },
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [740, -240],
+      "position": [
+        740,
+        -240
+      ],
       "id": "98000117-0000-4000-8000-000000000028",
       "name": "Import Owned?"
     },
@@ -414,7 +468,10 @@
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [-140, -100],
+      "position": [
+        -140,
+        -100
+      ],
       "id": "98000117-0000-4000-8000-000000000014",
       "name": "Emit Account Scans"
     },
@@ -460,7 +517,10 @@
             "blockingReasonsJson": "={{ $json.blockingReasonsJson }}",
             "captureSourceHash": "={{ $json.captureSourceHash }}"
           },
-          "matchingColumns": ["scanId", "captureRunId"],
+          "matchingColumns": [
+            "scanId",
+            "captureRunId"
+          ],
           "schema": [
             {
               "id": "scanId",
@@ -540,7 +600,10 @@
       },
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1.1,
-      "position": [80, -100],
+      "position": [
+        80,
+        -100
+      ],
       "id": "98000117-0000-4000-8000-000000000015",
       "name": "Save CSV Account Scans"
     },
@@ -550,7 +613,10 @@
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [300, -100],
+      "position": [
+        300,
+        -100
+      ],
       "id": "98000117-0000-4000-8000-000000000016",
       "name": "Emit CSV Lines"
     },
@@ -581,7 +647,10 @@
       },
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [410, -100],
+      "position": [
+        410,
+        -100
+      ],
       "id": "98000117-0000-4000-8000-000000000023",
       "name": "Has CSV Lines?"
     },
@@ -639,7 +708,10 @@
             "sourceHash": "={{ $json.sourceHash }}",
             "capturedAt": "={{ $json.capturedAt }}"
           },
-          "matchingColumns": ["lineKey", "captureRunId"],
+          "matchingColumns": [
+            "lineKey",
+            "captureRunId"
+          ],
           "schema": [
             {
               "id": "lineKey",
@@ -779,7 +851,10 @@
       },
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1.1,
-      "position": [520, -100],
+      "position": [
+        520,
+        -100
+      ],
       "id": "98000117-0000-4000-8000-000000000017",
       "name": "Save CSV Lines"
     },
@@ -789,7 +864,10 @@
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [740, -100],
+      "position": [
+        740,
+        -100
+      ],
       "id": "98000117-0000-4000-8000-000000000018",
       "name": "Plan Read-Only Review"
     },
@@ -835,15 +913,15 @@
         "columns": {
           "mappingMode": "defineBelow",
           "value": {
-      "runUpdatedAt": "={{ $('Plan Read-Only Review').first().json.updatedAt }}",
+            "runUpdatedAt": "={{ $('Plan Read-Only Review').first().json.updatedAt }}",
             "lastHeartbeatAt": "={{ $('Plan Read-Only Review').first().json.lastHeartbeatAt }}",
             "status": "={{ $('Plan Read-Only Review').first().json.status }}",
             "phase": "={{ $('Plan Read-Only Review').first().json.phase }}",
             "progressCurrent": "={{ $('Plan Read-Only Review').first().json.progressCurrent }}",
             "progressTotal": "={{ $('Plan Read-Only Review').first().json.progressTotal }}",
             "progressMessage": "={{ $('Plan Read-Only Review').first().json.progressMessage }}",
-      "bankAccountsCaptured": "={{ $('Plan Read-Only Review').first().json.accountCount }}",
-      "statementLinesObserved": "={{ $('Plan Read-Only Review').first().json.rowCount }}",
+            "bankAccountsCaptured": "={{ $('Plan Read-Only Review').first().json.accountCount }}",
+            "statementLinesObserved": "={{ $('Plan Read-Only Review').first().json.rowCount }}",
             "scanIdsJson": "={{ $('Plan Read-Only Review').first().json.scanIdsJson }}",
             "accountLabelsJson": "={{ $('Plan Read-Only Review').first().json.accountLabelsJson }}",
             "reviewRunId": "={{ $('Plan Read-Only Review').first().json.reviewRunId }}",
@@ -924,7 +1002,10 @@
       },
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1.1,
-      "position": [960, -100],
+      "position": [
+        960,
+        -100
+      ],
       "id": "98000117-0000-4000-8000-000000000019",
       "name": "Mark Capture Reviewing",
       "alwaysOutputData": true
@@ -983,7 +1064,10 @@
       },
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.3,
-      "position": [1180, -100],
+      "position": [
+        1180,
+        -100
+      ],
       "id": "98000117-0000-4000-8000-000000000020",
       "name": "Start Automatic Read-Only Review",
       "onError": "continueRegularOutput"
@@ -994,7 +1078,10 @@
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1400, -100],
+      "position": [
+        1400,
+        -100
+      ],
       "id": "98000117-0000-4000-8000-000000000021",
       "name": "Shape Import Response"
     },
@@ -1020,7 +1107,10 @@
       },
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
-      "position": [1640, 0],
+      "position": [
+        1640,
+        0
+      ],
       "id": "98000117-0000-4000-8000-000000000022",
       "name": "Respond CSV Import"
     },
@@ -1030,7 +1120,10 @@
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [-40, -520],
+      "position": [
+        -40,
+        -520
+      ],
       "id": "98000117-0000-4000-8000-000000000032",
       "name": "Plan Reviewing Replay Recovery"
     },
@@ -1061,7 +1154,10 @@
       },
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [180, -520],
+      "position": [
+        180,
+        -520
+      ],
       "id": "98000117-0000-4000-8000-000000000033",
       "name": "Inspect Interrupted Review?"
     },
@@ -1095,7 +1191,10 @@
       },
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1.1,
-      "position": [400, -600],
+      "position": [
+        400,
+        -600
+      ],
       "id": "98000117-0000-4000-8000-000000000034",
       "name": "Read Recovery Review Run",
       "alwaysOutputData": true
@@ -1106,7 +1205,10 @@
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [620, -600],
+      "position": [
+        620,
+        -600
+      ],
       "id": "98000117-0000-4000-8000-000000000035",
       "name": "Plan Review Redispatch"
     },
@@ -1137,7 +1239,10 @@
       },
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [840, -600],
+      "position": [
+        840,
+        -600
+      ],
       "id": "98000117-0000-4000-8000-000000000036",
       "name": "Redispatch Needed?"
     },
@@ -1228,7 +1333,10 @@
       },
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1.1,
-      "position": [1060, -600],
+      "position": [
+        1060,
+        -600
+      ],
       "id": "98000117-0000-4000-8000-000000000037",
       "name": "Claim Review Redispatch",
       "alwaysOutputData": true
@@ -1268,7 +1376,10 @@
       },
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1.1,
-      "position": [1280, -600],
+      "position": [
+        1280,
+        -600
+      ],
       "id": "98000117-0000-4000-8000-000000000038",
       "name": "Read Review Redispatch Ownership",
       "alwaysOutputData": true
@@ -1279,7 +1390,10 @@
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1500, -600],
+      "position": [
+        1500,
+        -600
+      ],
       "id": "98000117-0000-4000-8000-000000000039",
       "name": "Verify Review Redispatch Ownership"
     },
@@ -1310,7 +1424,10 @@
       },
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [1720, -600],
+      "position": [
+        1720,
+        -600
+      ],
       "id": "98000117-0000-4000-8000-000000000040",
       "name": "Redispatch Owned?"
     },
@@ -1368,7 +1485,10 @@
       },
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.3,
-      "position": [1940, -680],
+      "position": [
+        1940,
+        -680
+      ],
       "id": "98000117-0000-4000-8000-000000000041",
       "name": "Redispatch Automatic Read-Only Review"
     },
@@ -1459,7 +1579,10 @@
       },
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1.1,
-      "position": [2160, -680],
+      "position": [
+        2160,
+        -680
+      ],
       "id": "98000117-0000-4000-8000-000000000042",
       "name": "Mark Review Redispatched",
       "alwaysOutputData": true
@@ -1470,7 +1593,10 @@
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2380, -680],
+      "position": [
+        2380,
+        -680
+      ],
       "id": "98000117-0000-4000-8000-000000000043",
       "name": "Shape Review Redispatch Response"
     }

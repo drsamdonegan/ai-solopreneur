@@ -21,7 +21,7 @@ If a live run already exists for that conversation, reuse it. If the helper is o
 
 ## Evidence and completeness
 
-The CSV parser must bind the report title and organisation, preserve every repeated bank-account section (including empty sections), reject ambiguous dates and amounts, and resolve each account label to exactly one active Xero `BANK` AccountID before a row can become executable. All rows are bound to SHA-256 source hashes and duplicate rows remain distinct through occurrence order.
+The CSV parser accepts Xero's titled grouped export or its current compact **Statement Lines Report For All Orgs YYYY-MM-DD.csv** format. The titled form must name the verified organisation. The compact form omits that name, so it is accepted only when its exact filename and two-row account preamble arrive through a run already bound to the live API-verified Xero tenant. Preserve every repeated bank-account section (including empty sections), keep the account name separate from its following account identifier, reject ambiguous dates and amounts, and resolve each account label to exactly one active Xero `BANK` AccountID before a row can become executable. All rows are bound to SHA-256 source hashes and duplicate rows remain distinct through occurrence order.
 
 An **All bank accounts** export avoids clicking through Xero reconciliation pages, but it does not prove that the user selected all historical dates. Describe coverage as the exported date range, never as all history unless the user confirms the range.
 

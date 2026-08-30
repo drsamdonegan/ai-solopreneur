@@ -23,6 +23,7 @@ export const DEFAULT_LIMITS = Object.freeze({
 const INBOX_MARKER = ".mlai-xero-export-inbox.json";
 const COMPANION_LOCK = ".mlai-xero-export-companion.lock";
 const REPORT_MARKERS = ["uncoded statement lines", "uncoded bank statement lines"];
+const MODERN_COMPACT_EXPORT_NAME = /^Statement Lines Report For All Orgs \d{4}-\d{2}-\d{2}(?: \(\d{1,3}\))?\.csv$/i;
 const HEADER_ALIASES = Object.freeze({
   date: ["date", "statement date"],
   payee: ["payee", "contact", "name"],
@@ -489,6 +490,16 @@ function exactReportTitle(row) {
   return cells.length === 1 && REPORT_MARKERS.includes(normalized(cells[0]));
 }
 
+function modernCompactReportPreamble(preamble, { fileName, tenantId } = {}) {
+  const tenant = clean(tenantId);
+  const cells = preamble.map((row) => row.map(clean).filter(Boolean));
+  return MODERN_COMPACT_EXPORT_NAME.test(clean(fileName))
+    && /^[0-9a-f-]{20,64}$/i.test(tenant)
+    && cells.length === 2
+    && cells.every((row) => row.length === 1 && row[0].length > 0 && row[0].length <= 200)
+    && !cells.some((row) => REPORT_MARKERS.includes(normalized(row[0])));
+}
+
 function expectedOrganisationNames(values) {
   const source = Array.isArray(values) ? values : [values];
   const names = [...new Set(source.map(clean).filter(Boolean).map(normalized))];
@@ -536,6 +547,8 @@ function canonicalSourceHash(row) {
 export function preflightXeroUncodedStatementCsv(source, {
   dateOrder,
   organisationNames,
+  fileName = "",
+  tenantId = "",
   maximumRows = DEFAULT_LIMITS.maximumRows,
   maximumAccounts = DEFAULT_LIMITS.maximumAccounts,
 } = {}) {
@@ -553,13 +566,15 @@ export function preflightXeroUncodedStatementCsv(source, {
   const firstHeader = rows.findIndex((row) => recognizeHeader(row));
   const preambleLimit = firstHeader === -1 ? Math.min(rows.length, 50) : firstHeader;
   const preamble = rows.slice(0, preambleLimit);
-  if (!preamble.some(exactReportTitle)) {
+  const titledReport = preamble.some(exactReportTitle);
+  const compactReport = modernCompactReportPreamble(preamble, { fileName, tenantId });
+  if (!titledReport && !compactReport) {
     throw new ExportCaptureError(
       "REPORT_MARKER_MISSING",
-      "The CSV preamble is not a recognized Xero Uncoded Statement Lines report.",
+      "The CSV preamble and filename are not a recognized Xero Uncoded Statement Lines export.",
     );
   }
-  if (!preamble.some((row) => rowMatchesOrganisation(row, expectedNames))) {
+  if (titledReport && !preamble.some((row) => rowMatchesOrganisation(row, expectedNames))) {
     throw new ExportCaptureError(
       "ORGANISATION_MISMATCH",
       "The Xero report does not name the expected organisation.",
@@ -578,7 +593,9 @@ export function preflightXeroUncodedStatementCsv(source, {
   const resolvedDateOrder = resolveDateOrder(rows, dateOrder);
   let dataRows = 0;
   let pendingAccount = "";
+  let pendingAccountIdentifier = "";
   let currentAccount = "";
+  let currentAccountIdentifier = "";
   let indexes = null;
   for (let index = 0; index < rows.length; index += 1) {
     const row = rows[index];
@@ -591,17 +608,24 @@ export function preflightXeroUncodedStatementCsv(source, {
         );
       }
       currentAccount = pendingAccount;
+      currentAccountIdentifier = pendingAccountIdentifier;
       pendingAccount = "";
+      pendingAccountIdentifier = "";
       indexes = header;
       const accountKey = normalized(currentAccount);
-      if (!groups.has(accountKey)) groups.set(accountKey, { label: currentAccount, rowCount: 0 });
+      if (!groups.has(accountKey)) groups.set(accountKey, { label: currentAccount, identifier: currentAccountIdentifier, rowCount: 0 });
       continue;
     }
     const heading = accountHeading(row);
     if (heading) {
-      pendingAccount = heading;
+      if (pendingAccount && !indexes && !currentAccount) pendingAccountIdentifier = heading;
+      else {
+        pendingAccount = heading;
+        pendingAccountIdentifier = "";
+      }
       indexes = null;
       currentAccount = "";
+      currentAccountIdentifier = "";
       continue;
     }
     if (!indexes || !currentAccount) continue;
@@ -631,6 +655,7 @@ export function preflightXeroUncodedStatementCsv(source, {
     occurrences.set(signature, occurrence);
     const canonical = {
       bankAccountLabel: currentAccount,
+      bankAccountIdentifier: currentAccountIdentifier,
       date,
       payee,
       particulars,
@@ -650,6 +675,7 @@ export function preflightXeroUncodedStatementCsv(source, {
   if (!groups.size) throw new ExportCaptureError("ACCOUNT_SECTION_MISSING", "The Xero report contains no recognized bank-account sections.");
   if (groups.size > maximumAccounts) throw new ExportCaptureError("ACCOUNT_LIMIT", `The Xero export contains more than ${maximumAccounts} bank accounts.`);
   return {
+    reportFormat: compactReport ? "xero-statement-lines-compact-v1" : "xero-uncoded-lines-grouped-v1",
     rowCount: dataRows,
     accountCount: groups.size,
     accountLabels: [...groups.values()].map((group) => group.label).sort(),
@@ -841,12 +867,14 @@ function validateJob(raw) {
     ...(Array.isArray(value.expected_organisation_names) ? value.expected_organisation_names : []),
   ].map(clean).filter(Boolean);
   expectedOrganisationNames(organisationNames);
+  const tenantId = clean(value.tenant_id || value.tenantId);
   return {
     runId,
     claimedAt,
     exportUrl: assertOfficialExportUrl(value.export_url || value.exportUrl || OFFICIAL_UNCODED_LINES_URL),
     dateOrder,
     organisationNames,
+    tenantId,
   };
 }
 
@@ -1193,6 +1221,8 @@ export async function runExportJob({
   const parsed = preflightXeroUncodedStatementCsv(csv.buffer, {
     dateOrder: job.dateOrder,
     organisationNames: job.organisationNames,
+    fileName: csv.name,
+    tenantId: job.tenantId,
   });
   const coverageNote = `All bank accounts requested; ${parsed.accountCount} account labels present in export. Completeness is not independently confirmed.`;
   await emit(structuredStatus("verifying", { runId: job.runId, state: "recognized_xero_export", message: coverageNote, rowCount: parsed.rowCount, accountCount: parsed.accountCount, current: 3, total: 4 }));

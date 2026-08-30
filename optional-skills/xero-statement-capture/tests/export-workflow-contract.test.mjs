@@ -93,6 +93,7 @@ for (const name of ["Authenticated Claim", "Authenticated Progress"]) {
 }
 const bindCode = node(bridge, "Bind Claim To Organisation").parameters.jsCode;
 check(bindCode.includes("mode:'user-mediated-xero-export'"), "the claimed mode must match the companion feature gate exactly");
+check(bindCode.includes("tenant_id:tenantId"), "the companion job must carry the API-verified Xero tenant binding needed by compact exports");
 check(bindCode.includes("const dateOrder='YMD'") && !bridge.nodes.some((entry) => entry.name === "Read Claim Organisation Details"), "claiming must not require Xero's broader Organisation settings scope");
 check(bridge.connections["Verify Live Xero Organisation"].main[0][0].node === "Bind Claim To Organisation", "the existing connection endpoint must bind the tenant directly before a user export");
 const progressCode = node(bridge, "Plan Progress").parameters.jsCode;
@@ -107,6 +108,7 @@ check(importHook.parameters.path === "xero-capture-import" && importHook.credent
 const parseCode = node(importer, "Parse Official CSV").parameters.jsCode;
 const verifyExportCode = node(importer, "Verify Export Organisation").parameters.jsCode;
 check(verifyExportCode.includes("csv.matchAll") && verifyExportCode.includes("first>12&&second<=12?'DMY'") && verifyExportCode.includes("!matches.length?'DMY':''"), "CSV import must infer only unambiguous slash-date order and accept order-independent date formats");
+check(verifyExportCode.includes("String(row.tenantId||'')"), "CSV import must retain the API-verified tenant binding");
 for (const phrase of ["all_bank_accounts_requested", "combinedNarration", "yourComments", "ACCOUNT_SECTION_MISSING", "sha256Hex", "uncoded_export", "CSV_ROW_LIMIT"]) {
   check(parseCode.includes(phrase), `strict grouped parser must include ${phrase}`);
 }
@@ -195,7 +197,7 @@ for (const workflowValue of [start, status, control, bridge, importer]) {
 }
 
 const fixture = await readFile(join(here, "fixtures", "uncoded-statement-lines.csv"), "utf8");
-const run = { runId: "123e4567-e89b-42d3-a456-426614174000", sessionId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", companionId: "companion-test", organisationName: "MLAI", organisationLegalName: "", dateOrder: "DMY", status: "uploading", importKey: "", importClaimId: "", source: "agent" };
+const run = { runId: "123e4567-e89b-42d3-a456-426614174000", sessionId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", companionId: "companion-test", tenantId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", organisationName: "MLAI", organisationLegalName: "", dateOrder: "DMY", status: "uploading", importKey: "", importClaimId: "", source: "agent" };
 const raw = { schema_version: 1, run_id: run.runId, companion_id: run.companionId, file_name: "Uncoded.csv", csv_text: fixture, all_bank_accounts_requested: true };
 const importKey = (envelope) => `xero-import-${createHash("sha256").update(`${envelope.run_id}\0${envelope.file_name}\0${envelope.csv_text}`).digest("hex")}`;
 const executeParser = (envelope = raw, verifiedRun = run, header = importKey(envelope)) => new Function("$", "$input", "$json", parseCode)(
@@ -207,6 +209,14 @@ check(parsed.idempotencyKey === importKey(raw), "n8n and companion import identi
 const visible = JSON.parse(parsed.lines[1].visibleFieldsJson);
 check(visible.combinedNarration.includes("INV-42") && visible.comments === "Duplicate bank line" && visible.yourComments === "Owner note", "combined narration and both comment fields must remain distinct");
 check(executeParser(raw, { ...run, organisationName: "Another Organisation" }).response.error.code === "CSV_ORGANISATION_MISMATCH", "parser must bind the report preamble to the live organisation");
+const compactFixture = await readFile(join(here, "fixtures", "statement-lines-compact.csv"), "utf8");
+const compactRaw = { ...raw, file_name: "Statement Lines Report For All Orgs 2026-08-30.csv", csv_text: compactFixture };
+const compactParsed = executeParser(compactRaw);
+check(compactParsed.valid === true && compactParsed.reportFormat === "xero-statement-lines-compact-v1" && compactParsed.accountLabels[0] === "Business Trans Acct", "strict n8n parser must accept Xero's current compact export only through its exact format");
+const compactVisible = JSON.parse(compactParsed.lines[0].visibleFieldsJson);
+check(compactVisible.bankAccountIdentifier === "06 3010 1496 6550", "compact n8n imports must preserve the account name and following account identifier separately");
+check(executeParser({ ...compactRaw, file_name: "generic.csv" }).response.error.code === "CSV_MARKER_INVALID", "compact bytes under a generic filename must fail closed");
+check(executeParser(compactRaw, { ...run, tenantId: "" }).response.error.code === "RUN_OR_ORGANISATION_MISMATCH", "compact exports without the API-verified tenant binding must fail closed");
 check(executeParser(raw, run, "xero-import-not-the-payload").response.error.code === "IDEMPOTENCY_KEY_INVALID", "an import header for different bytes must fail closed");
 check(executeParser(raw, { ...run, status: "reviewing", importKey: importKey(raw) }).replay === true, "an exact accepted retry must return the existing state without parsing writes again");
 const freshLease = executeParser(raw, { ...run, status: "verifying", importKey: importKey(raw), importClaimId: "old-claim", lastHeartbeatAt: new Date().toISOString() });
