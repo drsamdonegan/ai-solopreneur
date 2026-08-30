@@ -592,19 +592,16 @@
     },
     {
       "parameters": {
-        "resume": "timeInterval",
-        "amount": 0.25,
-        "unit": "seconds"
+        "jsCode": "await new Promise((resolve)=>setTimeout(resolve,100));return $input.all();"
       },
-      "type": "n8n-nodes-base.wait",
-      "typeVersion": 1.1,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [
         140,
         300
       ],
       "id": "98000116-0000-4000-8000-000000000030",
-      "name": "Wait For Progress Update",
-      "webhookId": "98000116-0000-4000-8000-000000000134"
+      "name": "Pause For Progress Update"
     },
     {
       "parameters": {
@@ -1004,7 +1001,7 @@
               "index": 0
             },
             {
-              "node": "Wait For Progress Update",
+              "node": "Pause For Progress Update",
               "type": "main",
               "index": 0
             }
@@ -1018,7 +1015,7 @@
         ]
       ]
     },
-      "Wait For Progress Update": {
+      "Pause For Progress Update": {
         "main": [
           [
             {
