@@ -91,6 +91,9 @@ run("read-only upgrade preflight", process.execPath, [
 run("cloud skill seeding", process.execPath, [
   "scripts/test-cloud-skills.mjs",
 ]);
+run("cloud n8n cache relocation", process.execPath, [
+  "tests/cloud-storage.test.mjs",
+]);
 run("cloud repository-managed webhook publishing", process.execPath, [
   "tests/cloud-workflows-required.test.mjs",
 ]);

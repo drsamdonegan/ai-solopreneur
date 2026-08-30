@@ -25,10 +25,12 @@ import {
   writeFileSync,
 } from "node:fs";
 import { randomBytes } from "node:crypto";
+import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runConfigHelp, runSetup, setupIsNeeded } from "./cloud-setup.mjs";
 import { seedCloudSkills } from "./cloud-skills.mjs";
+import { ensureN8nEphemeralCache } from "./cloud-storage.mjs";
 import {
   ensureXeroCaptureCredentials,
   primeAgent,
@@ -44,6 +46,8 @@ const dataDir = resolve(process.env.AGENT_DATA_DIR || "/data");
 const paths = {
   dataDir,
   n8nUserFolder: join(dataDir, "n8n"),
+  n8nCacheDir: join(dataDir, "n8n", ".cache"),
+  n8nEphemeralCacheDir: join(tmpdir(), "ai-solopreneur", "n8n-cache"),
   chatDataDir: join(dataDir, "chat"),
   documentDataDir: join(dataDir, "documents"),
   profileDataDir: join(dataDir, "profile"),
@@ -782,6 +786,22 @@ async function main() {
   print("Starting your agent...");
   print("");
 
+  // Recover before even probing the volume. A previous release may have left
+  // n8n's generated editor cache on a now-full persistent disk; removing those
+  // disposable bytes is what makes the write probe (and SQLite) work again.
+  try {
+    const cache = ensureN8nEphemeralCache({
+      persistentRoot: paths.dataDir,
+      persistentCacheDir: paths.n8nCacheDir,
+      ephemeralCacheDir: paths.n8nEphemeralCacheDir,
+    });
+    if (cache.changed) {
+      print("  Moved n8n's generated cache off persistent storage.");
+    }
+  } catch {
+    // Missing or unwritable storage is explained by findConfigProblems below.
+  }
+
   // A hosting platform builds and deploys the moment a project is created, so
   // the first deploy of every agent lands here before anyone could have added
   // storage or settings. Holding the door open beats exiting: exiting shows
@@ -839,6 +859,14 @@ async function main() {
     );
     print("");
   }
+
+  // Setup can restore a volume after the early recovery pass. Reassert the
+  // cache boundary before any n8n CLI process has a chance to regenerate it.
+  ensureN8nEphemeralCache({
+    persistentRoot: paths.dataDir,
+    persistentCacheDir: paths.n8nCacheDir,
+    ephemeralCacheDir: paths.n8nEphemeralCacheDir,
+  });
 
   // Setup can restore an older enabled.txt after the image was built. Seed
   // afterwards so installed source packages become live on the first cloud
