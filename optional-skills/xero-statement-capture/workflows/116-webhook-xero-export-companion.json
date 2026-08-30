@@ -592,7 +592,7 @@
     },
     {
       "parameters": {
-        "jsCode": "await new Promise((resolve)=>setTimeout(resolve,100));return $input.all();"
+        "jsCode": "const input=$input.first().json;return [{json:{...input,response:{ok:true,cancelled:false,run_id:input.runId,status:input.status}}}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -601,7 +601,7 @@
         300
       ],
       "id": "98000116-0000-4000-8000-000000000030",
-      "name": "Pause For Progress Update"
+      "name": "Shape Accepted Progress Response"
     },
     {
       "parameters": {
@@ -722,54 +722,31 @@
     },
     {
       "parameters": {
-        "resource": "row",
-        "operation": "get",
-        "dataTableId": {
-          "__rl": true,
-          "value": "xero_capture_runs",
-          "mode": "name"
-        },
-        "matchType": "allConditions",
-        "filters": {
-          "conditions": [
-            {
-              "keyName": "runId",
-              "condition": "eq",
-              "keyValue": "={{ $('Plan Progress').first().json.runId }}"
-            },
-            {
-              "keyName": "companionId",
-              "condition": "eq",
-              "keyValue": "={{ $('Plan Progress').first().json.companionId }}"
-            }
-          ]
-        },
-        "returnAll": false,
-        "limit": 2,
-        "orderBy": false
+        "respondWith": "json",
+        "responseBody": "={{ $json.response }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json; charset=utf-8"
+              },
+              {
+                "name": "Cache-Control",
+                "value": "no-store"
+              }
+            ]
+          }
+        }
       },
-      "type": "n8n-nodes-base.dataTable",
-      "typeVersion": 1.1,
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
       "position": [
         360,
         140
       ],
       "id": "98000116-0000-4000-8000-000000000028",
-      "name": "Read Progress Result",
-      "alwaysOutputData": true
-    },
-    {
-      "parameters": {
-        "jsCode": "const planned=$('Plan Progress').first().json;const stored=$input.first().json;const status=String(stored.status||stored.phase||'preflight');if(!Number.isInteger(stored.id)||String(stored.runId)!==planned.runId||String(stored.companionId)!==planned.companionId||(status!==String(planned.status)&&status!=='cancelled'))return [{json:{response:{ok:false,error:{code:'PROGRESS_UPDATE_UNCONFIRMED',message:'The capture progress update could not be confirmed.'}}}}];return [{json:{response:{ok:true,cancelled:status==='cancelled',run_id:planned.runId,status}}}];"
-      },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        580,
-        140
-      ],
-      "id": "98000116-0000-4000-8000-000000000026",
-      "name": "Shape Progress Response"
+      "name": "Respond Accepted Progress"
     },
     {
       "parameters": {
@@ -992,16 +969,11 @@
         ]
       ]
     },
-      "Progress Accepted?": {
+    "Progress Accepted?": {
         "main": [
           [
             {
-              "node": "Update Capture Progress",
-              "type": "main",
-              "index": 0
-            },
-            {
-              "node": "Pause For Progress Update",
+              "node": "Shape Accepted Progress Response",
               "type": "main",
               "index": 0
             }
@@ -1015,33 +987,22 @@
         ]
       ]
     },
-      "Pause For Progress Update": {
-        "main": [
-          [
-            {
-            "node": "Read Progress Result",
+    "Shape Accepted Progress Response": {
+      "main": [
+        [
+          {
+            "node": "Respond Accepted Progress",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Read Progress Result": {
+    "Respond Accepted Progress": {
       "main": [
         [
           {
-            "node": "Shape Progress Response",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Shape Progress Response": {
-      "main": [
-        [
-          {
-            "node": "Respond Progress",
+            "node": "Update Capture Progress",
             "type": "main",
             "index": 0
           }

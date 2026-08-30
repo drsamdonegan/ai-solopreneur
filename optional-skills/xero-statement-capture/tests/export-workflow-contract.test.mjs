@@ -97,6 +97,10 @@ check(bindCode.includes("const dateOrder='YMD'") && !bridge.nodes.some((entry) =
 check(bridge.connections["Verify Live Xero Organisation"].main[0][0].node === "Bind Claim To Organisation", "the existing connection endpoint must bind the tenant directly before a user export");
 const progressCode = node(bridge, "Plan Progress").parameters.jsCode;
 check(progressCode.includes("IMPORT_OWNS_REVIEW_STATE") && progressCode.includes("backward"), "companion progress must be monotonic and unable to overwrite import-owned review states");
+const progressUpdateFilters = node(bridge, "Update Capture Progress").parameters.filters.conditions;
+check(["runId", "companionId", "cancelRequested"].every((key) => progressUpdateFilters.some((filter) => filter.keyName === key)) && !progressUpdateFilters.some((filter) => filter.keyName === "status"), "accepted progress must stay bound to the claimed uncancelled run without relying on a stale status compare");
+check(bridge.connections["Progress Accepted?"].main[0][0].node === "Shape Accepted Progress Response" && bridge.connections["Shape Accepted Progress Response"].main[0][0].node === "Respond Accepted Progress" && bridge.connections["Respond Accepted Progress"].main[0][0].node === "Update Capture Progress", "accepted progress must acknowledge the validated ownership decision before the data-table node's empty output ends the workflow");
+check(node(bridge, "Respond Accepted Progress").parameters.responseBody === "={{ $json.response }}" && node(bridge, "Shape Accepted Progress Response").parameters.jsCode.includes("cancelled:false"), "accepted progress must return the exact companion acknowledgement envelope");
 
 const importHook = node(importer, "Raw Authenticated CSV Import");
 check(importHook.parameters.path === "xero-capture-import" && importHook.credentials.httpHeaderAuth.name === "Xero Capture Bridge", "raw CSV import must use the bridge webhook");
