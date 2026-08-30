@@ -1025,7 +1025,7 @@
           "attemptToConvertTypes": false,
           "convertFieldsToString": true
         },
-        "mode": "once",
+        "mode": "each",
         "options": {
           "waitForSubWorkflow": true
         }
