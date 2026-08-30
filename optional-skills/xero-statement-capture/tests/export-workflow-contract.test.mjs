@@ -93,13 +93,16 @@ for (const name of ["Authenticated Claim", "Authenticated Progress"]) {
 }
 const bindCode = node(bridge, "Bind Claim To Organisation").parameters.jsCode;
 check(bindCode.includes("mode:'user-mediated-xero-export'"), "the claimed mode must match the companion feature gate exactly");
-check(bindCode.includes("['AU','NZ','GB']") && bindCode.includes("country==='US'?'MDY'"), "date order must derive from the live Xero country and fail closed otherwise");
+check(bindCode.includes("const dateOrder='YMD'") && !bridge.nodes.some((entry) => entry.name === "Read Claim Organisation Details"), "claiming must not require Xero's broader Organisation settings scope");
+check(bridge.connections["Verify Live Xero Organisation"].main[0][0].node === "Bind Claim To Organisation", "the existing connection endpoint must bind the tenant directly before a user export");
 const progressCode = node(bridge, "Plan Progress").parameters.jsCode;
 check(progressCode.includes("IMPORT_OWNS_REVIEW_STATE") && progressCode.includes("backward"), "companion progress must be monotonic and unable to overwrite import-owned review states");
 
 const importHook = node(importer, "Raw Authenticated CSV Import");
 check(importHook.parameters.path === "xero-capture-import" && importHook.credentials.httpHeaderAuth.name === "Xero Capture Bridge", "raw CSV import must use the bridge webhook");
 const parseCode = node(importer, "Parse Official CSV").parameters.jsCode;
+const verifyExportCode = node(importer, "Verify Export Organisation").parameters.jsCode;
+check(verifyExportCode.includes("csv.matchAll") && verifyExportCode.includes("first>12&&second<=12?'DMY'") && verifyExportCode.includes("!matches.length?'DMY':''"), "CSV import must infer only unambiguous slash-date order and accept order-independent date formats");
 for (const phrase of ["all_bank_accounts_requested", "combinedNarration", "yourComments", "ACCOUNT_SECTION_MISSING", "sha256Hex", "uncoded_export", "CSV_ROW_LIMIT"]) {
   check(parseCode.includes(phrase), `strict grouped parser must include ${phrase}`);
 }

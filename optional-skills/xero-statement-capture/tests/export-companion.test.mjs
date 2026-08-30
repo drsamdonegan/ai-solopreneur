@@ -54,10 +54,21 @@ await rejects(
   /repeated Date, Payee, narration, Spent, and Received headers/i,
   "missing Xero grouped-report headers must fail closed",
 );
+const inferredDmy = preflightXeroUncodedStatementCsv(fixture, {
+  dateOrder: "YMD",
+  organisationNames: ["MLAI"],
+});
+check(
+  inferredDmy.rows[0].date === "2026-08-27",
+  "an unambiguous exported slash date should safely establish DMY without another Xero scope",
+);
 await rejects(
-  async () => preflightXeroUncodedStatementCsv(fixture, { organisationNames: ["MLAI"] }),
+  async () => preflightXeroUncodedStatementCsv(
+    fixture.toString("utf8").replaceAll("27/08/2026", "08/09/2026"),
+    { dateOrder: "YMD", organisationNames: ["MLAI"] },
+  ),
   /DMY or MDY/i,
-  "the companion must not guess the meaning of slash dates",
+  "an all-ambiguous slash-date export must still fail closed instead of guessing",
 );
 await rejects(
   async () => preflightXeroUncodedStatementCsv(Buffer.from([0, 1, 2]), { dateOrder: "DMY", organisationNames: ["MLAI"] }),

@@ -186,52 +186,7 @@
     },
     {
       "parameters": {
-        "url": "https://api.xero.com/api.xro/2.0/Organisation",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "oAuth2Api",
-        "sendHeaders": "={{ $('Verify Live Xero Organisation').first().json.connectionType !== 'custom' }}",
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Xero-tenant-id",
-              "value": "={{ $('Verify Live Xero Organisation').first().json.tenantId }}"
-            },
-            {
-              "name": "Accept",
-              "value": "application/json"
-            }
-          ]
-        },
-        "options": {
-          "timeout": 20000,
-          "response": {
-            "response": {
-              "fullResponse": true,
-              "neverError": true
-            }
-          }
-        }
-      },
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.4,
-      "position": [
-        340,
-        -300
-      ],
-      "id": "98000116-0000-4000-8000-000000000034",
-      "name": "Read Claim Organisation Details",
-      "credentials": {
-        "oAuth2Api": {
-          "id": "phase19XeroReadonly",
-          "name": "Xero (read-only)"
-        }
-      },
-      "alwaysOutputData": true,
-      "onError": "continueRegularOutput"
-    },
-    {
-      "parameters": {
-        "jsCode": "const plan=$('Plan Claim').first().json,probe=$('Verify Live Xero Organisation').first().json,raw=$json;let body=raw.body??raw;if(typeof body==='string'){try{body=JSON.parse(body);}catch{body={};}}const details=body?.Organisations?.[0]??raw?.Organisations?.[0]??null,status=Number(raw.statusCode||(details?200:0)),name=String(details?.Name||probe.organisationName||'').trim(),legalName=String(details?.LegalName||'').trim(),tenantId=String(probe.tenantId||'').trim(),version=String(details?.Version||'').toUpperCase();let country=String(details?.CountryCode||'').toUpperCase();if(!country){if(version.startsWith('AU'))country='AU';else if(version.startsWith('NZ'))country='NZ';else if(version.startsWith('UK'))country='GB';else if(version.startsWith('US'))country='US';}const dateOrder=new Set(['AU','NZ','GB']).has(country)?'DMY':country==='US'?'MDY':'',expectedName=String(probe.organisationName||'').normalize('NFKC').trim().toLowerCase(),nameMatches=Boolean(name&&expectedName&&name.normalize('NFKC').trim().toLowerCase()===expectedName);let error=null;if(probe.connected!==true)error={code:'XERO_CONNECTION_UNAVAILABLE',message:'The live Xero connection could not be verified before export.'};else if(status!==200)error={code:'XERO_ORGANISATION_REQUEST_FAILED',message:`The live Xero organisation request failed before export (HTTP ${status||'unknown'}).`};else if(!details||!nameMatches||!tenantId)error={code:'XERO_ORGANISATION_UNAVAILABLE',message:'The live Xero organisation could not be verified before export.'};else if(!dateOrder)error={code:'XERO_DATE_ORDER_UNKNOWN',message:'The live Xero organisation country is not one of the supported date-order locales (AU, NZ, GB, or US).'};if(error)return [{json:{...plan,organisationBound:false,response:{ok:false,error}}}];const response={ok:true,job:{schema_version:1,mode:'user-mediated-xero-export',source:'csv-export',run_id:plan.runId,claimed_at:plan.claimedAt,date_order:dateOrder,export_url:'https://go.xero.com/Banking/StatementLines/Offline',period:'all',manual_login_only:true,all_bank_accounts_requested:true,organisation_name:name,...(legalName?{organisation_legal_name:legalName}:{})}};return [{json:{...plan,organisationBound:true,tenantId,organisationName:name,organisationLegalName:legalName,dateOrder,response}}];"
+        "jsCode": "const plan=$('Plan Claim').first().json,probe=$('Verify Live Xero Organisation').first().json,name=String(probe.organisationName||'').trim(),tenantId=String(probe.tenantId||'').trim();if(probe.connected!==true||!name||!tenantId)return [{json:{...plan,organisationBound:false,response:{ok:false,error:{code:'XERO_ORGANISATION_UNAVAILABLE',message:'The connected Xero tenant could not be verified before export.'}}}}];const dateOrder='YMD',response={ok:true,job:{schema_version:1,mode:'user-mediated-xero-export',source:'csv-export',run_id:plan.runId,claimed_at:plan.claimedAt,date_order:dateOrder,export_url:'https://go.xero.com/Banking/StatementLines/Offline',period:'all',manual_login_only:true,all_bank_accounts_requested:true,organisation_name:name}};return [{json:{...plan,organisationBound:true,tenantId,organisationName:name,organisationLegalName:'',dateOrder,response}}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -897,17 +852,6 @@
       ]
     },
     "Verify Live Xero Organisation": {
-      "main": [
-        [
-          {
-            "node": "Read Claim Organisation Details",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Read Claim Organisation Details": {
       "main": [
         [
           {

@@ -385,6 +385,40 @@ function recognizeHeader(row) {
   return valid ? indexes : null;
 }
 
+function resolveDateOrder(rows, configuredOrder) {
+  const configured = clean(configuredOrder).toUpperCase();
+  if (new Set(["DMY", "MDY"]).has(configured)) return configured;
+  let indexes = null;
+  let inferred = "";
+  for (const row of rows) {
+    const header = recognizeHeader(row);
+    if (header) {
+      indexes = header;
+      continue;
+    }
+    if (!indexes) continue;
+    const match = /^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/.exec(
+      clean(row[indexes.date]),
+    );
+    if (!match) continue;
+    const first = Number(match[1]);
+    const second = Number(match[2]);
+    const candidate = first > 12 && second <= 12
+      ? "DMY"
+      : second > 12 && first <= 12
+        ? "MDY"
+        : "";
+    if (candidate && inferred && candidate !== inferred) {
+      throw new ExportCaptureError(
+        "DATE_ORDER_CONFLICT",
+        "The Xero CSV contains conflicting slash-date formats.",
+      );
+    }
+    if (candidate) inferred = candidate;
+  }
+  return inferred || configured;
+}
+
 function parseDate(value, dateOrder) {
   const raw = clean(value);
   let year; let month; let day;
@@ -541,6 +575,7 @@ export function preflightXeroUncodedStatementCsv(source, {
   const groups = new Map();
   const canonicalRows = [];
   const occurrences = new Map();
+  const resolvedDateOrder = resolveDateOrder(rows, dateOrder);
   let dataRows = 0;
   let pendingAccount = "";
   let currentAccount = "";
@@ -583,7 +618,7 @@ export function preflightXeroUncodedStatementCsv(source, {
     const combinedNarration = field(row, indexes.combinedNarration);
     const code = field(row, indexes.code);
     if (!payee && !particulars && !reference && !combinedNarration) throw new ExportCaptureError("ROW_IDENTITY_MISSING", `CSV row ${index + 1} has no payee or narration.`);
-    const date = parseDate(dateRaw, clean(dateOrder).toUpperCase());
+    const date = parseDate(dateRaw, resolvedDateOrder);
     const amount = parseAmount(row, indexes);
     const accountKey = normalized(currentAccount);
     const group = groups.get(accountKey);
