@@ -131,8 +131,18 @@ const mismatchedProfile = runCode(effectiveConnectionSrc, { input: [{
 check("a profile bound to another tenant is never used", mismatchedProfile.tenantReady === false && mismatchedProfile.errorSummary === "profile-xero-provenance-mismatch");
 const xeroFetches = ["Fetch Accounts", "Fetch Tax Rates", "Fetch Unpaid Invoices", "Fetch Unreconciled Transactions", "Fetch Coding History", "Fetch Contacts"]
   .map((name) => review.nodes.find((entry) => entry.name === name));
-check("every context call omits explicit tenant headers for Custom Connections", xeroFetches.every((entry) => String(entry.parameters.sendHeaders).includes("connectionType !== 'custom'")));
-check("every standard context call uses the effective discovered tenant", xeroFetches.every((entry) => entry.parameters.headerParameters.parameters.some((header) => header.name === "Xero-tenant-id" && String(header.value).includes("Effective Xero Connection"))));
+check("every context call keeps its header block enabled", xeroFetches.every((entry) => entry.parameters.sendHeaders === true));
+check("every context call aliases the conditional tenant header to Accept for Custom Connections", xeroFetches.every((entry) => {
+  const header = entry.parameters.headerParameters.parameters[0];
+  return String(header.name).includes("connectionType === 'custom' ? 'Accept' : 'Xero-tenant-id'")
+    && String(header.value).includes("connectionType === 'custom' ? 'application/json'");
+}));
+check("every standard context call uses the effective discovered tenant", xeroFetches.every((entry) => {
+  const header = entry.parameters.headerParameters.parameters[0];
+  return String(header.name).includes("Xero-tenant-id")
+    && String(header.value).includes("Effective Xero Connection")
+    && String(header.value).includes("tenantId");
+}));
 
 const line = (over = {}) => ({
   sourceType: "statement-line", sourceId: "sl-1", statementLineId: "sl-1", scanId: "scan-1",

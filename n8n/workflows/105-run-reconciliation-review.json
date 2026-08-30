@@ -373,12 +373,12 @@
         "url": "={{ \"https://api.xero.com/api.xro/2.0/Accounts\" }}",
         "authentication": "genericCredentialType",
         "genericAuthType": "oAuth2Api",
-        "sendHeaders": "={{ $('Effective Xero Connection').first().json.connectionType !== 'custom' }}",
+        "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
-              "name": "Xero-tenant-id",
-              "value": "={{ $('Effective Xero Connection').first().json.tenantId }}"
+              "name": "={{ $('Effective Xero Connection').first().json.connectionType === 'custom' ? 'Accept' : 'Xero-tenant-id' }}",
+              "value": "={{ $('Effective Xero Connection').first().json.connectionType === 'custom' ? 'application/json' : $('Effective Xero Connection').first().json.tenantId }}"
             },
             {
               "name": "Accept",
@@ -456,12 +456,12 @@
         "url": "={{ \"https://api.xero.com/api.xro/2.0/TaxRates\" }}",
         "authentication": "genericCredentialType",
         "genericAuthType": "oAuth2Api",
-        "sendHeaders": "={{ $('Effective Xero Connection').first().json.connectionType !== 'custom' }}",
+        "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
-              "name": "Xero-tenant-id",
-              "value": "={{ $('Effective Xero Connection').first().json.tenantId }}"
+              "name": "={{ $('Effective Xero Connection').first().json.connectionType === 'custom' ? 'Accept' : 'Xero-tenant-id' }}",
+              "value": "={{ $('Effective Xero Connection').first().json.connectionType === 'custom' ? 'application/json' : $('Effective Xero Connection').first().json.tenantId }}"
             },
             {
               "name": "Accept",
@@ -502,12 +502,12 @@
         "url": "={{ \"https://api.xero.com/api.xro/2.0/Invoices?Statuses=AUTHORISED&page=1\" }}",
         "authentication": "genericCredentialType",
         "genericAuthType": "oAuth2Api",
-        "sendHeaders": "={{ $('Effective Xero Connection').first().json.connectionType !== 'custom' }}",
+        "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
-              "name": "Xero-tenant-id",
-              "value": "={{ $('Effective Xero Connection').first().json.tenantId }}"
+              "name": "={{ $('Effective Xero Connection').first().json.connectionType === 'custom' ? 'Accept' : 'Xero-tenant-id' }}",
+              "value": "={{ $('Effective Xero Connection').first().json.connectionType === 'custom' ? 'application/json' : $('Effective Xero Connection').first().json.tenantId }}"
             },
             {
               "name": "Accept",
@@ -547,12 +547,12 @@
         "url": "={{ \"https://api.xero.com/api.xro/2.0/BankTransactions?where=IsReconciled%3D%3Dfalse&page=1\" }}",
         "authentication": "genericCredentialType",
         "genericAuthType": "oAuth2Api",
-        "sendHeaders": "={{ $('Effective Xero Connection').first().json.connectionType !== 'custom' }}",
+        "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
-              "name": "Xero-tenant-id",
-              "value": "={{ $('Effective Xero Connection').first().json.tenantId }}"
+              "name": "={{ $('Effective Xero Connection').first().json.connectionType === 'custom' ? 'Accept' : 'Xero-tenant-id' }}",
+              "value": "={{ $('Effective Xero Connection').first().json.connectionType === 'custom' ? 'application/json' : $('Effective Xero Connection').first().json.tenantId }}"
             },
             {
               "name": "Accept",
@@ -592,12 +592,12 @@
         "url": "={{ \"https://api.xero.com/api.xro/2.0/BankTransactions?order=Date DESC&page=1\" }}",
         "authentication": "genericCredentialType",
         "genericAuthType": "oAuth2Api",
-        "sendHeaders": "={{ $('Effective Xero Connection').first().json.connectionType !== 'custom' }}",
+        "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
-              "name": "Xero-tenant-id",
-              "value": "={{ $('Effective Xero Connection').first().json.tenantId }}"
+              "name": "={{ $('Effective Xero Connection').first().json.connectionType === 'custom' ? 'Accept' : 'Xero-tenant-id' }}",
+              "value": "={{ $('Effective Xero Connection').first().json.connectionType === 'custom' ? 'application/json' : $('Effective Xero Connection').first().json.tenantId }}"
             },
             {
               "name": "Accept",
@@ -1983,12 +1983,12 @@
         "url": "https://api.xero.com/api.xro/2.0/Contacts?where=ContactStatus%3D%3D%22ACTIVE%22&page=1",
         "authentication": "genericCredentialType",
         "genericAuthType": "oAuth2Api",
-        "sendHeaders": "={{ $('Effective Xero Connection').first().json.connectionType !== 'custom' }}",
+        "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
-              "name": "Xero-tenant-id",
-              "value": "={{ $('Effective Xero Connection').first().json.tenantId }}"
+              "name": "={{ $('Effective Xero Connection').first().json.connectionType === 'custom' ? 'Accept' : 'Xero-tenant-id' }}",
+              "value": "={{ $('Effective Xero Connection').first().json.connectionType === 'custom' ? 'application/json' : $('Effective Xero Connection').first().json.tenantId }}"
             },
             {
               "name": "Accept",
