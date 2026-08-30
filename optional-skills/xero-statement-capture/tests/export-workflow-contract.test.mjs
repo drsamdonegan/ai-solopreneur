@@ -98,6 +98,7 @@ check(bindCode.includes("const dateOrder='YMD'") && !bridge.nodes.some((entry) =
 check(bridge.connections["Verify Live Xero Organisation"].main[0][0].node === "Bind Claim To Organisation", "the existing connection endpoint must bind the tenant directly before a user export");
 const progressCode = node(bridge, "Plan Progress").parameters.jsCode;
 check(progressCode.includes("IMPORT_OWNS_REVIEW_STATE") && progressCode.includes("backward"), "companion progress must be monotonic and unable to overwrite import-owned review states");
+check(progressCode.includes("finishedAt=terminal.has(status)?input.updatedAt:null"), "non-terminal companion progress must persist a null date instead of an invalid empty finishedAt value");
 const progressUpdateFilters = node(bridge, "Update Capture Progress").parameters.filters.conditions;
 check(["runId", "companionId", "cancelRequested"].every((key) => progressUpdateFilters.some((filter) => filter.keyName === key)) && !progressUpdateFilters.some((filter) => filter.keyName === "status"), "accepted progress must stay bound to the claimed uncancelled run without relying on a stale status compare");
 check(bridge.connections["Progress Accepted?"].main[0][0].node === "Shape Accepted Progress Response" && bridge.connections["Shape Accepted Progress Response"].main[0][0].node === "Update Capture Progress" && bridge.connections["Update Capture Progress"].main[0][0].node === "Respond Accepted Progress", "accepted progress must persist its monotonic state before acknowledging the companion, preventing an immediate import race");
