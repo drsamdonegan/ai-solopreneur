@@ -61,6 +61,8 @@ const nodesOf = (db, table, key, value) =>
   );
 const credentialOn = (nodes, name) =>
   nodes.find((node) => node.name === name)?.credentials?.telegramApi;
+const headerCredentialOn = (nodes, name) =>
+  nodes.find((node) => node.name === name)?.credentials?.httpHeaderAuth;
 
 // After a fresh import both copies are empty. With exactly one Telegram
 // credential on the agent, both copies come back filled without the learner
@@ -92,6 +94,79 @@ const credentialOn = (nodes, name) =>
   check(credentialOn(entity, "Telegram Message")?.id === "cred1", "editor copy gets the only credential");
   check(credentialOn(version, "Telegram Message")?.id === "cred1", "published-version copy gets it too");
   check(credentialOn(version, "Send The Reply")?.id === "cred1", "every telegram node in the version copy is filled");
+}
+
+// The authenticated Xero capture webhooks use two credentials of the same
+// type. Their IDs are repository-owned and stable, so both an empty import and
+// a stale/wrong binding must heal deterministically in the editor and in the
+// published workflow version.
+{
+  const db = freshDb();
+  for (const [id, name] of [
+    ["phase20XeroCaptureControl", "Xero Capture Control"],
+    ["phase20XeroCaptureBridge", "Xero Capture Bridge"],
+    ["wrong-header", "Unrelated Header"],
+  ]) {
+    db.prepare("INSERT INTO credentials_entity VALUES (?, ?, ?)").run(
+      id,
+      name,
+      "httpHeaderAuth",
+    );
+  }
+  const entityNodes = [
+    {
+      name: "Authenticated Claim",
+      type: "n8n-nodes-base.webhook",
+      credentials: {
+        httpHeaderAuth: { id: "wrong-header", name: "Unrelated Header" },
+      },
+    },
+    {
+      name: "Authenticated Progress",
+      type: "n8n-nodes-base.webhook",
+    },
+  ];
+  db.prepare("INSERT INTO workflow_entity VALUES (?, ?, ?, ?)").run(
+    "phase20XeroExportCompanion",
+    JSON.stringify(entityNodes),
+    "xero-live",
+    "xero-live",
+  );
+  db.prepare("INSERT INTO workflow_history VALUES (?, ?, ?)").run(
+    "xero-live",
+    "phase20XeroExportCompanion",
+    JSON.stringify(entityNodes),
+  );
+  db.close();
+
+  const fixed = restoreCredentials(
+    databasePath,
+    savedCredentials(databasePath),
+    credentialsByType(databasePath),
+  );
+  const after = new DatabaseSync(databasePath, { readOnly: true });
+  const entity = nodesOf(
+    after,
+    "workflow_entity",
+    "id",
+    "phase20XeroExportCompanion",
+  );
+  const live = nodesOf(after, "workflow_history", "versionId", "xero-live");
+  after.close();
+
+  check(fixed === 2, `fixed capture bindings count each node once (got ${fixed})`);
+  for (const nodes of [entity, live]) {
+    check(
+      headerCredentialOn(nodes, "Authenticated Claim")?.id
+        === "phase20XeroCaptureBridge",
+      "a stale capture-claim binding heals to the shipped bridge credential",
+    );
+    check(
+      headerCredentialOn(nodes, "Authenticated Progress")?.id
+        === "phase20XeroCaptureBridge",
+      "an empty capture-progress binding heals despite same-type ambiguity",
+    );
+  }
 }
 
 // The half-repaired shape an earlier version of this script left behind:

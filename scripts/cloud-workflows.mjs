@@ -297,6 +297,48 @@ const CREDENTIAL_TYPE_FOR_NODE = new Map([
 ]);
 
 /**
+ * Repository-owned credentials whose IDs are deliberately stable.
+ *
+ * n8n removes credential selections while importing a workflow. Most choices
+ * must then be restored from the learner's database, because the repository
+ * cannot know their credential IDs. These two capture credentials are
+ * different: startup creates them with fixed IDs from hosting secrets, and the
+ * control and bridge credentials share one n8n type. Relying on the generic
+ * single-candidate repair would therefore leave the authenticated webhooks
+ * unbound (or preserve a stale binding) forever.
+ */
+const SHIPPED_CREDENTIAL_FOR_NODE = new Map([
+  ...[
+    "Authenticated Capture Start",
+    "Authenticated Capture Status",
+    "Authenticated Capture Cancel",
+  ].map((nodeName) => [
+    `phase20XeroCaptureControl::${nodeName}`,
+    {
+      type: "httpHeaderAuth",
+      credential: {
+        id: "phase20XeroCaptureControl",
+        name: "Xero Capture Control",
+      },
+    },
+  ]),
+  ...[
+    ["phase20XeroExportCompanion", "Authenticated Claim"],
+    ["phase20XeroExportCompanion", "Authenticated Progress"],
+    ["phase20ImportXeroUncodedCsv", "Raw Authenticated CSV Import"],
+  ].map(([workflowId, nodeName]) => [
+    `${workflowId}::${nodeName}`,
+    {
+      type: "httpHeaderAuth",
+      credential: {
+        id: "phase20XeroCaptureBridge",
+        name: "Xero Capture Bridge",
+      },
+    },
+  ]),
+]);
+
+/**
  * Puts one workflow's credential choices back into one stored copy of its
  * nodes. Returns the "workflowId::nodeName" keys it filled, so that a fix
  * applied to several stored copies of the same workflow counts as one fix.
@@ -304,10 +346,30 @@ const CREDENTIAL_TYPE_FOR_NODE = new Map([
 function fillNodeCredentials(workflowId, nodes, saved, byType) {
   const filled = [];
   for (const node of Array.isArray(nodes) ? nodes : []) {
+    const key = `${workflowId}::${node?.name}`;
+    const shipped = SHIPPED_CREDENTIAL_FOR_NODE.get(key);
+    const shippedExists = shipped
+      ? (byType.get(shipped.type) ?? []).some(
+          ({ id }) => id === shipped.credential.id,
+        )
+      : false;
+    if (shipped && shippedExists) {
+      const current = node?.credentials?.[shipped.type];
+      if (
+        current?.id !== shipped.credential.id
+        || current?.name !== shipped.credential.name
+        || Object.keys(node.credentials ?? {}).length !== 1
+      ) {
+        node.credentials = {
+          [shipped.type]: { ...shipped.credential },
+        };
+        filled.push(key);
+      }
+      continue;
+    }
     if (node?.credentials && Object.keys(node.credentials).length > 0) {
       continue;
     }
-    const key = `${workflowId}::${node?.name}`;
     const remembered = saved.get(key);
     if (remembered) {
       node.credentials = remembered;
