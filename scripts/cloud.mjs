@@ -29,7 +29,11 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runConfigHelp, runSetup, setupIsNeeded } from "./cloud-setup.mjs";
 import { seedCloudSkills } from "./cloud-skills.mjs";
-import { primeAgent, syncWorkflows } from "./cloud-workflows.mjs";
+import {
+  ensureXeroCaptureCredentials,
+  primeAgent,
+  syncWorkflows,
+} from "./cloud-workflows.mjs";
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -880,7 +884,19 @@ async function main() {
   // workflows are already correct when n8n first reads them and nothing needs
   // restarting to pick them up.
   try {
-    const sync = syncWorkflows({ paths, n8nEnv: n8nEnv(cfg), log: print });
+    const cloudN8nEnv = n8nEnv(cfg);
+    const captureCredentials = ensureXeroCaptureCredentials({
+      enabled:
+        process.env.XERO_CAPTURE_RUNS_ENABLED?.trim().toLowerCase() === "true",
+      controlSecret: process.env.XERO_CAPTURE_CONTROL_SECRET,
+      bridgeSecret: process.env.XERO_CAPTURE_INGEST_SECRET,
+      n8nBin: paths.n8nBin,
+      n8nEnv: cloudN8nEnv,
+    });
+    if (captureCredentials.configured) {
+      print("  Xero capture control and bridge credentials are ready.");
+    }
+    const sync = syncWorkflows({ paths, n8nEnv: cloudN8nEnv, log: print });
     if (!sync.skipped) {
       print(
         `  ${sync.imported} workflows updated, ${sync.published} turned on` +

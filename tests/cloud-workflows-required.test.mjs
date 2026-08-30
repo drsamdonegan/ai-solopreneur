@@ -4,12 +4,20 @@
 //
 // User-configurable triggers remain opt-in, so this test also pins the boundary
 // between a shipped webhook endpoint and a schedule or provider trigger.
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import {
   RETIRED_WORKFLOW_IDS,
+  ensureXeroCaptureCredentials,
   learnerPublishedIds,
   requiredWorkflowIds,
   retiredPublishedIds,
@@ -86,6 +94,48 @@ check(
     unpublishCalls.every((call) => call[1] === "unpublish:workflow"),
   "cloud sync explicitly unpublishes every retired Xero browser-capture workflow",
 );
+
+check(
+  ensureXeroCaptureCredentials({ enabled: false }).configured === false,
+  "capture credential bootstrapping is inert while the feature is disabled",
+);
+let importedCredentials;
+let temporaryCredentialPath;
+const credentialResult = ensureXeroCaptureCredentials({
+  enabled: true,
+  controlSecret: "control-secret-12345678901234567890",
+  bridgeSecret: "bridge-secret-123456789012345678901",
+  n8nBin: "/fake/n8n",
+  n8nEnv: { N8N_USER_FOLDER: "/fake/data" },
+  runCommand: (binary, args) => {
+    temporaryCredentialPath = args.find((value) => value.startsWith("--input=")).slice(8);
+    importedCredentials = JSON.parse(readFileSync(temporaryCredentialPath, "utf8"));
+    check(binary === "/fake/n8n" && args[0] === "import:credentials", "capture credentials use n8n's supported import path");
+    return { status: 0, stdout: "", stderr: "" };
+  },
+});
+check(credentialResult.configured === true, "valid hosting secrets configure the capture credentials");
+check(
+  importedCredentials.length === 2 &&
+    importedCredentials[0].id === "phase20XeroCaptureControl" &&
+    importedCredentials[0].data.name === "X-Xero-Capture-Control" &&
+    importedCredentials[1].id === "phase20XeroCaptureBridge" &&
+    importedCredentials[1].data.name === "X-Xero-Capture-Key" &&
+    importedCredentials[0].data.value !== importedCredentials[1].data.value,
+  "control and bridge credentials have stable IDs, separate headers, and separate values",
+);
+check(!existsSync(temporaryCredentialPath), "the plaintext credential import file is removed immediately");
+let rejectedSharedSecret = false;
+try {
+  ensureXeroCaptureCredentials({
+    enabled: true,
+    controlSecret: "shared-secret-12345678901234567890",
+    bridgeSecret: "shared-secret-12345678901234567890",
+  });
+} catch {
+  rejectedSharedSecret = true;
+}
+check(rejectedSharedSecret, "control and bridge authentication can never share one secret");
 
 rmSync(dir, { recursive: true, force: true });
 

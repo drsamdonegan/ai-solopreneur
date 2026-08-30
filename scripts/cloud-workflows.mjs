@@ -14,7 +14,15 @@
 
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { writeSkillSyncState } from "./skill-sync-state.mjs";
@@ -498,6 +506,71 @@ function lastLines(result, count = 6) {
     .filter(Boolean)
     .slice(-count)
     .join("\n");
+}
+
+/**
+ * Materialises the two cloud-only header credentials used by the authenticated
+ * Xero capture webhooks. The values originate in the hosting secret store and
+ * are imported through n8n's own CLI, so only n8n's encrypted database keeps
+ * them after startup. The temporary plaintext file is mode 0600 and is removed
+ * whether the import succeeds or fails.
+ */
+export function ensureXeroCaptureCredentials({
+  enabled,
+  controlSecret,
+  bridgeSecret,
+  n8nBin,
+  n8nEnv,
+  runCommand = runCli,
+}) {
+  if (!enabled) return { configured: false };
+
+  const control = String(controlSecret ?? "").trim();
+  const bridge = String(bridgeSecret ?? "").trim();
+  if (control.length < 24 || bridge.length < 24) {
+    throw new Error(
+      "Xero capture is enabled, but both control and bridge secrets must contain at least 24 characters.",
+    );
+  }
+  if (control === bridge) {
+    throw new Error("Xero capture control and bridge secrets must be different.");
+  }
+
+  const temporary = mkdtempSync(join(tmpdir(), "ai-solopreneur-xero-credentials-"));
+  const input = join(temporary, "credentials.json");
+  try {
+    writeFileSync(
+      input,
+      `${JSON.stringify([
+        {
+          id: "phase20XeroCaptureControl",
+          name: "Xero Capture Control",
+          type: "httpHeaderAuth",
+          data: { name: "X-Xero-Capture-Control", value: control },
+        },
+        {
+          id: "phase20XeroCaptureBridge",
+          name: "Xero Capture Bridge",
+          type: "httpHeaderAuth",
+          data: { name: "X-Xero-Capture-Key", value: bridge },
+        },
+      ])}\n`,
+      { mode: 0o600 },
+    );
+    const result = runCommand(
+      n8nBin,
+      ["import:credentials", `--input=${input}`],
+      n8nEnv,
+    );
+    if (result.error || result.status !== 0) {
+      throw new Error(
+        `The Xero capture credentials could not be prepared.\n${lastLines(result)}`,
+      );
+    }
+  } finally {
+    rmSync(temporary, { recursive: true, force: true });
+  }
+  return { configured: true };
 }
 
 export function retireLegacyWorkflows({
