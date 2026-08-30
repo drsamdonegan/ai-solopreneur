@@ -1064,9 +1064,12 @@ textarea:focus-visible,
   display: inline-block;
   margin: 0.25rem 0;
   padding: 0.5rem 0.9rem;
+  border: 0;
   border-radius: 999px;
   background: var(--brand-primary);
   color: #fff;
+  cursor: pointer;
+  font: inherit;
   font-weight: 700;
   text-decoration: none;
 }
@@ -1074,6 +1077,12 @@ textarea:focus-visible,
 .message__connect:hover,
 .message__connect:focus-visible {
   filter: brightness(0.92);
+}
+
+.message__connect:disabled {
+  cursor: not-allowed;
+  filter: grayscale(0.7);
+  opacity: 0.55;
 }
 
 .message--user .message__copy {
@@ -2212,6 +2221,98 @@ textarea:focus-visible,
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+.xero-capture-launch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  width: 100%;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+}
+
+.xero-capture-launch[hidden] {
+  display: none;
+}
+
+.xero-capture-launch p {
+  margin: 0;
+}
+
+.xero-capture-launch .section-label {
+  margin-bottom: 0.2rem;
+}
+
+#xero-capture-guidance {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.xero-capture-launch .secondary-button {
+  flex: none;
+  white-space: nowrap;
+}
+
+.xero-capture-progress__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.xero-capture-progress__side {
+  display: grid;
+  flex: none;
+  gap: 0.2rem;
+  justify-items: end;
+}
+
+.xero-capture-progress__action {
+  border: 0;
+  background: transparent;
+  color: var(--brand-primary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 650;
+  padding: 0.25rem;
+  text-decoration: none;
+}
+
+.xero-capture-progress__action:hover,
+.xero-capture-progress__action:focus-visible {
+  text-decoration: underline;
+}
+
+.scan-progress--failed .scan-progress__spinner {
+  animation: none;
+  border-color: #b42318;
+  background: #b42318;
+}
+
+@media (max-width: 36rem) {
+  .xero-capture-launch {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .xero-capture-launch .secondary-button {
+    width: 100%;
+  }
+
+  #xero-capture-progress {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .xero-capture-progress__side {
+    width: 100%;
+    justify-items: start;
+    padding-left: 1.6rem;
   }
 }
 

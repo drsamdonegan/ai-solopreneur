@@ -1,0 +1,1110 @@
+{
+  "name": "116 - WEBHOOK - Xero Export Companion",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Authenticated local export bridge\n\nA local helper may claim a run, open only Xero's official Uncoded Statement Lines report, wait for manual login/MFA and a manual All bank accounts export, then upload the CSV. It must not inspect the DOM, simulate Xero clicks, or handle credentials.",
+        "height": 320,
+        "width": 600,
+        "color": 6
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -980,
+        -420
+      ],
+      "id": "98000116-0000-4000-8000-000000000001",
+      "name": "Sticky"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "xero-capture-claim",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -960,
+        -120
+      ],
+      "id": "98000116-0000-4000-8000-000000000010",
+      "name": "Authenticated Claim",
+      "webhookId": "98000116-0000-4000-8000-000000000110",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "phase20XeroCaptureBridge",
+          "name": "Xero Capture Bridge"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const b=$json.body??$json;const keys=new Set(['schema_version','companion_id','app_version']);const exact=b&&typeof b==='object'&&!Array.isArray(b)&&Object.keys(b).every(k=>keys.has(k));const companionId=String(b.companion_id||'').trim();const valid=Boolean(exact&&b.schema_version===1&&/^[A-Za-z0-9._:-]{8,128}$/.test(companionId)&&String(b.app_version||'').length<=80);return [{json:{valid,companionId,response:valid?undefined:{ok:false,error:{code:'INVALID_CLAIM',message:'The companion claim envelope is invalid.'}}}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -740,
+        -120
+      ],
+      "id": "98000116-0000-4000-8000-000000000011",
+      "name": "Validate Claim"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "xero_capture_runs",
+          "mode": "name"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "status",
+              "condition": "eq",
+              "keyValue": "preflight"
+            },
+            {
+              "keyName": "cancelRequested",
+              "condition": "eq",
+              "keyValue": "no"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 50,
+        "orderBy": true,
+        "orderByColumn": "runCreatedAt",
+        "orderByDirection": "ASC"
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -520,
+        -120
+      ],
+      "id": "98000116-0000-4000-8000-000000000012",
+      "name": "Read Claimable Runs",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const input=$('Validate Claim').first().json;if(!input.valid)return [{json:{...input,shouldClaim:false}}];const now=Date.now();const rows=$input.all().map(i=>i.json).filter(r=>r&&String(r.status)==='preflight'&&String(r.cancelRequested||'no')!=='yes'&&Date.parse(String(r.expiresAt||0))>now);rows.sort((a,b)=>Date.parse(String(a.runCreatedAt||0))-Date.parse(String(b.runCreatedAt||0)));const run=rows[0];if(!run)return [{json:{...input,shouldClaim:false,response:{ok:true,job:null,retryInMs:2500}}}];const at=new Date().toISOString();return [{json:{...input,shouldClaim:true,runId:String(run.runId),sessionId:String(run.sessionId||''),requestId:String(run.requestId||''),claimedAt:at,updatedAt:at,status:'opening',phase:'opening',progressCurrent:1,progressTotal:6,progressMessage:'Opening Xero for a manual Uncoded Statement Lines export.',requiresUserLogin:'unknown'}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -300,
+        -120
+      ],
+      "id": "98000116-0000-4000-8000-000000000013",
+      "name": "Plan Claim"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "98000116-claim",
+              "leftValue": "={{ $json.shouldClaim }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -80,
+        -120
+      ],
+      "id": "98000116-0000-4000-8000-000000000014",
+      "name": "Claim Available?"
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "phase19CheckXeroConnection",
+          "mode": "list",
+          "cachedResultName": "100 - TOOL - check_xero_connection"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "sessionId": "={{ $json.sessionId }}",
+            "requestId": "={{ $json.requestId }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "sessionId",
+              "displayName": "sessionId",
+              "type": "string"
+            },
+            {
+              "id": "requestId",
+              "displayName": "requestId",
+              "type": "string"
+            }
+          ]
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        120,
+        -300
+      ],
+      "id": "98000116-0000-4000-8000-000000000030",
+      "name": "Verify Live Xero Organisation"
+    },
+    {
+      "parameters": {
+        "url": "https://api.xero.com/api.xro/2.0/Organisation",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "sendHeaders": "={{ $('Verify Live Xero Organisation').first().json.connectionType !== 'custom' }}",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Xero-tenant-id",
+              "value": "={{ $('Verify Live Xero Organisation').first().json.tenantId }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        340,
+        -300
+      ],
+      "id": "98000116-0000-4000-8000-000000000034",
+      "name": "Read Claim Organisation Details",
+      "credentials": {
+        "oAuth2Api": {
+          "id": "phase19XeroReadonly",
+          "name": "Xero (read-only)"
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const plan=$('Plan Claim').first().json,probe=$('Verify Live Xero Organisation').first().json,raw=$json;const details=Number(raw.statusCode||0)===200?(raw.body?.Organisations?.[0]??null):null,name=String(details?.Name||probe.organisationName||'').trim(),legalName=String(details?.LegalName||'').trim(),tenantId=String(probe.tenantId||'').trim(),country=String(details?.CountryCode||'').toUpperCase();const dateOrder=new Set(['AU','NZ','GB']).has(country)?'DMY':country==='US'?'MDY':'';const nameMatches=name&&String(probe.organisationName||'').trim()&&name.normalize('NFKC').trim().toLowerCase()===String(probe.organisationName).normalize('NFKC').trim().toLowerCase();if(probe.connected!==true||!details||!nameMatches||!tenantId||!dateOrder)return [{json:{...plan,organisationBound:false,response:{ok:false,error:{code:!dateOrder?'XERO_DATE_ORDER_UNKNOWN':'XERO_ORGANISATION_UNAVAILABLE',message:!dateOrder?'The live Xero organisation country is not one of the supported date-order locales (AU, NZ, GB, or US).':'The live Xero organisation could not be verified before export.'}}}}];const response={ok:true,job:{schema_version:1,mode:'user-mediated-xero-export',source:'csv-export',run_id:plan.runId,claimed_at:plan.claimedAt,date_order:dateOrder,export_url:'https://go.xero.com/Banking/StatementLines/Offline',period:'all',manual_login_only:true,all_bank_accounts_requested:true,organisation_name:name,...(legalName?{organisation_legal_name:legalName}:{})}};return [{json:{...plan,organisationBound:true,tenantId,organisationName:name,organisationLegalName:legalName,dateOrder,response}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        560,
+        -300
+      ],
+      "id": "98000116-0000-4000-8000-000000000031",
+      "name": "Bind Claim To Organisation"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "98000116-org",
+              "leftValue": "={{ $json.organisationBound }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        560,
+        -300
+      ],
+      "id": "98000116-0000-4000-8000-000000000032",
+      "name": "Organisation Bound?"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "value": "xero_capture_runs",
+          "mode": "name"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "runId",
+              "condition": "eq",
+              "keyValue": "={{ $json.runId }}"
+            },
+            {
+              "keyName": "status",
+              "condition": "eq",
+              "keyValue": "preflight"
+            },
+            {
+              "keyName": "sessionId",
+              "condition": "eq",
+              "keyValue": "={{ $json.sessionId }}"
+            },
+            {
+              "keyName": "cancelRequested",
+              "condition": "eq",
+              "keyValue": "no"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "runUpdatedAt": "={{ $json.updatedAt }}",
+            "status": "={{ $json.status }}",
+            "phase": "={{ $json.phase }}",
+            "progressCurrent": "={{ $json.progressCurrent }}",
+            "progressTotal": "={{ $json.progressTotal }}",
+            "progressMessage": "={{ $json.progressMessage }}",
+            "requiresUserLogin": "={{ $json.requiresUserLogin }}",
+            "companionId": "={{ $json.companionId }}",
+            "claimedAt": "={{ $json.claimedAt }}",
+            "lastHeartbeatAt": "={{ $json.claimedAt }}",
+            "tenantId": "={{ $json.tenantId }}",
+            "organisationName": "={{ $json.organisationName }}",
+            "organisationLegalName": "={{ $json.organisationLegalName }}",
+            "dateOrder": "={{ $json.dateOrder }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "runUpdatedAt",
+              "displayName": "runUpdatedAt",
+              "type": "date"
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "type": "string"
+            },
+            {
+              "id": "phase",
+              "displayName": "phase",
+              "type": "string"
+            },
+            {
+              "id": "progressCurrent",
+              "displayName": "progressCurrent",
+              "type": "number"
+            },
+            {
+              "id": "progressTotal",
+              "displayName": "progressTotal",
+              "type": "number"
+            },
+            {
+              "id": "progressMessage",
+              "displayName": "progressMessage",
+              "type": "string"
+            },
+            {
+              "id": "requiresUserLogin",
+              "displayName": "requiresUserLogin",
+              "type": "string"
+            },
+            {
+              "id": "companionId",
+              "displayName": "companionId",
+              "type": "string"
+            },
+            {
+              "id": "claimedAt",
+              "displayName": "claimedAt",
+              "type": "date"
+            },
+            {
+              "id": "lastHeartbeatAt",
+              "displayName": "lastHeartbeatAt",
+              "type": "date"
+            },
+            {
+              "id": "tenantId",
+              "displayName": "tenantId",
+              "type": "string"
+            },
+            {
+              "id": "organisationName",
+              "displayName": "organisationName",
+              "type": "string"
+            },
+            {
+              "id": "organisationLegalName",
+              "displayName": "organisationLegalName",
+              "type": "string"
+            },
+            {
+              "id": "dateOrder",
+              "displayName": "dateOrder",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {
+          "dryRun": false
+        }
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        140,
+        -200
+      ],
+      "id": "98000116-0000-4000-8000-000000000015",
+      "name": "Claim Capture Run",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "xero_capture_runs",
+          "mode": "name"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "runId",
+              "condition": "eq",
+              "keyValue": "={{ $('Bind Claim To Organisation').first().json.runId }}"
+            },
+            {
+              "keyName": "companionId",
+              "condition": "eq",
+              "keyValue": "={{ $('Bind Claim To Organisation').first().json.companionId }}"
+            },
+            {
+              "keyName": "sessionId",
+              "condition": "eq",
+              "keyValue": "={{ $('Bind Claim To Organisation').first().json.sessionId }}"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 2,
+        "orderBy": false
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        360,
+        -200
+      ],
+      "id": "98000116-0000-4000-8000-000000000016",
+      "name": "Read Claimed Ownership",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const plan=$('Bind Claim To Organisation').first().json;const owned=$input.all().map(i=>i.json).some(r=>r&&String(r.runId)===plan.runId&&String(r.sessionId)===plan.sessionId&&String(r.companionId)===plan.companionId&&String(r.status)==='opening'&&String(r.tenantId)===plan.tenantId);return [{json:{response:owned?plan.response:{ok:false,error:{code:'CLAIM_RACE_LOST',message:'Another companion claimed this Xero export run.'}}}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        580,
+        -200
+      ],
+      "id": "98000116-0000-4000-8000-000000000033",
+      "name": "Verify Claimed Ownership"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json.response || $json }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json; charset=utf-8"
+              },
+              {
+                "name": "Cache-Control",
+                "value": "no-store"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        600,
+        -120
+      ],
+      "id": "98000116-0000-4000-8000-000000000017",
+      "name": "Respond Claim"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "xero-capture-progress",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -960,
+        220
+      ],
+      "id": "98000116-0000-4000-8000-000000000020",
+      "name": "Authenticated Progress",
+      "webhookId": "98000116-0000-4000-8000-000000000120",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "phase20XeroCaptureBridge",
+          "name": "Xero Capture Bridge"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const b=$json.body??$json;const allowedKeys=new Set(['schema_version','run_id','companion_id','status','current','total','message','requires_user_login','bank_accounts_found','statement_lines_observed']);const states=new Set(['preflight','opening','awaiting_login','awaiting_export','discovering','capturing','verifying','uploading','reviewing','ready','failed','cancelled']);const exact=b&&typeof b==='object'&&!Array.isArray(b)&&Object.keys(b).every(k=>allowedKeys.has(k));const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;const runId=String(b.run_id||''),companionId=String(b.companion_id||''),status=String(b.status||'');const current=Number(b.current||0),total=Number(b.total||0),accounts=Number(b.bank_accounts_found||0),lines=Number(b.statement_lines_observed||0);const valid=Boolean(exact&&b.schema_version===1&&uuid.test(runId)&&/^[A-Za-z0-9._:-]{8,128}$/.test(companionId)&&states.has(status)&&Number.isInteger(current)&&current>=0&&Number.isInteger(total)&&total>=current&&total<=20&&Number.isInteger(accounts)&&accounts>=0&&accounts<=100&&Number.isInteger(lines)&&lines>=0&&lines<=5000&&String(b.message||'').length<=500);return [{json:{valid,runId,companionId,status,phase:status,current,total,message:String(b.message||'').trim(),requiresUserLogin:b.requires_user_login===true?'yes':'no',accounts,lines,updatedAt:new Date().toISOString(),response:valid?undefined:{ok:false,error:{code:'INVALID_PROGRESS',message:'The companion progress envelope is invalid.'}}}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -740,
+        220
+      ],
+      "id": "98000116-0000-4000-8000-000000000021",
+      "name": "Validate Progress"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "xero_capture_runs",
+          "mode": "name"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "runId",
+              "condition": "eq",
+              "keyValue": "={{ $('Validate Progress').first().json.runId }}"
+            },
+            {
+              "keyName": "companionId",
+              "condition": "eq",
+              "keyValue": "={{ $('Validate Progress').first().json.companionId }}"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 2,
+        "orderBy": false
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -520,
+        220
+      ],
+      "id": "98000116-0000-4000-8000-000000000022",
+      "name": "Read Progress Run",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const input=$('Validate Progress').first().json;if(!input.valid)return [{json:{...input,shouldUpdate:false}}];\nconst run=$input.all().map((item)=>item.json).find((row)=>row&&String(row.runId)===input.runId&&String(row.companionId)===input.companionId);\nif(!run)return [{json:{...input,shouldUpdate:false,response:{ok:false,error:{code:'RUN_NOT_CLAIMED',message:'This companion did not claim the capture run.'}}}}];\nif(String(run.cancelRequested)==='yes'||String(run.status)==='cancelled')return [{json:{...input,shouldUpdate:false,response:{ok:true,cancelled:true,run_id:input.runId,status:'cancelled'}}}];\nconst terminal=new Set(['ready','failed','cancelled']);\nif(terminal.has(String(run.status||'')))return [{json:{...input,shouldUpdate:false,response:{ok:true,cancelled:String(run.status)==='cancelled',run_id:input.runId,status:String(run.status)}}}];\nif(['reviewing','ready'].includes(input.status))return [{json:{...input,shouldUpdate:false,response:{ok:false,error:{code:'IMPORT_OWNS_REVIEW_STATE',message:'The authenticated CSV import and saved review own reviewing and ready transitions.'}}}}];\nconst rank={preflight:0,opening:1,awaiting_login:2,awaiting_export:3,discovering:4,capturing:4,verifying:5,uploading:6,failed:9,cancelled:9},storedStatus=String(run.status||'preflight'),backward=(rank[input.status]??-1)<(rank[storedStatus]??-1),status=backward?storedStatus:input.status,current=Math.max(Number(run.progressCurrent||0),input.current),total=Math.max(Number(run.progressTotal||0),input.total,current),accounts=Math.max(Number(run.bankAccountsCaptured||0),input.accounts),lines=Math.max(Number(run.statementLinesObserved||0),input.lines),finishedAt=terminal.has(status)?input.updatedAt:'';\nreturn [{json:{...input,previousStatus:storedStatus,status,phase:status,current,total,accounts,lines,shouldUpdate:true,finishedAt}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -300,
+        220
+      ],
+      "id": "98000116-0000-4000-8000-000000000023",
+      "name": "Plan Progress"
+    },
+    {
+      "parameters": {
+        "jsCode": "const planned=$input.first().json;const requested=$('Validate Progress').first().json;const stored=$('Read Progress Run').first().json;if(String(stored.status)==='verifying'&&requested.status==='failed')return [{json:{...planned,shouldUpdate:false,response:{ok:false,error:{code:'IMPORT_OWNS_REVIEW_STATE',message:'The authenticated CSV import owns failure state after its lease is claimed.'}}}}];return [{json:planned}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -190,
+        220
+      ],
+      "id": "98000116-0000-4000-8000-000000000029",
+      "name": "Guard Import-Owned Progress"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "98000116-progress",
+              "leftValue": "={{ $json.shouldUpdate }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -80,
+        220
+      ],
+      "id": "98000116-0000-4000-8000-000000000024",
+      "name": "Progress Accepted?"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "value": "xero_capture_runs",
+          "mode": "name"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "runId",
+              "condition": "eq",
+              "keyValue": "={{ $json.runId }}"
+            },
+            {
+              "keyName": "companionId",
+              "condition": "eq",
+              "keyValue": "={{ $json.companionId }}"
+            },
+            {
+              "keyName": "status",
+              "condition": "eq",
+              "keyValue": "={{ $json.previousStatus }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "runUpdatedAt": "={{ $json.updatedAt }}",
+            "finishedAt": "={{ $json.finishedAt }}",
+            "lastHeartbeatAt": "={{ $json.updatedAt }}",
+            "status": "={{ $json.status }}",
+            "phase": "={{ $json.phase }}",
+            "progressCurrent": "={{ $json.current }}",
+            "progressTotal": "={{ $json.total }}",
+            "progressMessage": "={{ $json.message }}",
+            "requiresUserLogin": "={{ $json.requiresUserLogin }}",
+            "bankAccountsCaptured": "={{ $json.accounts }}",
+            "statementLinesObserved": "={{ $json.lines }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "runUpdatedAt",
+              "displayName": "runUpdatedAt",
+              "type": "date"
+            },
+            {
+              "id": "finishedAt",
+              "displayName": "finishedAt",
+              "type": "date"
+            },
+            {
+              "id": "lastHeartbeatAt",
+              "displayName": "lastHeartbeatAt",
+              "type": "date"
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "type": "string"
+            },
+            {
+              "id": "phase",
+              "displayName": "phase",
+              "type": "string"
+            },
+            {
+              "id": "progressCurrent",
+              "displayName": "progressCurrent",
+              "type": "number"
+            },
+            {
+              "id": "progressTotal",
+              "displayName": "progressTotal",
+              "type": "number"
+            },
+            {
+              "id": "progressMessage",
+              "displayName": "progressMessage",
+              "type": "string"
+            },
+            {
+              "id": "requiresUserLogin",
+              "displayName": "requiresUserLogin",
+              "type": "string"
+            },
+            {
+              "id": "bankAccountsCaptured",
+              "displayName": "bankAccountsCaptured",
+              "type": "number"
+            },
+            {
+              "id": "statementLinesObserved",
+              "displayName": "statementLinesObserved",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {
+          "dryRun": false
+        }
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        140,
+        140
+      ],
+      "id": "98000116-0000-4000-8000-000000000025",
+      "name": "Update Capture Progress",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "xero_capture_runs",
+          "mode": "name"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "runId",
+              "condition": "eq",
+              "keyValue": "={{ $('Plan Progress').first().json.runId }}"
+            },
+            {
+              "keyName": "companionId",
+              "condition": "eq",
+              "keyValue": "={{ $('Plan Progress').first().json.companionId }}"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 2,
+        "orderBy": false
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        360,
+        140
+      ],
+      "id": "98000116-0000-4000-8000-000000000028",
+      "name": "Read Progress Result",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const planned=$('Plan Progress').first().json;const stored=$input.first().json;if(!Number.isInteger(stored.id)||String(stored.runId)!==planned.runId||String(stored.companionId)!==planned.companionId)return [{json:{response:{ok:false,error:{code:'PROGRESS_UPDATE_UNCONFIRMED',message:'The capture progress update could not be confirmed.'}}}}];const status=String(stored.status||stored.phase||'preflight');return [{json:{response:{ok:true,cancelled:status==='cancelled',run_id:planned.runId,status}}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        580,
+        140
+      ],
+      "id": "98000116-0000-4000-8000-000000000026",
+      "name": "Shape Progress Response"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json.response || $json }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json; charset=utf-8"
+              },
+              {
+                "name": "Cache-Control",
+                "value": "no-store"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        600,
+        220
+      ],
+      "id": "98000116-0000-4000-8000-000000000027",
+      "name": "Respond Progress"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Authenticated Claim": {
+      "main": [
+        [
+          {
+            "node": "Validate Claim",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Claim": {
+      "main": [
+        [
+          {
+            "node": "Read Claimable Runs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Claimable Runs": {
+      "main": [
+        [
+          {
+            "node": "Plan Claim",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plan Claim": {
+      "main": [
+        [
+          {
+            "node": "Claim Available?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim Available?": {
+      "main": [
+        [
+          {
+            "node": "Verify Live Xero Organisation",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Claim",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Live Xero Organisation": {
+      "main": [
+        [
+          {
+            "node": "Read Claim Organisation Details",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Claim Organisation Details": {
+      "main": [
+        [
+          {
+            "node": "Bind Claim To Organisation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Bind Claim To Organisation": {
+      "main": [
+        [
+          {
+            "node": "Organisation Bound?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Organisation Bound?": {
+      "main": [
+        [
+          {
+            "node": "Claim Capture Run",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Claim",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim Capture Run": {
+      "main": [
+        [
+          {
+            "node": "Read Claimed Ownership",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Claimed Ownership": {
+      "main": [
+        [
+          {
+            "node": "Verify Claimed Ownership",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Claimed Ownership": {
+      "main": [
+        [
+          {
+            "node": "Respond Claim",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Authenticated Progress": {
+      "main": [
+        [
+          {
+            "node": "Validate Progress",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Progress": {
+      "main": [
+        [
+          {
+            "node": "Read Progress Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Progress Run": {
+      "main": [
+        [
+          {
+            "node": "Plan Progress",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plan Progress": {
+      "main": [
+        [
+          {
+            "node": "Guard Import-Owned Progress",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guard Import-Owned Progress": {
+      "main": [
+        [
+          {
+            "node": "Progress Accepted?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Progress Accepted?": {
+      "main": [
+        [
+          {
+            "node": "Update Capture Progress",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Progress",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Capture Progress": {
+      "main": [
+        [
+          {
+            "node": "Read Progress Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Progress Result": {
+      "main": [
+        [
+          {
+            "node": "Shape Progress Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shape Progress Response": {
+      "main": [
+        [
+          {
+            "node": "Respond Progress",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "executionTimeout": 30
+  },
+  "versionId": "98000116-0000-4000-8000-000000000900",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "phase": 20,
+    "testedWithN8n": "2.30.5",
+    "authentication": "X-Xero-Capture-Key",
+    "captureMethod": "user-mediated-xero-csv-export",
+    "browserAutomation": false
+  },
+  "id": "phase20XeroExportCompanion",
+  "tags": []
+}

@@ -31,9 +31,21 @@
               "type": "string"
             },
             {
-              "name": "filter",
+              "name": "runId",
               "type": "string"
-            }
+            },
+      {
+        "name": "filter",
+        "type": "string"
+      },
+      {
+        "name": "cursor",
+        "type": "string"
+      },
+      {
+        "name": "limit",
+        "type": "string"
+      }
           ]
         }
       },
@@ -48,7 +60,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const sessionId = typeof $json.sessionId === 'string' ? $json.sessionId.trim() : '';\nconst requestId = typeof $json.requestId === 'string' ? $json.requestId.trim() : '';\nconst uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;\nconst ALLOWED = ['all', 'ready', 'uncertain', 'accepted', 'executed'];\nconst raw = typeof $json.filter === 'string' ? $json.filter.trim().toLowerCase() : '';\nconst filter = ALLOWED.includes(raw) ? raw : 'all';\nconst error = (uuidPattern.test(sessionId) && uuidPattern.test(requestId))\n  ? null\n  : { code: 'INVALID_SESSION', message: 'Reading the suggestions needs a valid conversation and request ID.' };\nreturn [{ json: {\n  valid: error === null, sessionId, requestId, filter,\n  proposedInput: { sessionId, requestId, filter },\n  ...(error ? { response: { ok: false, error } } : {}),\n} }];"
+        "jsCode": "const sessionId = typeof $json.sessionId === 'string' ? $json.sessionId.trim() : '';\nconst requestId = typeof $json.requestId === 'string' ? $json.requestId.trim() : '';\nconst targetRunId = typeof $json.runId === 'string' ? $json.runId.trim() : '';\nconst uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;\nconst safeRunId = /^[A-Za-z0-9._:-]{1,120}$/;\nconst ALLOWED = ['all', 'ready', 'uncertain', 'accepted', 'executed'];\nconst raw = typeof $json.filter === 'string' ? $json.filter.trim().toLowerCase() : '';\nconst filter = ALLOWED.includes(raw) ? raw : 'all';\nconst rawCursor=String($json.cursor??'').trim(),rawLimit=String($json.limit??'').trim();\nconst cursor=rawCursor===''?0:(/^\\d+$/.test(rawCursor)?Number(rawCursor):NaN);\nconst limit=rawLimit===''?20:(/^\\d+$/.test(rawLimit)?Number(rawLimit):NaN);\nlet error=null;\nif(!uuidPattern.test(sessionId)||!uuidPattern.test(requestId))error={code:'INVALID_SESSION',message:'Reading the suggestions needs a valid conversation and request ID.'};\nelse if(targetRunId&&!safeRunId.test(targetRunId))error={code:'INVALID_RUN_ID',message:'The requested review run ID is invalid.'};\nelse if(!Number.isSafeInteger(cursor)||cursor<0||cursor>5000)error={code:'INVALID_CURSOR',message:'The suggestion cursor must be an integer from 0 to 5000.'};\nelse if(!Number.isSafeInteger(limit)||limit<1||limit>50)error={code:'INVALID_LIMIT',message:'The suggestion page size must be an integer from 1 to 50.'};\nreturn [{ json: {\n  valid: error === null, sessionId, requestId, targetRunId, filter, cursor, limit,\n  proposedInput: { sessionId, requestId, runId:targetRunId, filter, cursor:String(cursor), limit:String(limit) },\n  ...(error ? { response: { ok: false, error } } : {}),\n} }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -99,20 +111,24 @@
         "operation": "get",
         "dataTableId": {
           "__rl": true,
-          "value": "reconciliation_runs",
+          "value": "reconciliation_runs_v2",
           "mode": "name"
         },
         "matchType": "allConditions",
         "filters": {
-          "conditions": []
+          "conditions": [
+            {
+              "keyName": "sessionId",
+              "condition": "eq",
+              "keyValue": "={{ $('Validate Read Input').first().json.sessionId }}"
+            }
+          ]
         },
         "returnAll": false,
-        "limit": 5,
+        "limit": 5000,
         "orderBy": true,
-        "sort": {
-          "field": "startedAt",
-          "direction": "DESC"
-        }
+        "orderByColumn": "startedAt",
+        "orderByDirection": "DESC"
       },
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1.1,
@@ -121,11 +137,12 @@
         -200
       ],
       "id": "97900103-0000-4000-8000-000000000012",
-      "name": "Read Recent Runs"
+      "name": "Read Recent Runs",
+      "alwaysOutputData": true
     },
     {
       "parameters": {
-        "jsCode": "const input = $('Validate Read Input').first().json;\nconst rows = $input.all().map((item) => item.json).filter((row) => row && row.runId);\n\nconst minutesSince = (value) => {\n  const parsed = Date.parse(String(value ?? ''));\n  if (Number.isNaN(parsed)) return null;\n  return Math.round((Date.now() - parsed) / 60000);\n};\n// Same number as the guard in 102: past the run workflow's own timeout, n8n\n// has certainly stopped it, so a row still saying 'running' is wreckage.\nconst DEAD_AFTER = 31;\n\nconst finished = rows.filter((row) => ['completed', 'partial'].includes(String(row.status ?? '')));\nconst running = rows.filter((row) => String(row.status ?? '') === 'running')\n  .map((row) => ({ ...row, age: minutesSince(row.startedAt) }))\n  .filter((row) => row.age !== null);\n\nconst live = running.find((row) => row.age < DEAD_AFTER) ?? null;\nconst wreck = running.find((row) => row.age >= DEAD_AFTER) ?? null;\nconst latest = finished[0] ?? null;\n\nreturn [{ json: { ...input,\n  runId: latest ? String(latest.runId) : '',\n  hasRun: latest !== null,\n  running: live !== null,\n  runningMinutes: live ? live.age : 0,\n  interrupted: latest === null && wreck !== null,\n  interruptedMinutes: wreck ? wreck.age : 0,\n  run: latest ?? null } }];"
+        "jsCode": "const input = $('Validate Read Input').first().json;\nconst sessionRows = $input.all().map((item) => item.json).filter((row) => row && row.runId && String(row.sessionId ?? '') === input.sessionId);\nconst rows = input.targetRunId ? sessionRows.filter((row) => String(row.runId) === input.targetRunId) : sessionRows;\n\nconst minutesSince = (value) => {\n  const parsed = Date.parse(String(value ?? ''));\n  if (Number.isNaN(parsed)) return null;\n  return Math.round((Date.now() - parsed) / 60000);\n};\n// Same number as the guard in 102: past the run workflow's own timeout, n8n\n// has certainly stopped it, so a row still saying 'running' is wreckage.\nconst DEAD_AFTER = 31;\n\nconst finished = rows.filter((row) => ['completed', 'partial'].includes(String(row.status ?? '')));\nconst running = rows.filter((row) => String(row.status ?? '') === 'running')\n  .map((row) => ({ ...row, age: minutesSince(row.startedAt) }))\n  .filter((row) => row.age !== null);\n\nconst live = running.find((row) => row.age < DEAD_AFTER) ?? null;\nconst wreck = running.find((row) => row.age >= DEAD_AFTER) ?? null;\nconst latest = finished[0] ?? null;\n\nreturn [{ json: { ...input,\n  runId: latest ? String(latest.runId) : input.targetRunId,\n  hasRun: latest !== null,\n  targeted: Boolean(input.targetRunId),\n  targetMissing: Boolean(input.targetRunId && rows.length === 0),\n  running: live !== null,\n  runningMinutes: live ? live.age : 0,\n  interrupted: latest === null && wreck !== null,\n  interruptedMinutes: wreck ? wreck.age : 0,\n  run: latest ?? null } }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -142,7 +159,7 @@
         "operation": "get",
         "dataTableId": {
           "__rl": true,
-          "value": "reconciliation_suggestions",
+          "value": "reconciliation_suggestions_v2",
           "mode": "name"
         },
         "matchType": "allConditions",
@@ -152,11 +169,17 @@
               "keyName": "runId",
               "condition": "eq",
               "keyValue": "={{ $json.runId }}"
+            },
+            {
+              "keyName": "sessionId",
+              "condition": "eq",
+              "keyValue": "={{ $('Pick Run').first().json.sessionId }}"
             }
           ]
         },
-        "returnAll": true,
-        "orderBy": false
+        "returnAll": false,
+        "orderBy": false,
+        "limit": 5000
       },
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1.1,
@@ -165,11 +188,12 @@
         0
       ],
       "id": "97900103-0000-4000-8000-000000000014",
-      "name": "Read Suggestions"
+      "name": "Read Suggestions",
+      "alwaysOutputData": true
     },
     {
       "parameters": {
-        "jsCode": "const picked=$('Pick Run').first().json;\nconst rows=$input.all().map((item)=>item.json).filter((row)=>row&&row.suggestionId);\nif(!picked.hasRun){const message=picked.running?`A review has been running for ${picked.runningMinutes} minute${picked.runningMinutes===1?'':'s'} and has not finished yet.`:picked.interrupted?`A review started ${picked.interruptedMinutes} minutes ago and never finished. Offer to run another one.`:'No review has finished yet. Offer to capture the live Xero queue and run one rather than guessing.';return [{json:{...picked,response:{ok:true,hasRun:false,running:picked.running,interrupted:picked.interrupted,suggestions:[],message}}}];}\nconst money=(row)=>{const value=Number(row.amount??0);return `${value<0?'-':''}$${Math.abs(value).toFixed(2)}`;};\nconst who=(row)=>String(row.contactName||row.suggestedContact||row.narration||row.description||'unnamed').slice(0,60);\nconst render=(row)=>({suggestionId:String(row.suggestionId),statementLineId:String(row.statementLineId||''),line:`${String(row.occurredAt??'').slice(0,10)}  ${money(row)}  ${who(row)}`,date:String(row.occurredAt??'').slice(0,10),amount:money(row),counterparty:who(row),likelyDescription:String(row.likelyDescription||''),evidenceSummary:String(row.evidenceSummary||''),reviewQuestion:String(row.reviewQuestion||''),account:String(row.suggestedAccountCode||'')&&`${row.suggestedAccountCode} ${row.suggestedAccountName}`.trim(),taxType:String(row.suggestedTaxType||''),contactId:String(row.suggestedContactId||''),invoice:String(row.matchedInvoiceNumber||''),basis:String(row.basis||''),resultLane:String(row.resultLane||''),readyInXero:String(row.readyInXero)==='yes',confidence:Number(row.confidence||0),executionStatus:String(row.executionStatus||'')});\nconst executed=rows.filter((row)=>String(row.readyInXero)==='yes'||String(row.executionStatus)==='created');\nconst executedIds=new Set(executed.map((row)=>row.suggestionId));\nconst accepted=rows.filter((row)=>!executedIds.has(row.suggestionId)&&String(row.userDecision)==='accepted');\nconst decidedIds=new Set([...executed,...accepted,...rows.filter((row)=>String(row.userDecision||''))].map((row)=>row.suggestionId));\nconst pending=rows.filter((row)=>!decidedIds.has(row.suggestionId));\nconst ready=pending.filter((row)=>String(row.resultLane)==='ready_to_prepare');\nconst matchInXero=pending.filter((row)=>String(row.resultLane)==='existing_match');\nconst needsYou=pending.filter((row)=>String(row.resultLane)==='likely');\nconst blocked=pending.filter((row)=>String(row.resultLane)==='blocked');\nconst wanted={all:{ready,matchInXero,needsYou,blocked,accepted,executed},uncertain:{ready:[],matchInXero:[],needsYou,blocked,accepted:[],executed:[]},ready:{ready,matchInXero:[],needsYou:[],blocked:[],accepted:[],executed:[]},accepted:{ready:[],matchInXero:[],needsYou:[],blocked:[],accepted,executed:[]},executed:{ready:[],matchInXero:[],needsYou:[],blocked:[],accepted:[],executed}}[picked.filter];\nreturn [{json:{...picked,response:{ok:true,hasRun:true,runId:picked.runId,status:String(picked.run?.status||''),reportText:String(picked.run?.reportText||''),counts:{total:rows.length,readyToApprove:ready.length,matchInXero:matchInXero.length,needsYou:needsYou.length,blocked:blocked.length,accepted:accepted.length,readyInXero:executed.length},readyToApprove:wanted.ready.map(render),matchInXero:wanted.matchInXero.map(render),needsYou:wanted.needsYou.map(render),blocked:wanted.blocked.map(render),alreadyAccepted:wanted.accepted.map(render),readyInXero:wanted.executed.map(render),errorSummary:String(picked.run?.errorSummary||''),nextStep:'Lead with needsYou and blocked. Lower-certainty rows include a likelyDescription and one reviewQuestion. Get explicit approval for exact readyToApprove items before preparation. Nothing is reconciled until the user completes Match or Find & Match and clicks OK in Xero.'}}}];"
+        "jsCode": "const picked=$('Pick Run').first().json;\nconst rows=$input.all().map((item)=>item.json).filter((row)=>row&&row.suggestionId&&String(row.sessionId??'')===picked.sessionId&&String(row.runId??'')===picked.runId),cursor=Number.isSafeInteger(picked.cursor)?picked.cursor:0,limit=Number.isSafeInteger(picked.limit)?picked.limit:20;\nif(!picked.hasRun){const message=picked.running?`The requested review has been running for ${picked.runningMinutes} minute${picked.runningMinutes===1?'':'s'} and has not finished yet.`:picked.interrupted?`The requested review started ${picked.interruptedMinutes} minutes ago and never finished. Offer to run another one.`:picked.targetMissing?`Review ${picked.targetRunId} does not exist in this conversation. Do not substitute a newer or older review.`:picked.targeted?'The requested review did not finish successfully. Do not substitute another review.':'No review has finished yet. Offer to capture a fresh user-mediated Xero Uncoded Statement Lines export and run one rather than guessing.';return [{json:{...picked,response:{ok:true,hasRun:false,requestedRunId:picked.targetRunId||'',running:picked.running,interrupted:picked.interrupted,suggestions:[],pagination:{cursor:0,limit,totalReturned:0,pageReturned:0,remaining:0,hasMore:false,nextCursor:null},message}}}];}\nconst money=(row)=>{const value=Number(row.amount??0);return `${value<0?'-':''}$${Math.abs(value).toFixed(2)}`;};\nconst who=(row)=>String(row.contactName||row.suggestedContact||row.narration||row.description||'unnamed').slice(0,60);\nconst render=(row)=>({suggestionId:String(row.suggestionId),statementLineId:String(row.statementLineId||''),line:`${String(row.occurredAt??'').slice(0,10)}  ${money(row)}  ${who(row)}`,date:String(row.occurredAt??'').slice(0,10),amount:money(row),counterparty:who(row),likelyDescription:String(row.likelyDescription||''),evidenceSummary:String(row.evidenceSummary||''),reviewQuestion:String(row.reviewQuestion||''),account:String(row.suggestedAccountCode||'')&&`${row.suggestedAccountCode} ${row.suggestedAccountName}`.trim(),taxType:String(row.suggestedTaxType||''),contactId:String(row.suggestedContactId||''),invoice:String(row.matchedInvoiceNumber||''),basis:String(row.basis||''),resultLane:String(row.resultLane||''),readyInXero:String(row.readyInXero)==='yes',confidence:Number(row.confidence||0),executionStatus:String(row.executionStatus||'')});\nconst stable=(a,b)=>String(a.occurredAt||'').localeCompare(String(b.occurredAt||''))||String(a.suggestionId||'').localeCompare(String(b.suggestionId||''));\nconst executed=rows.filter((row)=>String(row.readyInXero)==='yes'||String(row.executionStatus)==='created').sort(stable);\nconst executedIds=new Set(executed.map((row)=>row.suggestionId));\nconst accepted=rows.filter((row)=>!executedIds.has(row.suggestionId)&&String(row.userDecision)==='accepted').sort(stable);\nconst decidedIds=new Set([...executed,...accepted,...rows.filter((row)=>String(row.userDecision||''))].map((row)=>row.suggestionId));\nconst pending=rows.filter((row)=>!decidedIds.has(row.suggestionId));\nconst ready=pending.filter((row)=>String(row.resultLane)==='ready_to_prepare').sort(stable);\nconst matchInXero=pending.filter((row)=>String(row.resultLane)==='existing_match').sort(stable);\nconst needsYou=pending.filter((row)=>String(row.resultLane)==='likely').sort(stable);\nconst blocked=pending.filter((row)=>String(row.resultLane)==='blocked').sort(stable);\nconst lanes={ready,matchInXero,needsYou,blocked,accepted,executed};\nconst order={all:['needsYou','blocked','ready','matchInXero','accepted','executed'],uncertain:['needsYou','blocked'],ready:['ready'],accepted:['accepted'],executed:['executed']}[picked.filter];\nconst interleave=(names)=>{const result=[];const longest=Math.max(0,...names.map((lane)=>lanes[lane].length));for(let index=0;index<longest;index+=1)for(const lane of names)if(lanes[lane][index])result.push({lane,row:lanes[lane][index]});return result;};\nconst ordered=picked.filter==='all'?interleave(order):order.flatMap((lane)=>lanes[lane].map((row)=>({lane,row})));\nconst page=ordered.slice(cursor,cursor+limit),next=cursor+page.length,hasMore=next<ordered.length;\nconst paged={ready:[],matchInXero:[],needsYou:[],blocked:[],accepted:[],executed:[]};for(const item of page)paged[item.lane].push(render(item.row));\nconst counts={total:rows.length,readyToApprove:ready.length,matchInXero:matchInXero.length,needsYou:needsYou.length,blocked:blocked.length,accepted:accepted.length,readyInXero:executed.length};\nconst consumed={ready:0,matchInXero:0,needsYou:0,blocked:0,accepted:0,executed:0};for(const item of ordered.slice(0,next))consumed[item.lane]+=1;\nconst remainingByLane={needsYou:needsYou.length-consumed.needsYou,blocked:blocked.length-consumed.blocked,readyToApprove:ready.length-consumed.ready,matchInXero:matchInXero.length-consumed.matchInXero,accepted:accepted.length-consumed.accepted,readyInXero:executed.length-consumed.executed};\nconst completeSummary=`Review ${picked.runId}: ${counts.needsYou} need your help, ${counts.blocked} are blocked, ${counts.readyToApprove} are ready for approval, ${counts.matchInXero} have a possible Xero match, ${counts.accepted} are already accepted, and ${counts.readyInXero} are already prepared in Xero.`;\nconst summary=`${completeSummary} Showing ${page.length} of ${ordered.length} detail rows for filter ${picked.filter}${hasMore?`; ${ordered.length-next} remain at cursor ${next}`:''}.`;\nreturn [{json:{...picked,response:{ok:true,hasRun:true,runId:picked.runId,status:String(picked.run?.status||''),reportText:rows.length<=limit?String(picked.run?.reportText||summary):summary,completeSummary,counts,pagination:{cursor,limit,totalReturned:ordered.length,pageReturned:page.length,remaining:ordered.length-next,remainingByLane,hasMore,nextCursor:hasMore?String(next):null},readyToApprove:paged.ready,matchInXero:paged.matchInXero,needsYou:paged.needsYou,blocked:paged.blocked,alreadyAccepted:paged.accepted,readyInXero:paged.executed,errorSummary:String(picked.run?.errorSummary||''),nextStep:'The counts are complete for this exact saved review. For filter all, this page is deterministically interleaved so every non-empty lane is surfaced early, with needsYou and blocked first in each round. Present only the detail rows returned. If hasMore is true, state the exact remaining count and nextCursor; fetch bounded additional pages only when the current request needs those details, and never imply omitted details were shown. Lower-certainty rows include a likelyDescription and one reviewQuestion. Get explicit approval for exact readyToApprove items before preparation. Nothing is reconciled until the user completes Match or Find & Match and clicks OK in Xero.'}}}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,

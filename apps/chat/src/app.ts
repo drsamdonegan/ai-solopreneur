@@ -74,6 +74,7 @@ const MAX_PAID_RESEARCH_REQUEST_BYTES = 1_024 * 1_024;
 const MAX_SEO_ARTICLE_REQUEST_BYTES = 1_024 * 1_024;
 const MAX_REQUEST_BYTES = 65_536;
 const MAX_UPSTREAM_BYTES = 65_536;
+const XERO_CAPTURE_PROXY_TIMEOUT_MS = 5_000;
 // Where a learner's own browser finds n8n when nothing says otherwise, which
 // is the case on their own computer. A hosted kit passes its real address in.
 const DEFAULT_N8N_PUBLIC_URL = "http://localhost:5678";
@@ -123,7 +124,59 @@ type ErrorCode =
   | "SEO_ARTICLE_ERROR"
   | "SEO_ARTICLE_NOT_FOUND"
   | "TOO_MANY_DOCUMENTS"
-  | "UNSUPPORTED_FILE_TYPE";
+  | "UNSUPPORTED_FILE_TYPE"
+  | "XERO_CAPTURE_DISABLED"
+  | "XERO_CAPTURE_NOT_FOUND"
+  | "XERO_CAPTURE_UNAVAILABLE";
+
+const XERO_CAPTURE_STATES = [
+  "preflight",
+  "opening",
+  "awaiting_login",
+  "awaiting_export",
+  "discovering",
+  "capturing",
+  "verifying",
+  "uploading",
+  "reviewing",
+  "ready",
+  "failed",
+  "cancelled",
+] as const;
+
+type XeroCaptureState = (typeof XERO_CAPTURE_STATES)[number];
+
+const XERO_CAPTURE_NOTES: Readonly<Record<XeroCaptureState, string>> = {
+  preflight: "Preparing the read-only export run.",
+  opening: "Open Xero's Uncoded Statement Lines report.",
+  awaiting_login: "Sign in to Xero, then return to the Uncoded Statement Lines report.",
+  awaiting_export:
+    "Choose All bank accounts and a date range covering your unreconciled history, click Run, then export CSV. Leave the file in Downloads.",
+  discovering: "The local companion found the exported CSV.",
+  capturing: "Reading the exported statement lines locally.",
+  verifying: "Checking the exported rows and totals.",
+  uploading: "Sending the verified export to the private bookkeeping workflow.",
+  reviewing: "Preparing read-only coding suggestions.",
+  ready: "The read-only coding suggestions are ready.",
+  failed: "The Xero export run stopped. Start a fresh export to retry.",
+  cancelled: "The Xero export run was cancelled. No Xero data was changed.",
+};
+
+interface XeroCaptureRun {
+  runId: string;
+  reviewRunId?: string;
+  source: "user" | "agent";
+  state: XeroCaptureState;
+  note: string;
+  current: number;
+  total: number;
+  accountCount: number;
+  capturedCount: number;
+  expectedCount: number;
+  createdAt: string;
+  updatedAt: string;
+  errorCode?: string;
+}
 
 interface ChatRequest {
   requestId: string;
@@ -177,6 +230,15 @@ export interface ChatGatewayOptions {
   chatStore?: ChatStore;
   profileStore?: ProfileStore;
   agentSettingsStore?: AgentSettingsStore;
+  /**
+   * Enables only the hosted hand-off and progress API for the user-mediated
+   * Uncoded Statement Lines CSV export. It provides no browser control and
+   * carries no Xero credential. Public deployments leave this false while
+   * migrating away from the earlier website-capture experiment.
+   */
+  xeroCaptureEnabled?: boolean;
+  /** Server-to-server authentication for the three n8n control webhooks. */
+  xeroCaptureControlSecret?: string;
   skillsDirectory?: string;
   skillPacksDirectory?: string;
   profileDirectory?: string;
@@ -187,6 +249,8 @@ export interface ChatGatewayOptions {
    */
   accessGate?: AccessGate | undefined;
 }
+
+// xeroCaptureExportHostContract: 1
 
 class PublicError extends Error {
   constructor(
@@ -294,6 +358,251 @@ function validateSessionId(value: unknown): string {
     );
   }
   return value;
+}
+
+function xeroCaptureDisabledError(): PublicError {
+  return new PublicError(
+    403,
+    "XERO_CAPTURE_DISABLED",
+    "The hosted Xero CSV export workflow is not enabled for this deployment.",
+  );
+}
+
+function xeroCaptureConfigured(options: ChatGatewayOptions): boolean {
+  return (
+    options.xeroCaptureEnabled === true &&
+    (options.xeroCaptureControlSecret?.length ?? 0) >= 24
+  );
+}
+
+function requireBookkeepingConversation(
+  chatStore: ChatStore,
+  sessionId: string,
+): void {
+  const conversation = chatStore.getConversation(sessionId);
+  if (conversation === undefined || conversation.agentId !== "bookkeeping") {
+    throw new PublicError(
+      404,
+      "XERO_CAPTURE_NOT_FOUND",
+      "Start Xero capture from a Bookkeeping conversation.",
+    );
+  }
+}
+
+function xeroCaptureTimestamp(value: unknown): string {
+  if (
+    typeof value !== "string" ||
+    value.length > 64 ||
+    !/(?:Z|[+-]\d\d:\d\d)$/i.test(value) ||
+    !Number.isFinite(Date.parse(value))
+  ) {
+    return "";
+  }
+  return value;
+}
+
+function xeroCaptureCount(value: unknown): number {
+  return Number.isSafeInteger(value) && Number(value) >= 0 && Number(value) <= 1_000_000
+    ? Number(value)
+    : 0;
+}
+
+async function readBoundedUpstreamText(
+  response: Response,
+  maximumBytes: number,
+): Promise<string> {
+  const declared = Number(response.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > maximumBytes) {
+    await response.body?.cancel().catch(() => undefined);
+    throw new PublicError(
+      502,
+      "XERO_CAPTURE_UNAVAILABLE",
+      "The Xero capture service returned an unexpected status.",
+    );
+  }
+  if (response.body === null) return "";
+
+  const reader = response.body.getReader();
+  const chunks: Buffer[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maximumBytes) {
+        await reader.cancel().catch(() => undefined);
+        throw new PublicError(
+          502,
+          "XERO_CAPTURE_UNAVAILABLE",
+          "The Xero capture service returned an unexpected status.",
+        );
+      }
+      chunks.push(Buffer.from(value));
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  return Buffer.concat(chunks, total).toString("utf8");
+}
+
+function validateXeroCaptureRun(
+  value: unknown,
+  expectedRunId?: string,
+): XeroCaptureRun | undefined {
+  if (value === null || value === undefined) {
+    return undefined;
+  }
+  if (typeof value !== "object" || Array.isArray(value)) {
+    throw new PublicError(
+      502,
+      "XERO_CAPTURE_UNAVAILABLE",
+      "The Xero capture service returned an unexpected status.",
+    );
+  }
+  const candidate = value as Record<string, unknown>;
+  const runId = typeof candidate.runId === "string" ? candidate.runId : "";
+  const state = typeof candidate.state === "string" ? candidate.state : "";
+  if (
+    !UUID_PATTERN.test(runId) ||
+    (expectedRunId !== undefined && runId !== expectedRunId) ||
+    !(XERO_CAPTURE_STATES as readonly string[]).includes(state)
+  ) {
+    throw new PublicError(
+      502,
+      "XERO_CAPTURE_UNAVAILABLE",
+      "The Xero capture service returned an unexpected status.",
+    );
+  }
+
+  const createdAt = xeroCaptureTimestamp(candidate.createdAt);
+  const updatedAt = xeroCaptureTimestamp(candidate.updatedAt);
+  const reviewRunId =
+    typeof candidate.reviewRunId === "string" ? candidate.reviewRunId : "";
+  if (reviewRunId !== "" && reviewRunId !== `csv-review-${runId}`) {
+    throw new PublicError(
+      502,
+      "XERO_CAPTURE_UNAVAILABLE",
+      "The Xero capture service returned an unexpected status.",
+    );
+  }
+  const result: XeroCaptureRun = {
+    runId,
+    source: candidate.source === "agent" ? "agent" : "user",
+    state: state as XeroCaptureState,
+    // Never proxy arbitrary text from an import workflow to the page: it may
+    // contain statement-line details. Guidance is fixed by state instead.
+    note: XERO_CAPTURE_NOTES[state as XeroCaptureState],
+    current: xeroCaptureCount(candidate.current ?? candidate.step),
+    total: xeroCaptureCount(candidate.total ?? candidate.of),
+    accountCount: xeroCaptureCount(candidate.accountCount),
+    capturedCount: xeroCaptureCount(candidate.capturedCount),
+    expectedCount: xeroCaptureCount(candidate.expectedCount),
+    createdAt,
+    updatedAt,
+  };
+  if (reviewRunId !== "") {
+    result.reviewRunId = reviewRunId;
+  }
+  const errorCode =
+    typeof candidate.errorCode === "string" &&
+    /^[A-Z][A-Z0-9_]{0,79}$/.test(candidate.errorCode)
+      ? candidate.errorCode
+      : "";
+  if (errorCode !== "") {
+    result.errorCode = errorCode;
+  }
+  return result;
+}
+
+async function callXeroCaptureWebhook(
+  action: "start" | "status" | "cancel",
+  payload: Record<string, unknown>,
+  options: {
+    fetchImplementation: typeof fetch;
+    upstreamUrl: string;
+    xeroCaptureControlSecret: string;
+  },
+): Promise<unknown> {
+  const controlSecret = options.xeroCaptureControlSecret ?? "";
+  if (controlSecret.length < 24) {
+    throw xeroCaptureDisabledError();
+  }
+  const controller = new AbortController();
+  const timeout = setTimeout(
+    () => controller.abort(),
+    XERO_CAPTURE_PROXY_TIMEOUT_MS,
+  );
+  try {
+    const upstreamUrl = new URL(
+      `/webhook/xero-capture-${action}`,
+      options.upstreamUrl,
+    );
+    const response = await options.fetchImplementation(upstreamUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Xero-Capture-Control": controlSecret,
+      },
+      body: JSON.stringify(payload),
+      // Never forward the private control credential through an upstream
+      // redirect. A misconfigured webhook must fail closed instead of sending
+      // the header to whatever Location it names.
+      redirect: "error",
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      throw new PublicError(
+        response.status === 404 ? 503 : 502,
+        "XERO_CAPTURE_UNAVAILABLE",
+        "The private Xero export service is not available yet.",
+      );
+    }
+    const rawBody = await readBoundedUpstreamText(response, MAX_UPSTREAM_BYTES);
+    try {
+      return JSON.parse(rawBody);
+    } catch {
+      throw new PublicError(
+        502,
+        "XERO_CAPTURE_UNAVAILABLE",
+        "The Xero capture service returned an unexpected status.",
+      );
+    }
+  } catch (error) {
+    if (error instanceof PublicError) {
+      throw error;
+    }
+    throw new PublicError(
+      503,
+      "XERO_CAPTURE_UNAVAILABLE",
+      controller.signal.aborted
+        ? "The Xero capture service took too long to answer."
+        : "The private Xero export service is not available yet.",
+    );
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function xeroCaptureRunFromResponse(
+  body: unknown,
+  expectedRunId?: string,
+): XeroCaptureRun | undefined {
+  if (typeof body !== "object" || body === null || Array.isArray(body)) {
+    throw new PublicError(
+      502,
+      "XERO_CAPTURE_UNAVAILABLE",
+      "The Xero capture service returned an unexpected status.",
+    );
+  }
+  const candidate = body as Record<string, unknown>;
+  if (candidate.hasRun === false) {
+    return undefined;
+  }
+  return validateXeroCaptureRun(
+    Object.hasOwn(candidate, "run") ? candidate.run : candidate,
+    expectedRunId,
+  );
 }
 
 function validateChatRequest(
@@ -3096,6 +3405,253 @@ export function createChatHandler(options: ChatGatewayOptions): RequestListener 
           "Cache-Control": "no-store",
         });
         response.end();
+        return;
+      }
+
+      // Xero's public API does not expose the reconciliation queue. This is a
+      // deliberately narrow hand-off for a user-exported Uncoded Statement
+      // Lines CSV: the chat app can start, read, and cancel an import run, but
+      // has no Xero credential and exposes no URL, selector, click, or script
+      // API. The user signs in, runs the official report, and exports the CSV.
+      const xeroCaptureRunMatch =
+        /^\/api\/xero-capture\/runs\/([0-9a-f-]+)$/i.exec(url.pathname);
+      if (
+        url.pathname === "/api/xero-capture/runs" ||
+        xeroCaptureRunMatch !== null
+      ) {
+        try {
+          const isCollection = xeroCaptureRunMatch === null;
+          if (isCollection && request.method === "GET") {
+            const sessionId = validateSessionId(url.searchParams.get("sessionId"));
+            requireBookkeepingConversation(chatStore, sessionId);
+            if (!xeroCaptureConfigured(options)) {
+              sendJson(response, 200, {
+                schemaVersion: 1,
+                enabled: false,
+                available: false,
+                readOnly: true,
+                run: null,
+                reason:
+                  "The user-mediated Xero CSV export workflow is disabled for this deployment.",
+              });
+              return;
+            }
+            const body = await callXeroCaptureWebhook(
+              "status",
+              { schemaVersion: 1, requestId: randomUUID(), sessionId },
+              {
+                fetchImplementation,
+                upstreamUrl: options.upstreamUrl,
+                xeroCaptureControlSecret:
+                  options.xeroCaptureControlSecret ?? "",
+              },
+            );
+            sendJson(response, 200, {
+              schemaVersion: 1,
+              enabled: true,
+              available: true,
+              readOnly: true,
+              run: xeroCaptureRunFromResponse(body) ?? null,
+            });
+            return;
+          }
+
+          if (isCollection && request.method === "POST") {
+            if (!xeroCaptureConfigured(options)) {
+              throw xeroCaptureDisabledError();
+            }
+            const body = await readRequestBody(request);
+            if (typeof body !== "object" || body === null || Array.isArray(body)) {
+              throw new PublicError(
+                400,
+                "INVALID_REQUEST",
+                "The Xero capture request is invalid.",
+              );
+            }
+            const candidate = body as Record<string, unknown>;
+            if (
+              Object.keys(candidate).some(
+                (key) => key !== "sessionId" && key !== "source",
+              )
+            ) {
+              throw new PublicError(
+                400,
+                "INVALID_REQUEST",
+                "Xero capture accepts only a conversation and start source.",
+              );
+            }
+            const sessionId = validateSessionId(candidate.sessionId);
+            requireBookkeepingConversation(chatStore, sessionId);
+            const source = candidate.source === "agent" ? "agent" : "user";
+            if (
+              candidate.source !== undefined &&
+              candidate.source !== "user" &&
+              candidate.source !== "agent"
+            ) {
+              throw new PublicError(
+                400,
+                "INVALID_REQUEST",
+                "The Xero capture start source is invalid.",
+              );
+            }
+
+            const runId = randomUUID();
+            const upstreamBody = await callXeroCaptureWebhook(
+              "start",
+              {
+                schemaVersion: 1,
+                requestId: randomUUID(),
+                runId,
+                sessionId,
+                source,
+                readOnly: true,
+              },
+              {
+                fetchImplementation,
+                upstreamUrl: options.upstreamUrl,
+                xeroCaptureControlSecret:
+                  options.xeroCaptureControlSecret ?? "",
+              },
+            );
+            const upstreamStatus =
+              typeof upstreamBody === "object" &&
+              upstreamBody !== null &&
+              !Array.isArray(upstreamBody) &&
+              (upstreamBody as Record<string, unknown>).status === "already-running"
+                ? "already-running"
+                : "started";
+            // The authenticated start workflow may return the existing live
+            // run for this same conversation. In that explicit case its run
+            // ID necessarily differs from the new idempotency candidate.
+            const run = xeroCaptureRunFromResponse(
+              upstreamBody,
+              upstreamStatus === "already-running" ? undefined : runId,
+            );
+            if (run === undefined) {
+              throw new PublicError(
+                502,
+                "XERO_CAPTURE_UNAVAILABLE",
+                "The Xero capture service did not create a run.",
+              );
+            }
+            sendJson(response, 201, {
+              schemaVersion: 1,
+              enabled: true,
+              available: true,
+              readOnly: true,
+              run,
+            });
+            return;
+          }
+
+          if (!isCollection && request.method === "GET") {
+            if (!xeroCaptureConfigured(options)) {
+              throw xeroCaptureDisabledError();
+            }
+            const runId = validateSessionId(xeroCaptureRunMatch[1]);
+            const sessionId = validateSessionId(url.searchParams.get("sessionId"));
+            requireBookkeepingConversation(chatStore, sessionId);
+            const body = await callXeroCaptureWebhook(
+              "status",
+              {
+                schemaVersion: 1,
+                requestId: randomUUID(),
+                runId,
+                sessionId,
+              },
+              {
+                fetchImplementation,
+                upstreamUrl: options.upstreamUrl,
+                xeroCaptureControlSecret:
+                  options.xeroCaptureControlSecret ?? "",
+              },
+            );
+            const run = xeroCaptureRunFromResponse(body, runId);
+            if (run === undefined) {
+              throw new PublicError(
+                404,
+                "XERO_CAPTURE_NOT_FOUND",
+                "That Xero capture run is not available.",
+              );
+            }
+            sendJson(response, 200, {
+              schemaVersion: 1,
+              enabled: true,
+              available: true,
+              readOnly: true,
+              run,
+            });
+            return;
+          }
+
+          if (!isCollection && request.method === "DELETE") {
+            if (!xeroCaptureConfigured(options)) {
+              throw xeroCaptureDisabledError();
+            }
+            const runId = validateSessionId(xeroCaptureRunMatch[1]);
+            const sessionId = validateSessionId(url.searchParams.get("sessionId"));
+            requireBookkeepingConversation(chatStore, sessionId);
+            const body = await callXeroCaptureWebhook(
+              "cancel",
+              {
+                schemaVersion: 1,
+                requestId: randomUUID(),
+                runId,
+                sessionId,
+              },
+              {
+                fetchImplementation,
+                upstreamUrl: options.upstreamUrl,
+                xeroCaptureControlSecret:
+                  options.xeroCaptureControlSecret ?? "",
+              },
+            );
+            const run = xeroCaptureRunFromResponse(body, runId);
+            if (run === undefined) {
+              throw new PublicError(
+                404,
+                "XERO_CAPTURE_NOT_FOUND",
+                "That Xero capture run is not available.",
+              );
+            }
+            sendJson(response, 200, {
+              schemaVersion: 1,
+              enabled: true,
+              available: true,
+              readOnly: true,
+              run,
+            });
+            return;
+          }
+
+          sendJson(
+            response,
+            405,
+            {
+              error: {
+                code: "INVALID_REQUEST",
+                message: isCollection
+                  ? "Start or read Xero capture runs with POST or GET."
+                  : "Read or cancel this Xero capture run with GET or DELETE.",
+              },
+            },
+            { Allow: isCollection ? "GET, POST" : "GET, DELETE" },
+          );
+        } catch (error) {
+          if (error instanceof PublicError) {
+            sendError(response, error);
+          } else {
+            options.logError?.("Unexpected Xero capture proxy error", error);
+            sendError(
+              response,
+              new PublicError(
+                502,
+                "XERO_CAPTURE_UNAVAILABLE",
+                "The private Xero export service is not available yet.",
+              ),
+            );
+          }
+        }
         return;
       }
 

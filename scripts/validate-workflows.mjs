@@ -463,6 +463,7 @@ if (agentWorkflow) {
 
   for (const agentName of AGENT_NODE_NAMES) {
     const agent = nodeByName(agentWorkflow, agentName);
+    const expectedMaxIterations = agentName === "Bookkeeping Agent" ? 12 : 4;
     check(
       agent?.type === "@n8n/n8n-nodes-langchain.agent" &&
         agent?.typeVersion === 3.1,
@@ -476,7 +477,7 @@ if (agentWorkflow) {
       `Agent: ${agentName} must use only validated message and system context`,
     );
     check(
-      agent?.parameters?.options?.maxIterations === 4 &&
+      agent?.parameters?.options?.maxIterations === expectedMaxIterations &&
         agent?.parameters?.options?.enableStreaming === false &&
         agent?.parameters?.options?.returnIntermediateSteps === false,
       `Agent: ${agentName} must retain the reviewed cost and response limits`,
@@ -2159,11 +2160,11 @@ if (confirmWorkflow) {
     consume?.parameters?.operation === "update" &&
       consume?.parameters?.dataTableId?.value === "pending_actions" &&
       JSON.stringify(consumeFilters.map(([key]) => key)) ===
-        JSON.stringify(["actionId", "sessionId", "status"]) &&
+        JSON.stringify(["actionId", "sessionId", "actionType", "confirmationText", "status"]) &&
       consumeFilters.some(
         ([key, value]) => key === "status" && value === "pending",
       ),
-    "Confirmation consumption must conditionally bind action, session, and pending status",
+    "Confirmation consumption must conditionally bind action, session, type, exact phrase, and pending status",
   );
   const consumeFields = Object.keys(consume?.parameters?.columns?.value ?? {}).sort();
   check(
@@ -2189,8 +2190,8 @@ if (confirmWorkflow) {
     .sort();
   check(
     JSON.stringify(executionTargets) ===
-      JSON.stringify(["phase4CreateTask", "phase4UpdateTaskStatus"]),
-    "Confirmation may dispatch only the two reviewed task write workers",
+      JSON.stringify(["phase19PrepareGreenMatches", "phase4CreateTask", "phase4UpdateTaskStatus"].sort()),
+    "Confirmation may dispatch only the three reviewed confirmed-write workers",
   );
 }
 

@@ -3,7 +3,7 @@
   "id": "xero-bookkeeping",
   "agent": "bookkeeping",
   "name": "Xero Bookkeeping",
-  "description": "Captures the live Xero bank-reconciliation queue, explains uncertain lines, and prepares only explicitly approved high-certainty matches.",
+  "description": "Imports Xero's user-exported uncoded statement lines, explains uncertain rows, and offers exact single-use confirmation for accepted high-certainty preparation.",
   "icon": "ledger",
   "installable": true,
   "requires": [],

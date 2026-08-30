@@ -3,7 +3,7 @@
   "nodes": [
     {
       "parameters": {
-        "content": "## Run this once\n\nCreates the local evidence tables used by browser-backed Xero reviews. Complete scans are the only source of the active queue. Incomplete scans are retained as blockers and never retire a previously observed line.",
+        "content": "## Run this once\n\nCreates the local evidence and capture-run tables used by the user-exported Xero review flow. Capture runs are the source of truth for progress. Complete CSV groups are the only source of the active queue. Incomplete imports never retire a previous complete group.",
         "height": 300,
         "width": 520,
         "color": 6
@@ -49,11 +49,27 @@
       "parameters": {
         "resource": "table",
         "operation": "create",
-        "tableName": "xero_statement_scans",
+        "tableName": "xero_statement_scans_v2",
         "columns": {
           "column": [
             {
               "name": "scanId",
+              "type": "string"
+            },
+            {
+              "name": "sessionId",
+              "type": "string"
+            },
+            {
+              "name": "captureRunId",
+              "type": "string"
+            },
+            {
+              "name": "captureTenantId",
+              "type": "string"
+            },
+            {
+              "name": "captureOrganisationName",
               "type": "string"
             },
             {
@@ -111,11 +127,27 @@
       "parameters": {
         "resource": "table",
         "operation": "create",
-        "tableName": "xero_statement_lines",
+        "tableName": "xero_statement_lines_v2",
         "columns": {
           "column": [
             {
               "name": "lineKey",
+              "type": "string"
+            },
+            {
+              "name": "sessionId",
+              "type": "string"
+            },
+            {
+              "name": "captureRunId",
+              "type": "string"
+            },
+            {
+              "name": "captureTenantId",
+              "type": "string"
+            },
+            {
+              "name": "captureOrganisationName",
               "type": "string"
             },
             {
@@ -219,12 +251,174 @@
     },
     {
       "parameters": {
-        "jsCode": "return [{ json: { ok: true, created: ['xero_statement_scans', 'xero_statement_lines'], nextStep: 'Configure the authenticated capture webhooks and load the read-only extension. See skills/xero-statement-capture/references/capture-setup.md.' } }];"
+        "resource": "table",
+        "operation": "create",
+        "tableName": "xero_capture_runs",
+        "columns": {
+          "column": [
+            {
+              "name": "runId",
+              "type": "string"
+            },
+            {
+              "name": "sessionId",
+              "type": "string"
+            },
+            {
+              "name": "requestId",
+              "type": "string"
+            },
+            {
+              "name": "source",
+              "type": "string"
+            },
+            {
+              "name": "tenantId",
+              "type": "string"
+            },
+            {
+              "name": "organisationName",
+              "type": "string"
+            },
+            {
+              "name": "organisationLegalName",
+              "type": "string"
+            },
+            {
+              "name": "dateOrder",
+              "type": "string"
+            },
+            {
+              "name": "runCreatedAt",
+              "type": "date"
+            },
+            {
+              "name": "runUpdatedAt",
+              "type": "date"
+            },
+            {
+              "name": "expiresAt",
+              "type": "date"
+            },
+            {
+              "name": "finishedAt",
+              "type": "date"
+            },
+            {
+              "name": "status",
+              "type": "string"
+            },
+            {
+              "name": "phase",
+              "type": "string"
+            },
+            {
+              "name": "progressCurrent",
+              "type": "number"
+            },
+            {
+              "name": "progressTotal",
+              "type": "number"
+            },
+            {
+              "name": "progressMessage",
+              "type": "string"
+            },
+            {
+              "name": "requiresUserLogin",
+              "type": "string"
+            },
+            {
+              "name": "companionId",
+              "type": "string"
+            },
+            {
+              "name": "claimedAt",
+              "type": "date"
+            },
+            {
+              "name": "lastHeartbeatAt",
+              "type": "date"
+            },
+            {
+              "name": "period",
+              "type": "string"
+            },
+            {
+              "name": "bankAccountsExpected",
+              "type": "number"
+            },
+            {
+              "name": "bankAccountsCaptured",
+              "type": "number"
+            },
+            {
+              "name": "pagesCompleted",
+              "type": "number"
+            },
+            {
+              "name": "statementLinesObserved",
+              "type": "number"
+            },
+            {
+              "name": "scanIdsJson",
+              "type": "string"
+            },
+            {
+              "name": "accountLabelsJson",
+              "type": "string"
+            },
+            {
+              "name": "reviewRunId",
+              "type": "string"
+            },
+            {
+              "name": "reviewStatus",
+              "type": "string"
+            },
+            {
+              "name": "importKey",
+              "type": "string"
+            },
+            {
+              "name": "importClaimId",
+              "type": "string"
+            },
+            {
+              "name": "cancelRequested",
+              "type": "string"
+            },
+            {
+              "name": "errorCode",
+              "type": "string"
+            },
+            {
+              "name": "errorMessage",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {
+          "createIfNotExists": true
+        }
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        180,
+        220
+      ],
+      "id": "98000018-0000-4000-8000-000000000025",
+      "name": "Create Capture Run Table"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { ok: true, created: ['xero_statement_scans_v2', 'xero_statement_lines_v2', 'xero_capture_runs'], nextStep: 'Configure the authenticated Xero Capture Bridge workflows. The supported flow waits for the user to sign in, choose All bank accounts, and click the built-in Xero CSV Export. It never scrapes the page or handles credentials. See skills/xero-statement-capture/references/capture-setup.md.' } }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        180,
+        480,
         220
       ],
       "id": "98000018-0000-4000-8000-000000000030",
@@ -267,6 +461,17 @@
       ]
     },
     "Create Statement Line Table": {
+      "main": [
+        [
+          {
+            "node": "Create Capture Run Table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Capture Run Table": {
       "main": [
         [
           {

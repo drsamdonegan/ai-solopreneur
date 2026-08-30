@@ -1,0 +1,1915 @@
+{
+  "name": "117 - WEBHOOK - Import Xero Uncoded CSV",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Canonical CSV import\n\nParses the raw official Xero Uncoded Statement Lines CSV in n8n, fails closed on malformed or oversized data, preserves every exported bank-account label, and starts a read-only review. The request records that All bank accounts was requested; it is not treated as proof of full organisation coverage.",
+        "height": 340,
+        "width": 620,
+        "color": 6
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-1040, -340],
+      "id": "98000117-0000-4000-8000-000000000001",
+      "name": "Sticky"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "xero-capture-import",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [-1020, 0],
+      "id": "98000117-0000-4000-8000-000000000010",
+      "name": "Raw Authenticated CSV Import",
+      "webhookId": "98000117-0000-4000-8000-000000000110",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "phase20XeroCaptureBridge",
+          "name": "Xero Capture Bridge"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "throw new Error('DISCONNECTED_LEGACY_CSV_PATH');"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-820, 0],
+      "id": "98000117-0000-4000-8000-000000000009",
+      "name": "Normalise CSV Shape"
+    },
+    {
+      "parameters": {
+        "jsCode": "throw new Error('DISCONNECTED_LEGACY_CSV_PATH');"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-620, 0],
+      "id": "98000117-0000-4000-8000-000000000008",
+      "name": "Validate CSV Preamble"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "xero_capture_runs",
+          "mode": "name"
+        },
+        "returnAll": false,
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "runId",
+              "condition": "eq",
+              "keyValue": "={{ ($('Raw Authenticated CSV Import').first().json.body || $('Raw Authenticated CSV Import').first().json).run_id }}"
+            },
+            {
+              "keyName": "companionId",
+              "condition": "eq",
+              "keyValue": "={{ ($('Raw Authenticated CSV Import').first().json.body || $('Raw Authenticated CSV Import').first().json).companion_id }}"
+            }
+          ]
+        },
+        "limit": 2
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [-400, 0],
+      "id": "98000117-0000-4000-8000-000000000011",
+      "name": "Read Import Run",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw=$('Raw Authenticated CSV Import').first().json.body??$('Raw Authenticated CSV Import').first().json;\nconst runId=String(raw.run_id||''),companionId=String(raw.companion_id||'');\nconst rows=$input.all().map((item)=>item.json).filter((row)=>row&&String(row.runId)===runId&&String(row.companionId)===companionId&&String(row.cancelRequested)!=='yes'&&String(row.status)!=='cancelled'&&String(row.organisationName||'')&&['DMY','MDY'].includes(String(row.dateOrder||'').toUpperCase()));\nreturn rows.length===1?rows.map((row)=>({json:row})):[{json:{}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-200, 0],
+      "id": "98000117-0000-4000-8000-000000000007",
+      "name": "Verify Export Organisation"
+    },
+    {
+      "parameters": {
+        "jsCode": "throw new Error('DISCONNECTED_LEGACY_CSV_PATH');"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [20, 0],
+      "id": "98000117-0000-4000-8000-000000000006",
+      "name": "Authenticated CSV Import"
+    },
+    {
+      "parameters": {
+        "jsCode": "throw new Error('DISCONNECTED_LEGACY_CSV_PATH');"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [120, 0],
+      "id": "98000117-0000-4000-8000-000000000005",
+      "name": "Merge Verified Import"
+    },
+    {
+      "parameters": {
+        "jsCode": "throw new Error('DISCONNECTED_LEGACY_CSV_PATH');"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-580, 240],
+      "id": "98000117-0000-4000-8000-000000000012",
+      "name": "Legacy CSV Parser (disabled)"
+    },
+    {
+      "parameters": {
+        "jsCode": "const webhook=$('Raw Authenticated CSV Import').first().json;\nconst raw=webhook.body??webhook;\nconst run=$('Verify Export Organisation').first().json;\nconst requestHeaders=webhook.headers??{},idempotencyKey=String(requestHeaders['idempotency-key']??requestHeaders['Idempotency-Key']??'').trim();\nconst fail=(code,message)=>[{json:{valid:false,response:{ok:false,error:{code,message}}}}];\nconst allowed=new Set(['schema_version','run_id','companion_id','file_name','csv_text','all_bank_accounts_requested']);\nif(!raw||typeof raw!=='object'||Array.isArray(raw)||Object.keys(raw).some((key)=>!allowed.has(key)))return fail('INVALID_IMPORT','The CSV import envelope contains unsupported fields.');\nconst uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;\nconst runId=String(raw.run_id||''),companionId=String(raw.companion_id||''),fileName=String(raw.file_name||''),rawSource=String(raw.csv_text||''),source=rawSource.replace(/^\\uFEFF/,'');\nif(raw.schema_version!==1||!uuid.test(runId)||!/^[A-Za-z0-9._:-]{8,128}$/.test(companionId)||!/\\.csv$/i.test(fileName)||fileName.length>255||raw.all_bank_accounts_requested!==true)return fail('INVALID_IMPORT','The raw Xero export envelope is invalid.');\nif(String(run.runId)!==runId||String(run.companionId)!==companionId||!String(run.organisationName||''))return fail('RUN_OR_ORGANISATION_MISMATCH','The claimed run and verified Xero organisation do not match this export.');\nif(String(run.cancelRequested)==='yes'||String(run.status)==='cancelled')return fail('CAPTURE_CANCELLED','The Xero export run was cancelled.');\nif(!source||source.length>5242880||/\\u0000/.test(source))return fail('CSV_SIZE_LIMIT','The Xero CSV is empty, binary, or exceeds 5 MB.');\nconst parseCsv=(text)=>{const rows=[];let row=[],field='',quoted=false;for(let index=0;index<text.length;index++){const character=text[index];if(quoted){if(character==='\"'&&text[index+1]==='\"'){field+='\"';index++;}else if(character==='\"')quoted=false;else field+=character;continue;}if(character==='\"'){if(field!=='')throw Error('CSV_QUOTING');quoted=true;}else if(character===','){row.push(field);field='';}else if(character==='\\n'||character==='\\r'){if(character==='\\r'&&text[index+1]==='\\n')index++;row.push(field);field='';if(row.some((value)=>String(value).trim()!==''))rows.push(row);row=[];if(rows.length>5200)throw Error('CSV_ROW_LIMIT');}else field+=character;}if(quoted)throw Error('CSV_QUOTING');row.push(field);if(row.some((value)=>String(value).trim()!==''))rows.push(row);if(!rows.length)throw Error('CSV_EMPTY');return rows;};\nlet rows;try{rows=parseCsv(source);}catch(error){return fail(String(error.message||'CSV_INVALID'),'The Xero CSV is malformed or exceeds the bounded row limit.');}\nconst clean=(value)=>String(value??'').normalize('NFKC').trim().replace(/\\s+/g,' ');\nconst normalized=(value)=>clean(value).toLowerCase();\nconst normalizedHeader=(value)=>normalized(value).replace(/[_-]+/g,' ').replace(/[^a-z0-9 ]+/g,'').replace(/\\s+/g,' ').trim();\nconst aliases={date:['date','statement date'],payee:['payee','contact','name'],particulars:['particulars','description','details'],combinedNarration:['particulars reference code'],reference:['reference','ref'],code:['code'],comments:['comments','comment'],yourComments:['your comments','your comment'],tax:['tax','tax type'],spent:['spent','money out','debit'],received:['received','money in','credit']};\nconst headerIndex=(row,names)=>{const values=row.map(normalizedHeader);for(const name of names){const index=values.indexOf(name);if(index!==-1)return index;}return -1;};\nconst recognizeHeader=(row)=>{const indexes={};for(const [name,names] of Object.entries(aliases))indexes[name]=headerIndex(row,names);const narration=indexes.combinedNarration>=0||indexes.particulars>=0||indexes.reference>=0||indexes.code>=0;return indexes.date>=0&&indexes.payee>=0&&indexes.spent>=0&&indexes.received>=0&&narration?indexes:null;};\nconst firstHeader=rows.findIndex((row)=>recognizeHeader(row));\nif(firstHeader<0)return fail('CSV_HEADERS_INVALID','The CSV does not contain Xero’s repeated DATE, PAYEE, narration, SPENT, and RECEIVED account headers.');\nconst preamble=rows.slice(0,firstHeader);\nconst exactTitle=(row)=>{const cells=row.map(clean).filter(Boolean);return cells.length===1&&/^(?:uncoded statement lines|uncoded bank statement lines)$/i.test(cells[0]);};\nif(preamble.filter(exactTitle).length!==1)return fail('CSV_MARKER_INVALID','The Xero report title is missing from a dedicated preamble row or appears more than once.');\nconst expectedNames=[run.organisationName,run.organisationLegalName].map(clean).filter(Boolean).map(normalized);\nconst organisationRow=(row)=>{const cells=row.map(clean).filter(Boolean);if(cells.length===1&&expectedNames.includes(normalized(cells[0])))return true;if(cells.length===1){const match=/^(?:organisation|organization)\\s*:\\s*(.+)$/i.exec(cells[0]);return Boolean(match&&expectedNames.includes(normalized(match[1])));}return cells.length===2&&/^(?:organisation|organization)$/i.test(cells[0])&&expectedNames.includes(normalized(cells[1]));};\nif(!expectedNames.length||!preamble.some(organisationRow))return fail('CSV_ORGANISATION_MISMATCH','The export preamble is not bound to the live Xero organisation.');\nconst dateOrder=String(run.dateOrder||'').toUpperCase();\nif(!new Set(['DMY','MDY']).has(dateOrder))return fail('DATE_ORDER_REQUIRED','The verified run has no supported Xero date order.');\nconst dateOf=(value)=>{const raw=clean(value);let year,month,day,match=/^(\\d{4})-(\\d{2})-(\\d{2})(?:T.*)?$/.exec(raw);if(match){[,year,month,day]=match;}if(!year){match=/^(\\d{1,2})\\s+([A-Za-z]{3,9})\\s+(\\d{4})$/.exec(raw);if(match){const index=['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'].indexOf(match[2].slice(0,3).toLowerCase());if(index>=0){day=match[1];month=String(index+1);year=match[3];}}}if(!year){match=/^([A-Za-z]{3,9})\\s+(\\d{1,2}),?\\s+(\\d{4})$/.exec(raw);if(match){const index=['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'].indexOf(match[1].slice(0,3).toLowerCase());if(index>=0){month=String(index+1);day=match[2];year=match[3];}}}if(!year){match=/^(\\d{1,2})[\\/-](\\d{1,2})[\\/-](\\d{4})$/.exec(raw);if(match){year=match[3];if(dateOrder==='DMY'){day=match[1];month=match[2];}else{month=match[1];day=match[2];}}}const parsed=new Date(Date.UTC(Number(year),Number(month)-1,Number(day)));if(!year||parsed.getUTCFullYear()!==Number(year)||parsed.getUTCMonth()!==Number(month)-1||parsed.getUTCDate()!==Number(day))throw Error('DATE_INVALID');return String(year).padStart(4,'0')+'-'+String(month).padStart(2,'0')+'-'+String(day).padStart(2,'0');};\nconst money=(value,label)=>{const raw=clean(value);if(!raw)return null;const negative=/^-/.test(raw)||/^\\(.*\\)$/.test(raw),digits=raw.replace(/[,$£€¥\\s()]/g,'').replace(/^[+-]/,'');if(!/^\\d+(?:\\.\\d+)?$/.test(digits))throw Error(label+'_INVALID');const amount=Number(digits);if(!Number.isFinite(amount)||amount<=0||amount>1e12)throw Error(label+'_INVALID');return {amount:Number(amount.toFixed(2)),negative};};\nconst field=(row,index)=>index>=0?clean(row[index]):'';\nconst accountHeading=(row)=>{const cells=row.map(clean).filter(Boolean);if(cells.length===2&&/^(?:bank )?account(?: name)?$/i.test(cells[0]))return cells[1];if(cells.length!==1)return '';const value=cells[0],prefixed=/^(?:bank )?account(?: name)?\\s*[:—-]\\s*(.+)$/i.exec(value);if(prefixed)return clean(prefixed[1]);if(exactTitle(row)||/^xero$/i.test(value)||/^(?:organisation|organization|from|to|date range|generated|report date)\\s*[:,-]/i.test(value)||/^there (?:are|is) no (?:uncoded )?statement lines/i.test(value)||/^(?:total|grand total|closing|opening|balance)\\b/i.test(value))return '';return value;};\nconst sha256Hex=(message)=>{const K=[0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2],bytes=[];for(let i=0;i<message.length;i++){let c=message.charCodeAt(i);if(c<128)bytes.push(c);else if(c<2048)bytes.push(192|(c>>6),128|(c&63));else if(c>=0xd800&&c<=0xdbff&&i+1<message.length){const c2=message.charCodeAt(++i),cp=0x10000+((c-0xd800)<<10)+(c2-0xdc00);bytes.push(240|(cp>>18),128|((cp>>12)&63),128|((cp>>6)&63),128|(cp&63));}else bytes.push(224|(c>>12),128|((c>>6)&63),128|(c&63));}const bitLen=bytes.length*8;bytes.push(128);while(bytes.length%64!==56)bytes.push(0);for(let i=7;i>=0;i--)bytes.push(Math.floor(bitLen/Math.pow(2,i*8))&255);const rotr=(x,n)=>(x>>>n)|(x<<(32-n)),w=new Array(64),h=[0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];for(let chunk=0;chunk<bytes.length;chunk+=64){for(let i=0;i<16;i++)w[i]=((bytes[chunk+i*4]<<24)|(bytes[chunk+i*4+1]<<16)|(bytes[chunk+i*4+2]<<8)|bytes[chunk+i*4+3])>>>0;for(let i=16;i<64;i++){const s0=(rotr(w[i-15],7)^rotr(w[i-15],18)^(w[i-15]>>>3))>>>0,s1=(rotr(w[i-2],17)^rotr(w[i-2],19)^(w[i-2]>>>10))>>>0;w[i]=(((w[i-16]+s0)>>>0)+((w[i-7]+s1)>>>0))>>>0;}let [a,b,c,d,e,f,g,hh]=h;for(let i=0;i<64;i++){const S1=(rotr(e,6)^rotr(e,11)^rotr(e,25))>>>0,ch=((e&f)^(~e&g))>>>0,t1=(hh+S1+ch+K[i]+w[i])>>>0,S0=(rotr(a,2)^rotr(a,13)^rotr(a,22))>>>0,maj=((a&b)^(a&c)^(b&c))>>>0,t2=(S0+maj)>>>0;hh=g;g=f;f=e;e=(d+t1)>>>0;d=c;c=b;b=a;a=(t1+t2)>>>0;}h[0]=(h[0]+a)>>>0;h[1]=(h[1]+b)>>>0;h[2]=(h[2]+c)>>>0;h[3]=(h[3]+d)>>>0;h[4]=(h[4]+e)>>>0;h[5]=(h[5]+f)>>>0;h[6]=(h[6]+g)>>>0;h[7]=(h[7]+hh)>>>0;}return h.map((value)=>value.toString(16).padStart(8,'0')).join('');};\nconst expectedImportKey='xero-import-'+sha256Hex(runId+'\\u0000'+fileName+'\\u0000'+rawSource);\nif(idempotencyKey!==expectedImportKey)return fail('IDEMPOTENCY_KEY_INVALID','The deterministic CSV import identity is missing or does not match the authenticated payload.');\nif(String(run.importKey||'')&&String(run.importKey)!==expectedImportKey)return fail('IMPORT_IDENTITY_CONFLICT','This capture run is already bound to a different CSV import.');\nconst runState=String(run.status||''),storedImportKey=String(run.importKey||''),storedImportClaimId=String(run.importClaimId||'');\nif(storedImportKey===expectedImportKey&&['reviewing','ready','failed'].includes(runState)){const updatedAt=new Date().toISOString();return [{json:{valid:true,replay:true,runId,companionId,idempotencyKey:expectedImportKey,response:{ok:true,replayed:true,run:{runId,source:String(run.source||'agent'),state:runState,note:'This exact Xero export was already accepted; no second scan or review was started.',current:Number(run.progressCurrent||5),total:Number(run.progressTotal||6),accountCount:Number(run.bankAccountsCaptured||0),capturedCount:Number(run.statementLinesObserved||0),expectedCount:Number(run.statementLinesObserved||0),createdAt:String(run.runCreatedAt||''),updatedAt}}}}];}\nconst leaseMs=180000,leaseAt=Date.parse(String(run.lastHeartbeatAt||run.runUpdatedAt||'')),leaseFresh=Number.isFinite(leaseAt)&&Date.now()-leaseAt<leaseMs;\nif(runState==='verifying'&&storedImportKey===expectedImportKey&&leaseFresh)return fail('IMPORT_IN_PROGRESS','This exact authenticated Xero CSV import is still being verified. Retry after the current import lease finishes.');\nconst recoveringStale=runState==='verifying'&&storedImportKey===expectedImportKey&&!leaseFresh;\nif(!recoveringStale&&(runState!=='uploading'||storedImportKey||storedImportClaimId))return fail('IMPORT_STATE_INVALID','The capture run is not awaiting a new or safely recoverable authenticated CSV upload.');\nconst importClaimId='import-'+sha256Hex(expectedImportKey+'|'+Date.now()+'|'+Math.random()).slice(0,32),claimPreviousStatus=recoveringStale?'verifying':'uploading',claimPreviousImportKey=recoveringStale?storedImportKey:'',claimPreviousImportClaimId=recoveringStale?storedImportClaimId:'';\nconst groups=new Map(),occurrences=new Map();let pendingAccount='',currentAccount='',indexes=null,dataCount=0;\ntry{for(let index=0;index<rows.length;index++){const row=rows[index],header=recognizeHeader(row);if(header){if(!pendingAccount)throw Error('ACCOUNT_SECTION_MISSING');currentAccount=pendingAccount;pendingAccount='';indexes=header;const accountKey=normalized(currentAccount);if(!groups.has(accountKey))groups.set(accountKey,{key:accountKey,label:currentAccount,rows:[]});else if(groups.get(accountKey).label!==currentAccount)throw Error('ACCOUNT_LABEL_INCONSISTENT');continue;}const heading=accountHeading(row);if(heading){pendingAccount=heading;indexes=null;currentAccount='';continue;}if(!indexes||!currentAccount)continue;const populated=row.map(clean).filter(Boolean);if(!populated.length)continue;if(populated.length===1&&/^there (?:are|is) no (?:uncoded )?statement lines/i.test(populated[0]))continue;if(/^total\\b/i.test(field(row,0))&&!field(row,indexes.date))continue;const dateRaw=field(row,indexes.date),payee=field(row,indexes.payee),particulars=field(row,indexes.particulars),reference=field(row,indexes.reference),combinedNarration=field(row,indexes.combinedNarration),code=field(row,indexes.code),spent=money(field(row,indexes.spent),'SPENT'),received=money(field(row,indexes.received),'RECEIVED');if(!dateRaw||Boolean(spent)===Boolean(received))throw Error('AMBIGUOUS_ROW');if(spent?.negative||received?.negative)throw Error('NEGATIVE_AMOUNT_UNSUPPORTED');if(!payee&&!particulars&&!reference&&!combinedNarration)throw Error('IDENTITY_FIELDS_MISSING');const date=dateOf(dateRaw),amount=spent||received,direction=spent?'outflow':'inflow',accountKey=normalized(currentAccount),signature=[accountKey,date,payee,particulars,reference,combinedNarration,code,direction,amount.amount.toFixed(2)].map(normalized).join('\\u001f'),occurrence=(occurrences.get(signature)||0)+1;occurrences.set(signature,occurrence);const canonical={bankAccountLabel:currentAccount,date,payee,particulars,reference,combinedNarration,code,direction,amount:amount.amount,tax:field(row,indexes.tax),comments:field(row,indexes.comments),yourComments:field(row,indexes.yourComments),occurrence};canonical.sourceHash=sha256Hex(JSON.stringify(canonical));groups.get(accountKey).rows.push(canonical);dataCount++;if(dataCount>5000)throw Error('CSV_ROW_LIMIT');}}catch(error){return fail(String(error.message||'CSV_ROW_INVALID'),'A grouped Xero export row or account section is invalid; nothing was imported.');}\nif(!groups.size)return fail('NO_ACCOUNT_SECTIONS','The Xero export contains no bank-account sections.');\nif(groups.size>100)return fail('ACCOUNT_LIMIT','The Xero export exceeds the 100-account safety bound.');\nconst now=new Date().toISOString(),scans=[],lines=[];\nfor(const group of groups.values()){const accountKey='csv-label-'+sha256Hex(group.key).slice(0,24),scanId='csv-'+runId+'-'+sha256Hex(group.key).slice(0,12),canonical=group.rows.map((row)=>row.sourceHash).join('\\n');scans.push({scanId,bankAccountId:accountKey,bankAccountLabel:group.label,startedAt:String(run.claimedAt||now),completedAt:now,expectedCount:group.rows.length,observedCount:group.rows.length,complete:'yes',layout:'xero-uncoded-csv-v1',blockingReasonsJson:'[]',captureSourceHash:sha256Hex(runId+'|'+group.key+'|'+canonical)});for(const row of group.rows){const statementLineId='csv-'+row.sourceHash.slice(0,40)+'-'+String(row.occurrence),narration=[row.combinedNarration,row.particulars,row.reference,row.code].filter(Boolean).join(' — '),visible={source:'csv-export',bankAccountLabel:group.label,date:row.date,payee:row.payee,particulars:row.particulars,reference:row.reference,combinedNarration:row.combinedNarration,code:row.code,tax:row.tax,comments:row.comments,yourComments:row.yourComments,amount:row.amount,direction:row.direction,occurrence:row.occurrence};lines.push({lineKey:scanId+'|'+statementLineId,scanId,bankAccountId:accountKey,statementLineId,active:'yes',uiMode:'uncoded_export',date:row.date,payee:row.payee,narration,reference:row.reference,amount:row.amount,currency:'',direction:row.direction,visibleFieldsJson:JSON.stringify(visible),matchedXeroTransactionId:'',sourceHash:row.sourceHash,capturedAt:now});}}\nconst reviewRunId='csv-review-'+runId,accountLabels=[...groups.values()].map((group)=>group.label).sort(),response={ok:true,run:{runId,source:String(run.source||'agent'),state:'reviewing',note:'All accounts requested; '+groups.size+' account labels present in export. The read-only review is starting.',current:5,total:6,accountCount:groups.size,capturedCount:lines.length,expectedCount:lines.length,createdAt:String(run.runCreatedAt||''),updatedAt:now},coverage:{allAccountsRequested:true,accountLabelsPresent:groups.size,verifiedFullOrganisationCoverage:false},reviewRunId};\nreturn [{json:{valid:true,replay:false,idempotencyKey:expectedImportKey,importClaimId,claimPreviousStatus,claimPreviousImportKey,claimPreviousImportClaimId,recoveringStale,runId,companionId,sessionId:String(run.sessionId||''),source:String(run.source||'agent'),period:'all',reviewRunId,now,scans,lines,scanIdsJson:JSON.stringify(scans.map((scan)=>scan.scanId)),accountCount:groups.size,rowCount:lines.length,accountLabels,response}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 0],
+      "id": "98000117-0000-4000-8000-000000000004",
+      "name": "Parse Official CSV"
+    },
+    {
+      "parameters": {
+        "jsCode": "const parsed=$input.first().json;if(parsed.replay===true&&String(parsed.response?.run?.state||'')==='failed')return [{json:{valid:false,replay:false,response:{ok:false,error:{code:'FAILED_IMPORT_NOT_REPLAYABLE',message:'A failed capture is not proof that scans and review were accepted. Retry only through stale-lease recovery.'}}}}];return [{json:parsed}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 0],
+      "id": "98000117-0000-4000-8000-000000000030",
+      "name": "Reject Failed Parse Replay"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "98000117-valid",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [-360, 0],
+      "id": "98000117-0000-4000-8000-000000000013",
+      "name": "Valid CSV?"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "98000117-replay",
+              "leftValue": "={{ $json.replay }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [-140, -240],
+      "id": "98000117-0000-4000-8000-000000000024",
+      "name": "Import Replay?"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "value": "xero_capture_runs",
+          "mode": "name"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "runId",
+              "condition": "eq",
+              "keyValue": "={{ $json.runId }}"
+            },
+            {
+              "keyName": "companionId",
+              "condition": "eq",
+              "keyValue": "={{ $json.companionId }}"
+            },
+            {
+              "keyName": "status",
+              "condition": "eq",
+              "keyValue": "={{ $json.claimPreviousStatus }}"
+            },
+            {
+              "keyName": "importKey",
+              "condition": "eq",
+              "keyValue": "={{ $json.claimPreviousImportKey }}"
+            },
+            {
+              "keyName": "importClaimId",
+              "condition": "eq",
+              "keyValue": "={{ $json.claimPreviousImportClaimId }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "runUpdatedAt": "={{ $json.now }}",
+            "lastHeartbeatAt": "={{ $json.now }}",
+            "status": "verifying",
+            "phase": "verifying",
+            "progressCurrent": 4,
+            "progressTotal": 6,
+            "progressMessage": "Validating and importing the authenticated Xero CSV.",
+            "importKey": "={{ $json.idempotencyKey }}",
+            "importClaimId": "={{ $json.importClaimId }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "runUpdatedAt",
+              "displayName": "runUpdatedAt",
+              "type": "date"
+            },
+            {
+              "id": "lastHeartbeatAt",
+              "displayName": "lastHeartbeatAt",
+              "type": "date"
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "type": "string"
+            },
+            {
+              "id": "phase",
+              "displayName": "phase",
+              "type": "string"
+            },
+            {
+              "id": "progressCurrent",
+              "displayName": "progressCurrent",
+              "type": "number"
+            },
+            {
+              "id": "progressTotal",
+              "displayName": "progressTotal",
+              "type": "number"
+            },
+            {
+              "id": "progressMessage",
+              "displayName": "progressMessage",
+              "type": "string"
+            },
+            {
+              "id": "importKey",
+              "displayName": "importKey",
+              "type": "string"
+            },
+            {
+              "id": "importClaimId",
+              "displayName": "importClaimId",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {
+          "dryRun": false
+        }
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [80, -240],
+      "id": "98000117-0000-4000-8000-000000000025",
+      "name": "Claim CSV Import",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "xero_capture_runs",
+          "mode": "name"
+        },
+        "returnAll": false,
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "runId",
+              "condition": "eq",
+              "keyValue": "={{ $('Parse Official CSV').first().json.runId }}"
+            },
+            {
+              "keyName": "companionId",
+              "condition": "eq",
+              "keyValue": "={{ $('Parse Official CSV').first().json.companionId }}"
+            }
+          ]
+        },
+        "limit": 2
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [300, -240],
+      "id": "98000117-0000-4000-8000-000000000026",
+      "name": "Read CSV Import Ownership",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const parsed=$('Parse Official CSV').first().json;\nconst rows=$input.all().map((item)=>item.json).filter((row)=>row&&String(row.runId)===String(parsed.runId)&&String(row.companionId)===String(parsed.companionId));\nconst row=rows.length===1?rows[0]:null,status=String(row?.status||''),sameKey=String(row?.importKey||'')===String(parsed.idempotencyKey),owns=sameKey&&String(row?.importClaimId||'')===String(parsed.importClaimId)&&status==='verifying';\nif(owns)return [{json:{...parsed,importOwned:true}}];\nif(sameKey&&['reviewing','ready','failed'].includes(status)){const updatedAt=new Date().toISOString();return [{json:{valid:true,replay:true,importOwned:false,response:{ok:true,replayed:true,run:{runId:String(parsed.runId),source:String(row.source||parsed.source||'agent'),state:status,note:'This exact Xero export was already accepted; no second scan or review was started.',current:Number(row.progressCurrent||5),total:Number(row.progressTotal||6),accountCount:Number(row.bankAccountsCaptured||0),capturedCount:Number(row.statementLinesObserved||0),expectedCount:Number(row.statementLinesObserved||0),createdAt:String(row.runCreatedAt||''),updatedAt,...(row.errorCode?{errorCode:String(row.errorCode)}:{})}}}}];}\nif(sameKey&&status==='verifying')return [{json:{valid:false,replay:false,importOwned:false,response:{ok:false,error:{code:'IMPORT_IN_PROGRESS',message:'This exact authenticated Xero CSV is owned by another live import lease. Retry after it finishes.'}}}}];\nconst conflict=Boolean(row&&String(row.importKey||'')&&String(row.importKey)!==String(parsed.idempotencyKey));\nreturn [{json:{valid:false,replay:false,importOwned:false,response:{ok:false,error:{code:conflict?'IMPORT_IDENTITY_CONFLICT':'IMPORT_CLAIM_RACE_LOST',message:conflict?'This capture run is already bound to a different CSV import.':'Another import attempt won this capture run; retry the same authenticated CSV to read its state.'}}}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [520, -240],
+      "id": "98000117-0000-4000-8000-000000000027",
+      "name": "Verify CSV Import Ownership"
+    },
+    {
+      "parameters": {
+        "jsCode": "const checked=$input.first().json;if(checked.replay===true&&String(checked.response?.run?.state||'')==='failed')return [{json:{valid:false,replay:false,importOwned:false,response:{ok:false,error:{code:'FAILED_IMPORT_NOT_REPLAYABLE',message:'A failed capture is not proof that scans and review were accepted.'}}}}];return [{json:checked}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [740, -240],
+      "id": "98000117-0000-4000-8000-000000000031",
+      "name": "Reject Failed Ownership Replay"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "98000117-owned",
+              "leftValue": "={{ $json.importOwned }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [740, -240],
+      "id": "98000117-0000-4000-8000-000000000028",
+      "name": "Import Owned?"
+    },
+    {
+      "parameters": {
+        "jsCode": "const parsed=$('Parse Official CSV').first().json;const verified=$('Verify Export Organisation').first().json;const provenance={sessionId:String(parsed.sessionId||''),captureRunId:String(parsed.runId||''),captureTenantId:String(verified.tenantId||''),captureOrganisationName:String(verified.organisationName||'')};return parsed.scans.map(scan=>({json:{...scan,...provenance}}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-140, -100],
+      "id": "98000117-0000-4000-8000-000000000014",
+      "name": "Emit Account Scans"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "upsert",
+        "dataTableId": {
+          "__rl": true,
+          "value": "xero_statement_scans_v2",
+          "mode": "name"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "scanId",
+              "condition": "eq",
+              "keyValue": "={{ $json.scanId }}"
+            },
+            {
+              "keyName": "captureRunId",
+              "condition": "eq",
+              "keyValue": "={{ $json.captureRunId }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "scanId": "={{ $json.scanId }}",
+            "sessionId": "={{ $json.sessionId }}",
+            "captureRunId": "={{ $json.captureRunId }}",
+            "captureTenantId": "={{ $json.captureTenantId }}",
+            "captureOrganisationName": "={{ $json.captureOrganisationName }}",
+            "bankAccountId": "={{ $json.bankAccountId }}",
+            "startedAt": "={{ $json.startedAt }}",
+            "completedAt": "={{ $json.completedAt }}",
+            "expectedCount": "={{ $json.expectedCount }}",
+            "observedCount": "={{ $json.observedCount }}",
+            "complete": "={{ $json.complete }}",
+            "layout": "={{ $json.layout }}",
+            "blockingReasonsJson": "={{ $json.blockingReasonsJson }}",
+            "captureSourceHash": "={{ $json.captureSourceHash }}"
+          },
+          "matchingColumns": ["scanId", "captureRunId"],
+          "schema": [
+            {
+              "id": "scanId",
+              "displayName": "scanId",
+              "type": "string"
+            },
+            {
+              "id": "sessionId",
+              "displayName": "sessionId",
+              "type": "string"
+            },
+            {
+              "id": "captureRunId",
+              "displayName": "captureRunId",
+              "type": "string"
+            },
+            {
+              "id": "captureTenantId",
+              "displayName": "captureTenantId",
+              "type": "string"
+            },
+            {
+              "id": "captureOrganisationName",
+              "displayName": "captureOrganisationName",
+              "type": "string"
+            },
+            {
+              "id": "bankAccountId",
+              "displayName": "bankAccountId",
+              "type": "string"
+            },
+            {
+              "id": "startedAt",
+              "displayName": "startedAt",
+              "type": "date"
+            },
+            {
+              "id": "completedAt",
+              "displayName": "completedAt",
+              "type": "date"
+            },
+            {
+              "id": "expectedCount",
+              "displayName": "expectedCount",
+              "type": "number"
+            },
+            {
+              "id": "observedCount",
+              "displayName": "observedCount",
+              "type": "number"
+            },
+            {
+              "id": "complete",
+              "displayName": "complete",
+              "type": "string"
+            },
+            {
+              "id": "layout",
+              "displayName": "layout",
+              "type": "string"
+            },
+            {
+              "id": "blockingReasonsJson",
+              "displayName": "blockingReasonsJson",
+              "type": "string"
+            },
+            {
+              "id": "captureSourceHash",
+              "displayName": "captureSourceHash",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {
+          "dryRun": false
+        }
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [80, -100],
+      "id": "98000117-0000-4000-8000-000000000015",
+      "name": "Save CSV Account Scans"
+    },
+    {
+      "parameters": {
+        "jsCode": "const parsed=$('Parse Official CSV').first().json;const verified=$('Verify Export Organisation').first().json;const lines=parsed.lines;if(!lines.length)return [{json:{hasLines:false}}];const provenance={sessionId:String(parsed.sessionId||''),captureRunId:String(parsed.runId||''),captureTenantId:String(verified.tenantId||''),captureOrganisationName:String(verified.organisationName||'')};return lines.map(line=>{const visible=(()=>{try{return JSON.parse(String(line.visibleFieldsJson||'{}'));}catch{return{};}})();return {json:{hasLines:true,...provenance,lineKey:line.lineKey,statementLineId:line.statementLineId,scanId:line.scanId,bankAccountId:line.bankAccountId,active:line.active,occurredAt:line.date,narration:line.narration,reference:line.reference,direction:line.direction,amount:line.amount,currency:line.currency,visibleContact:line.payee,visibleAccount:'',visibleDescription:String(visible.particulars||line.narration||''),visibleTaxType:'',visibleEventName:'',visibleProjectName:'',visibleFieldsJson:line.visibleFieldsJson,uiMode:'uncoded_export',matchedXeroTransactionId:'',sourceHash:line.sourceHash,capturedAt:line.capturedAt}};});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [300, -100],
+      "id": "98000117-0000-4000-8000-000000000016",
+      "name": "Emit CSV Lines"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "98000117-has-lines",
+              "leftValue": "={{ $json.hasLines }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [410, -100],
+      "id": "98000117-0000-4000-8000-000000000023",
+      "name": "Has CSV Lines?"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "upsert",
+        "dataTableId": {
+          "__rl": true,
+          "value": "xero_statement_lines_v2",
+          "mode": "name"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "lineKey",
+              "condition": "eq",
+              "keyValue": "={{ $json.lineKey }}"
+            },
+            {
+              "keyName": "captureRunId",
+              "condition": "eq",
+              "keyValue": "={{ $json.captureRunId }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "lineKey": "={{ $json.lineKey }}",
+            "sessionId": "={{ $json.sessionId }}",
+            "captureRunId": "={{ $json.captureRunId }}",
+            "captureTenantId": "={{ $json.captureTenantId }}",
+            "captureOrganisationName": "={{ $json.captureOrganisationName }}",
+            "statementLineId": "={{ $json.statementLineId }}",
+            "scanId": "={{ $json.scanId }}",
+            "bankAccountId": "={{ $json.bankAccountId }}",
+            "active": "={{ $json.active }}",
+            "occurredAt": "={{ $json.occurredAt }}",
+            "narration": "={{ $json.narration }}",
+            "reference": "={{ $json.reference }}",
+            "direction": "={{ $json.direction }}",
+            "amount": "={{ $json.amount }}",
+            "currency": "={{ $json.currency }}",
+            "visibleContact": "={{ $json.visibleContact }}",
+            "visibleAccount": "={{ $json.visibleAccount }}",
+            "visibleDescription": "={{ $json.visibleDescription }}",
+            "visibleTaxType": "={{ $json.visibleTaxType }}",
+            "visibleEventName": "={{ $json.visibleEventName }}",
+            "visibleProjectName": "={{ $json.visibleProjectName }}",
+            "visibleFieldsJson": "={{ $json.visibleFieldsJson }}",
+            "uiMode": "={{ $json.uiMode }}",
+            "matchedXeroTransactionId": "={{ $json.matchedXeroTransactionId }}",
+            "sourceHash": "={{ $json.sourceHash }}",
+            "capturedAt": "={{ $json.capturedAt }}"
+          },
+          "matchingColumns": ["lineKey", "captureRunId"],
+          "schema": [
+            {
+              "id": "lineKey",
+              "displayName": "lineKey",
+              "type": "string"
+            },
+            {
+              "id": "sessionId",
+              "displayName": "sessionId",
+              "type": "string"
+            },
+            {
+              "id": "captureRunId",
+              "displayName": "captureRunId",
+              "type": "string"
+            },
+            {
+              "id": "captureTenantId",
+              "displayName": "captureTenantId",
+              "type": "string"
+            },
+            {
+              "id": "captureOrganisationName",
+              "displayName": "captureOrganisationName",
+              "type": "string"
+            },
+            {
+              "id": "statementLineId",
+              "displayName": "statementLineId",
+              "type": "string"
+            },
+            {
+              "id": "scanId",
+              "displayName": "scanId",
+              "type": "string"
+            },
+            {
+              "id": "bankAccountId",
+              "displayName": "bankAccountId",
+              "type": "string"
+            },
+            {
+              "id": "active",
+              "displayName": "active",
+              "type": "string"
+            },
+            {
+              "id": "occurredAt",
+              "displayName": "occurredAt",
+              "type": "string"
+            },
+            {
+              "id": "narration",
+              "displayName": "narration",
+              "type": "string"
+            },
+            {
+              "id": "reference",
+              "displayName": "reference",
+              "type": "string"
+            },
+            {
+              "id": "direction",
+              "displayName": "direction",
+              "type": "string"
+            },
+            {
+              "id": "amount",
+              "displayName": "amount",
+              "type": "number"
+            },
+            {
+              "id": "currency",
+              "displayName": "currency",
+              "type": "string"
+            },
+            {
+              "id": "visibleContact",
+              "displayName": "visibleContact",
+              "type": "string"
+            },
+            {
+              "id": "visibleAccount",
+              "displayName": "visibleAccount",
+              "type": "string"
+            },
+            {
+              "id": "visibleDescription",
+              "displayName": "visibleDescription",
+              "type": "string"
+            },
+            {
+              "id": "visibleTaxType",
+              "displayName": "visibleTaxType",
+              "type": "string"
+            },
+            {
+              "id": "visibleEventName",
+              "displayName": "visibleEventName",
+              "type": "string"
+            },
+            {
+              "id": "visibleProjectName",
+              "displayName": "visibleProjectName",
+              "type": "string"
+            },
+            {
+              "id": "visibleFieldsJson",
+              "displayName": "visibleFieldsJson",
+              "type": "string"
+            },
+            {
+              "id": "uiMode",
+              "displayName": "uiMode",
+              "type": "string"
+            },
+            {
+              "id": "matchedXeroTransactionId",
+              "displayName": "matchedXeroTransactionId",
+              "type": "string"
+            },
+            {
+              "id": "sourceHash",
+              "displayName": "sourceHash",
+              "type": "string"
+            },
+            {
+              "id": "capturedAt",
+              "displayName": "capturedAt",
+              "type": "date"
+            }
+          ]
+        },
+        "options": {
+          "dryRun": false
+        }
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [520, -100],
+      "id": "98000117-0000-4000-8000-000000000017",
+      "name": "Save CSV Lines"
+    },
+    {
+      "parameters": {
+        "jsCode": "const p=$('Parse Official CSV').first().json;return [{json:{...p,accountLabelsJson:JSON.stringify(p.accountLabels||[]),status:'reviewing',phase:'reviewing',progressCurrent:5,progressTotal:6,progressMessage:p.response.run.note,reviewStatus:'running',updatedAt:p.now,lastHeartbeatAt:p.now}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [740, -100],
+      "id": "98000117-0000-4000-8000-000000000018",
+      "name": "Plan Read-Only Review"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "value": "xero_capture_runs",
+          "mode": "name"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "runId",
+              "condition": "eq",
+              "keyValue": "={{ $('Plan Read-Only Review').first().json.runId }}"
+            },
+            {
+              "keyName": "companionId",
+              "condition": "eq",
+              "keyValue": "={{ $('Plan Read-Only Review').first().json.companionId }}"
+            },
+            {
+              "keyName": "status",
+              "condition": "eq",
+              "keyValue": "verifying"
+            },
+            {
+              "keyName": "importKey",
+              "condition": "eq",
+              "keyValue": "={{ $('Plan Read-Only Review').first().json.idempotencyKey }}"
+            },
+            {
+              "keyName": "importClaimId",
+              "condition": "eq",
+              "keyValue": "={{ $('Plan Read-Only Review').first().json.importClaimId }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+      "runUpdatedAt": "={{ $('Plan Read-Only Review').first().json.updatedAt }}",
+            "lastHeartbeatAt": "={{ $('Plan Read-Only Review').first().json.lastHeartbeatAt }}",
+            "status": "={{ $('Plan Read-Only Review').first().json.status }}",
+            "phase": "={{ $('Plan Read-Only Review').first().json.phase }}",
+            "progressCurrent": "={{ $('Plan Read-Only Review').first().json.progressCurrent }}",
+            "progressTotal": "={{ $('Plan Read-Only Review').first().json.progressTotal }}",
+            "progressMessage": "={{ $('Plan Read-Only Review').first().json.progressMessage }}",
+      "bankAccountsCaptured": "={{ $('Plan Read-Only Review').first().json.accountCount }}",
+      "statementLinesObserved": "={{ $('Plan Read-Only Review').first().json.rowCount }}",
+            "scanIdsJson": "={{ $('Plan Read-Only Review').first().json.scanIdsJson }}",
+            "accountLabelsJson": "={{ $('Plan Read-Only Review').first().json.accountLabelsJson }}",
+            "reviewRunId": "={{ $('Plan Read-Only Review').first().json.reviewRunId }}",
+            "reviewStatus": "={{ $('Plan Read-Only Review').first().json.reviewStatus }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "runUpdatedAt",
+              "displayName": "runUpdatedAt",
+              "type": "date"
+            },
+            {
+              "id": "lastHeartbeatAt",
+              "displayName": "lastHeartbeatAt",
+              "type": "date"
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "type": "string"
+            },
+            {
+              "id": "phase",
+              "displayName": "phase",
+              "type": "string"
+            },
+            {
+              "id": "progressCurrent",
+              "displayName": "progressCurrent",
+              "type": "number"
+            },
+            {
+              "id": "progressTotal",
+              "displayName": "progressTotal",
+              "type": "number"
+            },
+            {
+              "id": "progressMessage",
+              "displayName": "progressMessage",
+              "type": "string"
+            },
+            {
+              "id": "bankAccountsCaptured",
+              "displayName": "bankAccountsCaptured",
+              "type": "number"
+            },
+            {
+              "id": "statementLinesObserved",
+              "displayName": "statementLinesObserved",
+              "type": "number"
+            },
+            {
+              "id": "scanIdsJson",
+              "displayName": "scanIdsJson",
+              "type": "string"
+            },
+            {
+              "id": "accountLabelsJson",
+              "displayName": "accountLabelsJson",
+              "type": "string"
+            },
+            {
+              "id": "reviewRunId",
+              "displayName": "reviewRunId",
+              "type": "string"
+            },
+            {
+              "id": "reviewStatus",
+              "displayName": "reviewStatus",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {
+          "dryRun": false
+        }
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [960, -100],
+      "id": "98000117-0000-4000-8000-000000000019",
+      "name": "Mark Capture Reviewing",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "phase19RunReconciliationReview",
+          "mode": "list",
+          "cachedResultName": "105 - RUN - Reconciliation Review"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "runId": "={{ $('Plan Read-Only Review').first().json.reviewRunId }}",
+            "period": "={{ $('Plan Read-Only Review').first().json.period }}",
+            "mode": "user-export",
+            "captureRunId": "={{ $('Plan Read-Only Review').first().json.runId }}",
+            "sessionId": "={{ $('Plan Read-Only Review').first().json.sessionId }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "runId",
+              "displayName": "runId",
+              "type": "string"
+            },
+            {
+              "id": "period",
+              "displayName": "period",
+              "type": "string"
+            },
+            {
+              "id": "mode",
+              "displayName": "mode",
+              "type": "string"
+            },
+            {
+              "id": "captureRunId",
+              "displayName": "captureRunId",
+              "type": "string"
+            },
+            {
+              "id": "sessionId",
+              "displayName": "sessionId",
+              "type": "string"
+            }
+          ]
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": false
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [1180, -100],
+      "id": "98000117-0000-4000-8000-000000000020",
+      "name": "Start Automatic Read-Only Review",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{json:{response:$('Parse Official CSV').first().json.response}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1400, -100],
+      "id": "98000117-0000-4000-8000-000000000021",
+      "name": "Shape Import Response"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json.response || $json }}",
+        "options": {
+          "responseCode": "={{ $json.response?.error?.code === 'IMPORT_IN_PROGRESS' ? 425 : ($json.response?.ok === false ? 422 : 200) }}",
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json; charset=utf-8"
+              },
+              {
+                "name": "Cache-Control",
+                "value": "no-store"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [1640, 0],
+      "id": "98000117-0000-4000-8000-000000000022",
+      "name": "Respond CSV Import"
+    },
+    {
+      "parameters": {
+        "jsCode": "const parsed=$input.first().json;\nconst stored=$('Verify Export Organisation').first().json;\nconst exact=(value)=>String(value??'').normalize('NFKC').trim();\nconst uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;\nconst runId=exact(stored.runId),sessionId=exact(stored.sessionId),companionId=exact(stored.companionId),reviewRunId=exact(stored.reviewRunId);\nconst previousRunUpdatedAt=exact(stored.runUpdatedAt),leaseAt=Date.parse(previousRunUpdatedAt||exact(stored.lastHeartbeatAt)),recoveryAt=new Date().toISOString();\nconst sameBinding=parsed.valid===true&&parsed.replay===true&&exact(parsed.runId)===runId&&exact(parsed.companionId)===companionId&&exact(parsed.idempotencyKey)===exact(stored.importKey)&&exact(parsed.response?.run?.state)==='reviewing'&&exact(stored.status)==='reviewing'&&uuid.test(runId)&&uuid.test(sessionId)&&reviewRunId==='csv-review-'+runId&&Boolean(exact(stored.tenantId))&&Boolean(exact(stored.organisationName));\nconst stale=Number.isFinite(leaseAt)&&Date.now()-leaseAt>=5*60000;\nconst recoveryClaimId='review-recovery-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,14);\nreturn [{json:{...parsed,shouldInspectReview:Boolean(sameBinding&&stale),recoveryRunId:runId,sessionId,companionId,recoveryReviewRunId:reviewRunId,captureTenantId:exact(stored.tenantId),captureOrganisationName:exact(stored.organisationName),previousRunUpdatedAt,recoveryAt,recoveryClaimId}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-40, -520],
+      "id": "98000117-0000-4000-8000-000000000032",
+      "name": "Plan Reviewing Replay Recovery"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "98000117-inspect-review",
+              "leftValue": "={{ $json.shouldInspectReview }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [180, -520],
+      "id": "98000117-0000-4000-8000-000000000033",
+      "name": "Inspect Interrupted Review?"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "reconciliation_runs_v2",
+          "mode": "name"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "runId",
+              "condition": "eq",
+              "keyValue": "={{ $('Plan Reviewing Replay Recovery').first().json.recoveryReviewRunId }}"
+            },
+            {
+              "keyName": "sessionId",
+              "condition": "eq",
+              "keyValue": "={{ $('Plan Reviewing Replay Recovery').first().json.sessionId }}"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 2,
+        "orderBy": false
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [400, -600],
+      "id": "98000117-0000-4000-8000-000000000034",
+      "name": "Read Recovery Review Run",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const planned=$('Plan Reviewing Replay Recovery').first().json;\nconst rows=$input.all().map((item)=>item.json).filter((row)=>row&&String(row.runId)===planned.recoveryReviewRunId&&String(row.sessionId)===planned.sessionId);\nreturn [{json:{...planned,reviewRowCount:rows.length,shouldClaimRedispatch:planned.shouldInspectReview===true&&rows.length===0}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [620, -600],
+      "id": "98000117-0000-4000-8000-000000000035",
+      "name": "Plan Review Redispatch"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "98000117-claim-redispatch",
+              "leftValue": "={{ $json.shouldClaimRedispatch }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [840, -600],
+      "id": "98000117-0000-4000-8000-000000000036",
+      "name": "Redispatch Needed?"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "value": "xero_capture_runs",
+          "mode": "name"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "runId",
+              "condition": "eq",
+              "keyValue": "={{ $json.recoveryRunId }}"
+            },
+            {
+              "keyName": "sessionId",
+              "condition": "eq",
+              "keyValue": "={{ $json.sessionId }}"
+            },
+            {
+              "keyName": "companionId",
+              "condition": "eq",
+              "keyValue": "={{ $json.companionId }}"
+            },
+            {
+              "keyName": "status",
+              "condition": "eq",
+              "keyValue": "reviewing"
+            },
+            {
+              "keyName": "importKey",
+              "condition": "eq",
+              "keyValue": "={{ $json.idempotencyKey }}"
+            },
+            {
+              "keyName": "reviewRunId",
+              "condition": "eq",
+              "keyValue": "={{ $json.recoveryReviewRunId }}"
+            },
+            {
+              "keyName": "runUpdatedAt",
+              "condition": "eq",
+              "keyValue": "={{ $json.previousRunUpdatedAt }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "runUpdatedAt": "={{ $json.recoveryAt }}",
+            "lastHeartbeatAt": "={{ $json.recoveryAt }}",
+            "reviewStatus": "={{ $json.recoveryClaimId }}",
+            "progressMessage": "Claimed a stale interrupted review for safe read-only restart."
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "runUpdatedAt",
+              "displayName": "runUpdatedAt",
+              "type": "date"
+            },
+            {
+              "id": "lastHeartbeatAt",
+              "displayName": "lastHeartbeatAt",
+              "type": "date"
+            },
+            {
+              "id": "reviewStatus",
+              "displayName": "reviewStatus",
+              "type": "string"
+            },
+            {
+              "id": "progressMessage",
+              "displayName": "progressMessage",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {
+          "dryRun": false
+        }
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [1060, -600],
+      "id": "98000117-0000-4000-8000-000000000037",
+      "name": "Claim Review Redispatch",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "xero_capture_runs",
+          "mode": "name"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "runId",
+              "condition": "eq",
+              "keyValue": "={{ $('Plan Review Redispatch').first().json.recoveryRunId }}"
+            },
+            {
+              "keyName": "sessionId",
+              "condition": "eq",
+              "keyValue": "={{ $('Plan Review Redispatch').first().json.sessionId }}"
+            },
+            {
+              "keyName": "companionId",
+              "condition": "eq",
+              "keyValue": "={{ $('Plan Review Redispatch').first().json.companionId }}"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 2,
+        "orderBy": false
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [1280, -600],
+      "id": "98000117-0000-4000-8000-000000000038",
+      "name": "Read Review Redispatch Ownership",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const planned=$('Plan Review Redispatch').first().json;\nconst rows=$input.all().map((item)=>item.json).filter((row)=>row&&String(row.runId)===planned.recoveryRunId&&String(row.sessionId)===planned.sessionId&&String(row.companionId)===planned.companionId);\nconst row=rows.length===1?rows[0]:null;\nconst exact=(value)=>String(value??'').normalize('NFKC').trim();\nconst recoveryOwned=Boolean(row&&exact(row.status)==='reviewing'&&exact(row.importKey)===exact(planned.idempotencyKey)&&exact(row.reviewRunId)===exact(planned.recoveryReviewRunId)&&exact(row.reviewStatus)===exact(planned.recoveryClaimId)&&exact(row.runUpdatedAt)===exact(planned.recoveryAt)&&exact(row.tenantId)===exact(planned.captureTenantId)&&exact(row.organisationName)===exact(planned.captureOrganisationName));\nreturn [{json:{...planned,recoveryOwned}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1500, -600],
+      "id": "98000117-0000-4000-8000-000000000039",
+      "name": "Verify Review Redispatch Ownership"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "98000117-owned-redispatch",
+              "leftValue": "={{ $json.recoveryOwned }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1720, -600],
+      "id": "98000117-0000-4000-8000-000000000040",
+      "name": "Redispatch Owned?"
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "phase19RunReconciliationReview",
+          "mode": "list",
+          "cachedResultName": "105 - RUN - Reconciliation Review"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "runId": "={{ $('Plan Review Redispatch').first().json.recoveryReviewRunId }}",
+            "period": "all",
+            "mode": "user-export",
+            "captureRunId": "={{ $('Plan Review Redispatch').first().json.recoveryRunId }}",
+            "sessionId": "={{ $('Plan Review Redispatch').first().json.sessionId }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "runId",
+              "displayName": "runId",
+              "type": "string"
+            },
+            {
+              "id": "period",
+              "displayName": "period",
+              "type": "string"
+            },
+            {
+              "id": "mode",
+              "displayName": "mode",
+              "type": "string"
+            },
+            {
+              "id": "captureRunId",
+              "displayName": "captureRunId",
+              "type": "string"
+            },
+            {
+              "id": "sessionId",
+              "displayName": "sessionId",
+              "type": "string"
+            }
+          ]
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": false
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [1940, -680],
+      "id": "98000117-0000-4000-8000-000000000041",
+      "name": "Redispatch Automatic Read-Only Review"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "value": "xero_capture_runs",
+          "mode": "name"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "runId",
+              "condition": "eq",
+              "keyValue": "={{ $('Plan Review Redispatch').first().json.recoveryRunId }}"
+            },
+            {
+              "keyName": "sessionId",
+              "condition": "eq",
+              "keyValue": "={{ $('Plan Review Redispatch').first().json.sessionId }}"
+            },
+            {
+              "keyName": "companionId",
+              "condition": "eq",
+              "keyValue": "={{ $('Plan Review Redispatch').first().json.companionId }}"
+            },
+            {
+              "keyName": "status",
+              "condition": "eq",
+              "keyValue": "reviewing"
+            },
+            {
+              "keyName": "importKey",
+              "condition": "eq",
+              "keyValue": "={{ $('Plan Review Redispatch').first().json.idempotencyKey }}"
+            },
+            {
+              "keyName": "reviewRunId",
+              "condition": "eq",
+              "keyValue": "={{ $('Plan Review Redispatch').first().json.recoveryReviewRunId }}"
+            },
+            {
+              "keyName": "reviewStatus",
+              "condition": "eq",
+              "keyValue": "={{ $('Plan Review Redispatch').first().json.recoveryClaimId }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "runUpdatedAt": "={{ $now.toISO() }}",
+            "lastHeartbeatAt": "={{ $now.toISO() }}",
+            "reviewStatus": "running",
+            "progressMessage": "The interrupted read-only review was safely restarted; Xero remains untouched."
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "runUpdatedAt",
+              "displayName": "runUpdatedAt",
+              "type": "date"
+            },
+            {
+              "id": "lastHeartbeatAt",
+              "displayName": "lastHeartbeatAt",
+              "type": "date"
+            },
+            {
+              "id": "reviewStatus",
+              "displayName": "reviewStatus",
+              "type": "string"
+            },
+            {
+              "id": "progressMessage",
+              "displayName": "progressMessage",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {
+          "dryRun": false
+        }
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [2160, -680],
+      "id": "98000117-0000-4000-8000-000000000042",
+      "name": "Mark Review Redispatched",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const owned=$('Verify Review Redispatch Ownership').first().json;\nconst original=$('Parse Official CSV').first().json.response??{ok:true,replayed:true};\nconst updatedAt=new Date().toISOString();\nreturn [{json:{...owned,response:{...original,ok:true,replayed:true,redispatchedReview:true,run:{...(original.run??{}),runId:owned.recoveryRunId,state:'reviewing',note:'The original background review did not start. I safely restarted that same read-only review without importing the CSV again or changing Xero.',updatedAt},reviewRunId:owned.recoveryReviewRunId}}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2380, -680],
+      "id": "98000117-0000-4000-8000-000000000043",
+      "name": "Shape Review Redispatch Response"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Raw Authenticated CSV Import": {
+      "main": [
+        [
+          {
+            "node": "Read Import Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Import Run": {
+      "main": [
+        [
+          {
+            "node": "Verify Export Organisation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Export Organisation": {
+      "main": [
+        [
+          {
+            "node": "Parse Official CSV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Official CSV": {
+      "main": [
+        [
+          {
+            "node": "Reject Failed Parse Replay",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reject Failed Parse Replay": {
+      "main": [
+        [
+          {
+            "node": "Valid CSV?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Valid CSV?": {
+      "main": [
+        [
+          {
+            "node": "Import Replay?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond CSV Import",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Import Replay?": {
+      "main": [
+        [
+          {
+            "node": "Plan Reviewing Replay Recovery",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Claim CSV Import",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim CSV Import": {
+      "main": [
+        [
+          {
+            "node": "Read CSV Import Ownership",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read CSV Import Ownership": {
+      "main": [
+        [
+          {
+            "node": "Verify CSV Import Ownership",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify CSV Import Ownership": {
+      "main": [
+        [
+          {
+            "node": "Reject Failed Ownership Replay",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reject Failed Ownership Replay": {
+      "main": [
+        [
+          {
+            "node": "Import Owned?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Import Owned?": {
+      "main": [
+        [
+          {
+            "node": "Emit Account Scans",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond CSV Import",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Emit Account Scans": {
+      "main": [
+        [
+          {
+            "node": "Save CSV Account Scans",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save CSV Account Scans": {
+      "main": [
+        [
+          {
+            "node": "Emit CSV Lines",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Emit CSV Lines": {
+      "main": [
+        [
+          {
+            "node": "Has CSV Lines?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has CSV Lines?": {
+      "main": [
+        [
+          {
+            "node": "Save CSV Lines",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Plan Read-Only Review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save CSV Lines": {
+      "main": [
+        [
+          {
+            "node": "Plan Read-Only Review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plan Read-Only Review": {
+      "main": [
+        [
+          {
+            "node": "Start Automatic Read-Only Review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Capture Reviewing": {
+      "main": [
+        [
+          {
+            "node": "Shape Import Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start Automatic Read-Only Review": {
+      "main": [
+        [
+          {
+            "node": "Mark Capture Reviewing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shape Import Response": {
+      "main": [
+        [
+          {
+            "node": "Respond CSV Import",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plan Reviewing Replay Recovery": {
+      "main": [
+        [
+          {
+            "node": "Inspect Interrupted Review?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Inspect Interrupted Review?": {
+      "main": [
+        [
+          {
+            "node": "Read Recovery Review Run",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond CSV Import",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Recovery Review Run": {
+      "main": [
+        [
+          {
+            "node": "Plan Review Redispatch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plan Review Redispatch": {
+      "main": [
+        [
+          {
+            "node": "Redispatch Needed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Redispatch Needed?": {
+      "main": [
+        [
+          {
+            "node": "Claim Review Redispatch",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond CSV Import",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim Review Redispatch": {
+      "main": [
+        [
+          {
+            "node": "Read Review Redispatch Ownership",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Review Redispatch Ownership": {
+      "main": [
+        [
+          {
+            "node": "Verify Review Redispatch Ownership",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Review Redispatch Ownership": {
+      "main": [
+        [
+          {
+            "node": "Redispatch Owned?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Redispatch Owned?": {
+      "main": [
+        [
+          {
+            "node": "Redispatch Automatic Read-Only Review",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond CSV Import",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Redispatch Automatic Read-Only Review": {
+      "main": [
+        [
+          {
+            "node": "Mark Review Redispatched",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Review Redispatched": {
+      "main": [
+        [
+          {
+            "node": "Shape Review Redispatch Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shape Review Redispatch Response": {
+      "main": [
+        [
+          {
+            "node": "Respond CSV Import",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "executionTimeout": 120
+  },
+  "versionId": "98000117-0000-4000-8000-000000000900",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "phase": 20,
+    "testedWithN8n": "2.30.5",
+    "authentication": "X-Xero-Capture-Key",
+    "canonicalParser": "n8n",
+    "captureMethod": "user-mediated-xero-csv-export",
+    "browserAutomation": false,
+    "maximumRows": 5000
+  },
+  "id": "phase20ImportXeroUncodedCsv",
+  "tags": []
+}

@@ -1,5 +1,6 @@
 // Behavioural tests for the capture-backed review and its fail-closed lanes.
 import { loadWorkflow, codeOf, runCode, makeChecker } from "./_harness.mjs";
+import { readFileSync } from "node:fs";
 
 const { check, done } = makeChecker("matching");
 const review = loadWorkflow("105-run-reconciliation-review.json");
@@ -7,6 +8,35 @@ const batch = loadWorkflow("106-run-transaction-matching.json");
 const decisions = loadWorkflow("104-tool-record-reconciliation-decision.json");
 const prepare = loadWorkflow("108-tool-prepare-green-matches.json");
 const start = loadWorkflow("102-tool-start-reconciliation-review.json");
+const suggestionsWorkflow = loadWorkflow("103-tool-get-reconciliation-suggestions.json");
+const setup = loadWorkflow("17-setup-bookkeeping-data.json");
+const installedWorkflow = (name) => JSON.parse(readFileSync(new URL(`../../../n8n/workflows/${name}`, import.meta.url), "utf8"));
+
+// n8n Data Table `get` runs once per input item. A multi-row read connected
+// directly to another table read or an HTTP node therefore multiplies the
+// downstream query unless that consumer is explicitly execute-once. The one
+// exception below intentionally fetches bounded evidence for each of ten
+// bounded Monthly Update runs; every other direct fan-out edge is unsafe.
+const intentionalPerItemReads = new Set([
+  "105 - RUN - Reconciliation Review:Load Monthly Update Runs->Load Monthly Update Evidence",
+]);
+for (const workflowValue of [review, prepare]) {
+  const byName = new Map(workflowValue.nodes.map((node) => [node.name, node]));
+  for (const source of workflowValue.nodes.filter((node) =>
+    node.type === "n8n-nodes-base.dataTable"
+    && node.parameters?.operation === "get"
+    && (node.parameters?.returnAll === true || Number(node.parameters?.limit ?? 0) > 1))) {
+    const targets = (workflowValue.connections?.[source.name]?.main ?? []).flat();
+    for (const edge of targets) {
+      const target = byName.get(edge.node);
+      if (!target || !["n8n-nodes-base.dataTable", "n8n-nodes-base.httpRequest"].includes(target.type)) continue;
+      const key = `${workflowValue.name}:${source.name}->${target.name}`;
+      check(`multi-row query fan-out is controlled at ${source.name} -> ${target.name}`,
+        intentionalPerItemReads.has(key) || target.executeOnce === true,
+        `${key} must be intentional or set executeOnce=true`);
+    }
+  }
+}
 
 const planSrc = codeOf(review, "Plan Run");
 const normaliseSrc = codeOf(review, "Normalise Queue");
@@ -21,15 +51,48 @@ const selectSrc = codeOf(prepare, "Select Executable Rows");
 const startValidateSrc = codeOf(start, "Validate Start Input");
 const readTenantSrc = codeOf(review, "Read Tenant");
 const readCustomOrganisationSrc = codeOf(review, "Read Custom Organisation");
+const effectiveConnectionSrc = codeOf(review, "Effective Xero Connection");
 
 const minsAgo = (minutes) => new Date(Date.now() - minutes * 60000).toISOString();
 const hash = "a".repeat(64);
+const VALID_SESSION = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const VALID_REQUEST = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const ACCOUNTS = [
   { Code: "429", Name: "Travel - National", Type: "EXPENSE" },
   { Code: "461", Name: "Printing & Stationery", Type: "EXPENSE" },
 ];
 const TAX = [{ TaxType: "INPUT", Name: "GST on Expenses", DisplayTaxRate: 10 }];
 const CONTACTS = [{ ContactID: "contact-uber", Name: "Uber" }, { ContactID: "contact-office", Name: "Officeworks" }];
+
+const provenanceColumns = ["sessionId", "captureRunId", "captureTenantId", "captureOrganisationName"];
+for (const tableNodeName of ["Create Suggestions Table", "Create Runs Table"]) {
+  const tableNode = setup.nodes.find((entry) => entry.name === tableNodeName);
+  check(`${tableNodeName} uses an isolated v2 table`, String(tableNode.parameters.tableName).endsWith("_v2"));
+  const names = tableNode.parameters.columns.column.map((column) => column.name);
+  check(`${tableNodeName} stores conversation and Xero provenance`, provenanceColumns.every((name) => names.includes(name)));
+}
+const v2Workflows = [start, suggestionsWorkflow, decisions, review, prepare];
+check("all review workflows use only isolated v2 run and suggestion tables", v2Workflows.every((workflowValue) => workflowValue.nodes.every((entry) => {
+  const value = entry.parameters?.dataTableId?.value;
+  return value !== "reconciliation_runs" && value !== "reconciliation_suggestions";
+})));
+for (const [workflowValue, nodeName] of [
+  [start, "Read Recent Runs"],
+  [suggestionsWorkflow, "Read Recent Runs"],
+  [decisions, "Read Recent Runs"],
+  [review, "Load Recent Runs"],
+  [installedWorkflow("102-tool-start-reconciliation-review.json"), "Read Recent Runs"],
+  [installedWorkflow("103-tool-get-reconciliation-suggestions.json"), "Read Recent Runs"],
+  [installedWorkflow("104-tool-record-reconciliation-decision.json"), "Read Recent Runs"],
+  [installedWorkflow("105-run-reconciliation-review.json"), "Load Recent Runs"],
+]) {
+  const recentRuns = workflowValue.nodes.find((entry) => entry.name === nodeName);
+  check(`${workflowValue.name} uses the supported newest-run ordering fields`,
+    recentRuns?.parameters?.orderBy === true
+      && recentRuns.parameters.orderByColumn === "startedAt"
+      && recentRuns.parameters.orderByDirection === "DESC"
+      && !("sort" in recentRuns.parameters));
+}
 
 const plannedConnection = { runId: "run-1", fromDate: "2026-01-01", toDate: "2026-12-31" };
 const standardConnection = runCode(readTenantSrc, {
@@ -46,6 +109,22 @@ const customConnection = runCode(readCustomOrganisationSrc, {
   input: [{ statusCode: 200, body: { Organisations: [{ OrganisationID: "org-custom", Name: "Custom Acme" }] } }],
 })[0];
 check("Custom Connection organisation discovery is supported", customConnection.tenantReady === true && customConnection.connectionType === "custom" && customConnection.tenantId === "org-custom");
+const verifiedConnection = runCode(effectiveConnectionSrc, { input: [{
+  tenantReady: true, queueMode: "user-export", tenantId: "tenant-1", organisationName: "Acme",
+  captureTenantId: "tenant-1", captureOrganisationName: "Acme", bookkeepingProfileMissing: true,
+}] })[0];
+check("capture provenance must match the live read connection", verifiedConnection.tenantReady === true && verifiedConnection.verifiedTenantId === "tenant-1");
+const switchedConnection = runCode(effectiveConnectionSrc, { input: [{
+  tenantReady: true, queueMode: "user-export", tenantId: "tenant-2", organisationName: "Other",
+  captureTenantId: "tenant-1", captureOrganisationName: "Acme", bookkeepingProfileMissing: true,
+}] })[0];
+check("a tenant or organisation switch stops review before context", switchedConnection.tenantReady === false && switchedConnection.errorSummary === "capture-xero-provenance-mismatch");
+const mismatchedProfile = runCode(effectiveConnectionSrc, { input: [{
+  tenantReady: true, queueMode: "user-export", tenantId: "tenant-1", organisationName: "Acme",
+  captureTenantId: "tenant-1", captureOrganisationName: "Acme", bookkeepingProfileMissing: false,
+  profileTenantId: "tenant-2", profileOrganisationName: "Acme",
+}] })[0];
+check("a profile bound to another tenant is never used", mismatchedProfile.tenantReady === false && mismatchedProfile.errorSummary === "profile-xero-provenance-mismatch");
 const xeroFetches = ["Fetch Accounts", "Fetch Tax Rates", "Fetch Unpaid Invoices", "Fetch Unreconciled Transactions", "Fetch Coding History", "Fetch Contacts"]
   .map((name) => review.nodes.find((entry) => entry.name === name));
 check("every context call omits explicit tenant headers for Custom Connections", xeroFetches.every((entry) => String(entry.parameters.sendHeaders).includes("connectionType !== 'custom'")));
@@ -61,7 +140,8 @@ const line = (over = {}) => ({
 });
 
 const normalisedContext = (over = {}) => ({
-  runId: "run-1", accounts: ACCOUNTS, taxRates: TAX, invoices: [], unreconciled: [], history: [],
+  runId: "run-1", sessionId: VALID_SESSION, captureRunId: "capture-1", captureTenantId: "tenant-1",
+  captureOrganisationName: "Acme", accounts: ACCOUNTS, taxRates: TAX, invoices: [], unreconciled: [], history: [],
   contacts: CONTACTS, queue: [line()], problems: [], batchSize: 8, maxReceiptLookups: 15,
   neverGuessAbove: 0, profileJson: "{}", maxLines: 200, queueMode: "browser-capture", ...over,
 });
@@ -115,12 +195,12 @@ check("two invoice candidates are blocked", basis(conflicting) === "conflicting-
 check("invoice conflict names both choices", /INV-0042.*INV-0043/.test(conflicting.settled[0].reviewQuestion));
 
 // Existing BankTransaction matching requires identity evidence, never amount/date alone.
-const existing = { BankTransactionID: "bt-1", Total: 42.35, DateString: "2026-07-14", Contact: { ContactID: "contact-office", Name: "Officeworks" }, Reference: "OFF-1" };
+const existing = { BankTransactionID: "bt-1", Total: 42.35, DateString: "2026-07-14", BankAccount: { AccountID: "bank-1" }, Contact: { ContactID: "contact-office", Name: "Officeworks" }, Reference: "OFF-1" };
 const existingHit = prepass({ queue: [line({ narration: "OFFICEWORKS OFF-1", description: "OFFICEWORKS OFF-1" })], unreconciled: [existing] });
 check("existing Xero transaction routes to Find & Match", basis(existingHit) === "existing-match");
 const existingAmountOnly = prepass({ queue: [line({ narration: "SOMEONE ELSE", description: "SOMEONE ELSE" })], unreconciled: [existing] });
-check("same amount and date without identity stays uncertain", basis(existingAmountOnly) === "to-model");
-const transferRecord = { BankTransactionID: "bt-transfer", Total: 42.35, DateString: "2026-07-15", Contact: {}, Reference: "BANK TRANSFER" };
+check("same-bank amount/date without unique identity is duplicate-blocked", basis(existingAmountOnly) === "structural-blocker");
+const transferRecord = { BankTransactionID: "bt-transfer", Total: 42.35, DateString: "2026-07-15", BankAccount: { AccountID: "bank-1" }, Contact: {}, Reference: "BANK TRANSFER" };
 const existingTransfer = prepass({ queue: [line({ narration: "BANK TRANSFER", description: "BANK TRANSFER" })], unreconciled: [transferRecord] });
 check("existing transfer routes to Find & Match before structural blocking", basis(existingTransfer) === "existing-match");
 check("contact shortlist uses existing Xero contacts", existingAmountOnly.contactLists["sl-1"].length === 0);
@@ -188,26 +268,29 @@ check("reviewQuestion is required structured output", suggestionSchema.required.
 
 // Only a fresh complete capture can pass the review's authoritative gate.
 const capture = (over = {}) => ({ scanId: "scan-1", bankAccountId: "bank-1", completedAt: minsAgo(5),
-  complete: "yes", blockingReasonsJson: "[]", captureSourceHash: "b".repeat(64), ...over });
-const plan = (captures, runs = [], profile = true, mode = "reconciliation-queue") => runCode(planSrc, {
-  nodes: { "Run Input": [{ runId: "run-1", period: "90d", mode }],
-    "Load Bookkeeping Profile": profile ? [{ profileId: "default", organisationName: "Acme", baseCurrency: "AUD", neverGuessAbove: 2000 }] : [],
-    "Load Recent Runs": runs }, input: captures,
+  expectedCount: 1, observedCount: 1, complete: "yes", blockingReasonsJson: "[]", captureSourceHash: "b".repeat(64), ...over });
+const plan = (captures, runs = [], profile = true, mode = "reconciliation-queue", capturePresent = true) => runCode(planSrc, {
+  nodes: { "Run Input": [{ runId: "run-1", sessionId: VALID_SESSION, captureRunId: "capture-1", period: "all", mode }],
+    "Load Bookkeeping Profile": profile ? [{ profileId: "default", tenantId: "tenant-1", organisationName: "Acme", baseCurrency: "AUD", neverGuessAbove: 2000 }] : [],
+    "Load Recent Runs": runs.map((row) => ({ sessionId: VALID_SESSION, ...row })),
+    "Load Capture Runs": capturePresent ? [{ runId: "capture-1", sessionId: VALID_SESSION, tenantId: "tenant-1", organisationName: "Acme", scanIdsJson: JSON.stringify(captures.map((item) => item.scanId)),
+      accountLabelsJson: JSON.stringify(captures.map((_, index) => `Bank ${index + 1}`)) }] : [] }, input: captures,
 })[0];
 check("fresh complete capture opens review gate", plan([capture()]).ready === true);
 check("profile base currency reaches structural guards", plan([capture()]).baseCurrency === "AUD");
-check("missing capture blocks review", plan([]).errorSummary === "capture-missing");
+check("missing capture blocks review", plan([], [], true, "reconciliation-queue", false).errorSummary === "capture-missing");
+check("a valid export with zero uncoded rows can finish", plan([]).ready === true);
 check("incomplete capture blocks review", plan([capture({ complete: "no" })]).errorSummary === "capture-incomplete");
 check("stale capture blocks review", plan([capture({ completedAt: minsAgo(31) })]).errorSummary === "capture-stale");
 check("blocked capture blocks review", plan([capture({ blockingReasonsJson: '["page missing"]' })]).errorSummary === "capture-blocked");
 check("invalid capture hash blocks review", plan([capture({ captureSourceHash: "bad" })]).errorSummary === "capture-hash-missing");
 check("live run still blocks another review", plan([capture()], [{ runId: "other", status: "running", startedAt: minsAgo(5) }]).skip === true);
-check("profile is still required", plan([capture()], [], false).errorSummary === "no-profile");
+const profilelessPlan = plan([capture()], [], false);
+check("a profileless review still opens for Monthly Update and Gmail context", profilelessPlan.ready === true && profilelessPlan.bookkeepingProfileMissing === true);
+check("a profileless review passes only an empty profile to classification", JSON.parse(profilelessPlan.profileJson).organisationName === "");
 const codingPlan = plan([], [], true, "coding-review");
-check("explicit coding-review mode can run without a browser capture", codingPlan.ready === true && codingPlan.queueMode === "coding-review");
-check("coding-review plan carries no fake capture identity", codingPlan.captureScanId === "" && codingPlan.captureSourceHash === "");
-const VALID_SESSION = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
-const VALID_REQUEST = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+check("explicit coding-review mode can run without an export", codingPlan.ready === true && codingPlan.queueMode === "coding-review");
+check("coding-review plan carries no fake capture identity", codingPlan.captureScanIdsJson === "[]" && codingPlan.captureRunId === "");
 const validatedCodingMode = runCode(startValidateSrc, { input: [{ sessionId: VALID_SESSION, requestId: VALID_REQUEST, period: "90d", mode: "coding-review" }] })[0];
 check("start tool accepts explicit coding-review mode", validatedCodingMode.valid === true && validatedCodingMode.mode === "coding-review");
 const defaultMode = runCode(startValidateSrc, { input: [{ sessionId: VALID_SESSION, requestId: VALID_REQUEST, period: "90d", mode: "" }] })[0];
@@ -221,8 +304,8 @@ const capturedRow = { statementLineId: "sl-1", scanId: "scan-1", bankAccountId: 
   currency: "AUD", visibleFieldsJson: JSON.stringify({ contact: "Uber" }), uiMode: "blank_create",
   matchedXeroTransactionId: "", sourceHash: hash };
 const normalise = (rows, planOver = {}, apiTransactions = [{ BankTransactionID: "context-only" }]) => runCode(normaliseSrc, { nodes: {
-  "Effective Xero Connection": [{ runId: "run-1", captureScanId: "scan-1", captureBankAccountId: "bank-1",
-    fromDate: "2026-01-01", toDate: "2026-12-31", maxLines: 200, queueMode: "browser-capture", baseCurrency: "AUD", ...planOver }],
+  "Effective Xero Connection": [{ runId: "run-1", captureScanIdsJson: '["scan-1"]', captureAccountLabels: [],
+    fromDate: "2026-01-01", toDate: "2026-12-31", maxLines: 5000, queueMode: "user-export", baseCurrency: "AUD", ...planOver }],
   "Fetch Accounts": [{ statusCode: 200, body: { Accounts: [{ Code: "429", Name: "Travel - National", Type: "EXPENSE", Status: "ACTIVE" }] } }],
   "Read Captured Statement Lines": rows,
   "Fetch Tax Rates": [{ statusCode: 200, body: { TaxRates: [{ TaxType: "INPUT", Name: "GST", Status: "ACTIVE" }] } }],
@@ -231,13 +314,18 @@ const normalise = (rows, planOver = {}, apiTransactions = [{ BankTransactionID: 
   "Fetch Coding History": [{ statusCode: 200, body: { BankTransactions: [] } }],
   "Fetch Contacts": [{ statusCode: 200, body: { Contacts: [{ ContactID: "contact-uber", Name: "Uber", ContactStatus: "ACTIVE" }] } }],
   "Load Business Memory": [{ statusCode: 200, body: { memories: [{ summary: "A consulting company", whatTheBusinessDoes: "Advises clients" }] } }],
+  "Load Monthly Company Profile": [{ profileId: "company", profileSavedAt: minsAgo(10), companyName: "Acme", oneLiner: "Builds AI operations tools" }],
+  "Load Monthly Update Runs": [{ runId: "monthly-1", status: "completed", finishedAt: minsAgo(20) }],
+  "Load Monthly Update Evidence": [{ runId: "monthly-1", includeDecision: "included", importance: 0.9, confidence: 0.9, eventDate: "2026-07-12", title: "Client launch", summary: "Launched an automation for Client A" }],
   "Probe Gmail": [{ statusCode: 200, body: { emailAddress: "owner@example.test" } }],
 }, input: [{}] })[0];
 const queue = normalise([capturedRow]);
 check("captured active statement line becomes the queue", queue.queue.length === 1 && queue.queue[0].sourceId === "sl-1");
 check("debit capture becomes money out", queue.queue[0].amount === -42.35 && queue.queue[0].direction === "outflow");
-check("queue mode is browser capture", queue.queueMode === "browser-capture");
-check("business memory is normalised for the model", queue.memorySummary === "A consulting company Advises clients");
+check("queue mode is user export", queue.queueMode === "user-export");
+check("business memory is normalised for the model", queue.memorySummary.includes("A consulting company Advises clients"));
+check("Monthly Update company and event context reaches classification", queue.memorySummary.includes("Builds AI operations tools") && queue.memorySummary.includes("Client launch"));
+check("Monthly Update context is labelled as context, not receipt or write evidence", queue.memorySummary.includes("not receipt evidence or write authority"));
 check("connected Gmail evidence path is preserved", queue.gmailConnected === true);
 check("already-entered BankTransactions are context, not queue rows", !queue.queue.some((row) => row.sourceId === "context-only"));
 check("wrong scan ID is excluded", normalise([{ ...capturedRow, scanId: "old-scan" }]).queue.length === 0);
@@ -257,14 +345,18 @@ const apiTransferPrepass = prepass({ queue: transferCodingQueue.queue, unreconci
 check("bank transfers remain structurally blocked in coding-review mode", basis(apiTransferPrepass, "api-transfer") === "structural-blocker");
 
 // Result lanes are exclusive and require ContactID plus all thresholds.
-const merge = (settled, neverGuessAbove = 0, queueMode = "browser-capture") => runCode(mergeSrc, {
-  nodes: { "Deterministic Pre-Pass": [{ ...normalisedContext({ settled, uncertain: [], neverGuessAbove, queueMode }), queue: [] }], "Run Matching Batch": [] }, input: [{}],
+const merge = (settled, neverGuessAbove = 0, queueMode = "browser-capture", bookkeepingProfileMissing = false) => runCode(mergeSrc, {
+  nodes: { "Deterministic Pre-Pass": [{ ...normalisedContext({ settled, uncertain: [], neverGuessAbove, queueMode, bookkeepingProfileMissing }), queue: [] }], "Run Matching Batch": [] }, input: [{}],
 })[0];
 const confident = { ...line(), suggestedContact: "Uber", suggestedContactId: "contact-uber",
   suggestedAccountCode: "429", suggestedAccountName: "Travel - National", suggestedTaxType: "INPUT",
   identityConfidence: 0.97, accountingConfidence: 0.96, documentConfidence: 0, basis: "model-only",
   needsHuman: "no", whatToCheck: "", likelyDescription: "Local business travel", evidenceSummary: "Existing contact and saved rule.", reviewQuestion: "" };
 check("all gates produce ready_to_prepare", merge([confident]).rows[0].resultLane === "ready_to_prepare");
+const profileless = merge([confident], 0, "user-export", true);
+check("missing explicit bookkeeping rules force every create candidate non-executable", profileless.rows[0].resultLane === "likely" && profileless.highConfidence === 0);
+check("profileless review clears the executable coding tuple", profileless.rows[0].suggestedAccountCode === "" && profileless.rows[0].suggestedTaxType === "");
+check("profileless review explains the missing rule without losing the likely description", /No explicit bookkeeping profile/.test(profileless.rows[0].whatToCheck) && profileless.rows[0].likelyDescription === "Local business travel");
 const nonExecutableCoding = merge([{ ...confident, sourceType: "bank-transaction", statementLineId: "", scanId: "", statementSourceHash: "" }], 0, "coding-review");
 check("even a confident API coding-review row is never ready to prepare", nonExecutableCoding.rows[0].resultLane === "likely" && nonExecutableCoding.highConfidence === 0);
 check("non-executable coding rows have no executable account or tax tuple", nonExecutableCoding.rows[0].suggestedAccountCode === "" && nonExecutableCoding.rows[0].suggestedTaxType === "");
@@ -299,6 +391,8 @@ const report = runCode(composeSrc, { nodes: { "Merge All Suggestions": [lanes] }
 check("report names approval lane", report.includes("Ready for approval:"));
 check("report renders lower-certainty likely description", report.includes("likely Unknown supplier"));
 check("report says final Xero clicks remain", /Find & Match.*click OK/s.test(report));
+const profilelessReport = runCode(composeSrc, { nodes: { "Merge All Suggestions": [profileless] }, input: [{}] })[0].reportText;
+check("profileless report says Monthly Update and Gmail cannot authorize coding or preparation", /Monthly Update and Gmail context.*not coding evidence or write authority/s.test(profilelessReport));
 const codingReport = runCode(composeSrc, { nodes: { "Merge All Suggestions": [nonExecutableCoding] }, input: [{}] })[0].reportText;
 check("coding-review report says it is not the bank-feed queue", /coding-review mode, not the bank-feed queue/.test(codingReport));
 check("coding-review report says none can be prepared or reconciled", /none of these rows can be prepared or reconciled/.test(codingReport));
@@ -306,15 +400,20 @@ check("coding-review report says none can be prepared or reconciled", /none of t
 // Accepted hash and write gate recheck the live captured source before any Xero call.
 const ready = merge([confident]).rows[0];
 const evaluated = runCode(decisionSrc, {
-  nodes: { "Pick Latest Run": [{ ids: [ready.suggestionId], decision: "accepted", userAccountCode: "", hasRun: true }],
+  nodes: { "Pick Latest Run": [{ ids: [ready.suggestionId], decision: "accepted", userAccountCode: "", hasRun: true, runId: "run-1", sessionId: VALID_SESSION }],
     "Read Suggestions": [ready] }, input: [ready],
 })[0];
 const accepted = { ...ready, ...evaluated.recorded[0] };
-const currentScan = { scanId: "scan-new", bankAccountId: "bank-1", completedAt: minsAgo(2), complete: "yes", blockingReasonsJson: "[]", captureSourceHash: "b".repeat(64) };
-const currentLine = { statementLineId: "sl-1", bankAccountId: "bank-1", active: "yes", sourceHash: hash, uiMode: "blank_create", matchedXeroTransactionId: "" };
+const currentScan = { scanId: "scan-1", bankAccountId: "bank-1", completedAt: minsAgo(2), complete: "yes", blockingReasonsJson: "[]", captureSourceHash: "b".repeat(64),
+  sessionId: VALID_SESSION, captureRunId: "capture-1", captureTenantId: "tenant-1", captureOrganisationName: "Acme" };
+const currentLine = { statementLineId: "sl-1", scanId: "scan-1", bankAccountId: "bank-1", active: "yes", sourceHash: hash, uiMode: "blank_create", matchedXeroTransactionId: "",
+  sessionId: VALID_SESSION, captureRunId: "capture-1", captureTenantId: "tenant-1", captureOrganisationName: "Acme" };
 const select = (row = accepted, scan = currentScan, live = currentLine) => runCode(selectSrc, {
-  nodes: { "Pick Latest Run": [{ ids: [row.suggestionId], runId: "run-1", hasRun: true, greenMatchesCreated: 0 }],
-    "Read Accepted Suggestions": [row], "Read Current Scans": scan ? [scan] : [] }, input: live ? [live] : [],
+  nodes: { "Pick Latest Run": [{ ids: [row.suggestionId], approvedHashes: { [row.suggestionId]: row.acceptedHash }, confirmedActionId: VALID_REQUEST,
+      runId: "run-1", sessionId: VALID_SESSION, captureRunId: "capture-1", captureTenantId: "tenant-1", captureOrganisationName: "Acme", hasRun: true, greenMatchesCreated: 0 }],
+    "Read Accepted Suggestions": [row],
+    "Read Capture Provenance": [{ runId: "capture-1", sessionId: VALID_SESSION, tenantId: "tenant-1", organisationName: "Acme" }],
+    "Read Current Scans": scan ? [scan] : [] }, input: live ? [live] : [],
 })[0];
 check("fresh stable approved row reaches create payload", select().anythingToCreate === true);
 check("payload uses ContactID only", select().toCreate[0].payload.Contact.ContactID === "contact-uber" && !select().toCreate[0].payload.Contact.Name);
@@ -326,6 +425,6 @@ check("disappeared line refuses", select(accepted, currentScan, null).refusals[0
 check("new Xero match state refuses", select(accepted, currentScan, { ...currentLine, uiMode: "green_match", matchedXeroTransactionId: "bt-2" }).refusals[0].reason === "XERO_STATE_CHANGED");
 check("missing ContactID refuses", select({ ...accepted, suggestedContactId: "" }).refusals[0].reason === "CONTACT_ID_REQUIRED");
 check("lower-certainty lane refuses", select({ ...accepted, resultLane: "likely", needsHuman: "yes" }).refusals[0].reason === "NOT_HIGH_CERTAINTY");
-check("changed approval payload refuses", select({ ...accepted, suggestedTaxType: "NONE" }).refusals[0].reason === "CHANGED_SINCE_ACCEPTED");
+check("changed approval payload refuses", select({ ...accepted, suggestedTaxType: "NONE" }).refusals[0].reason === "CONFIRMATION_MISMATCH");
 
 done();

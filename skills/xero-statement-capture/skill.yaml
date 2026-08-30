@@ -1,5 +1,5 @@
 id: xero-statement-capture
 agent: bookkeeping
 name: Xero Statement Capture
-version: 1.0.0
-description: Safely captures the live Xero bank-reconciliation queue without clicking or changing anything in Xero.
+version: 1.1.0
+description: Opens Xero's official report and safely imports a user-exported all-account CSV without scraping, clicking, or handling Xero credentials.

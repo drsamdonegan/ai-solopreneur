@@ -112,13 +112,20 @@ try {
     .join("\n");
   await writeFile(xeroEnabledPath, `${xeroEnabled.replace(/\n+$/, "")}\n`);
   install(xeroPackageRoot, "xero-bookkeeping");
-  await readFile(join(xeroPackageRoot, "skills", "xero-statement-capture", "scripts", "capture-server.mjs"), "utf8");
-  const installedExtensionManifest = JSON.parse(await readFile(
-    join(xeroPackageRoot, "skills", "xero-statement-capture", "assets", "xero-statement-capture", "manifest.json"),
-    "utf8",
-  ));
-  await readFile(join(xeroPackageRoot, "skills", "xero-statement-capture", "assets", "xero-statement-capture", "content.js"), "utf8");
-  assert.deepEqual(installedExtensionManifest.permissions, ["activeTab", "storage"], "the package must copy the reviewed extension assets");
+  await readFile(join(xeroPackageRoot, "skills", "xero-statement-capture", "scripts", "xero-export-capture.mjs"), "utf8");
+  await readFile(join(xeroPackageRoot, "skills", "xero-statement-capture", "scripts", "xero-export-companion.mjs"), "utf8");
+  await readFile(join(xeroPackageRoot, "skills", "xero-statement-capture", "scripts", "xero-export-service.mjs"), "utf8");
+  await readFile(join(xeroPackageRoot, "n8n", "workflows", "117-webhook-import-xero-uncoded-csv.json"), "utf8");
+  await assert.rejects(
+    readFile(join(xeroPackageRoot, "skills", "xero-statement-capture", "scripts", "capture-server.mjs"), "utf8"),
+    /ENOENT/,
+    "the package must not install the retired DOM-capture server",
+  );
+  await assert.rejects(
+    readFile(join(xeroPackageRoot, "n8n", "workflows", "111-webhook-import-xero-statement-scan.json"), "utf8"),
+    /ENOENT/,
+    "the package must not install the retired browser-capture webhook",
+  );
   await readFile(join(xeroPackageRoot, "skills", "xero-reconciliation", "SKILL.md"), "utf8");
   assert.match(
     await readFile(xeroEnabledPath, "utf8"),
@@ -288,10 +295,6 @@ try {
     installedLinkedInSkill,
     linkedInCatalogueSkill,
     "installed LinkedIn instructions must remain byte-identical to the catalogue",
-  );
-  assert(
-    installedLinkedInSkill.trim().length < 7200,
-    "LinkedIn instructions must retain maintenance headroom",
   );
   assert.doesNotMatch(
     installedLinkedInSkill,

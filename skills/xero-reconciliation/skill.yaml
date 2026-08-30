@@ -1,5 +1,5 @@
 id: xero-reconciliation
 agent: bookkeeping
 name: Xero Coding Review
-version: 1.0.0
-description: Works out what the unreconciled transactions in your Xero organisation probably are, prepares the ones it is sure about, and asks about the rest.
+version: 1.2.0
+description: Reviews exported uncoded Xero statement lines with company and receipt context, proposes exact single-use confirmation for accepted high-confidence items, and asks about the rest.

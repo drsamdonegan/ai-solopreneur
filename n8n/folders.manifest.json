@@ -135,11 +135,8 @@
     {
       "id": "skill-bookkeeping",
       "name": "8. Your bookkeeping",
-      "description": "Reading the transactions waiting in Xero, with complete browser evidence and fail-closed queue status.",
+      "description": "User-mediated Xero uncoded-line export, evidence-backed coding review, and separately approved match preparation.",
       "workflows": [
-        "110-tool-get-xero-queue-status.json",
-        "111-webhook-import-xero-statement-scan.json",
-        "112-webhook-get-xero-annotations.json",
         "100-tool-check-xero-connection.json",
         "101-tool-set-bookkeeping-profile.json",
         "102-tool-start-reconciliation-review.json",
@@ -148,7 +145,12 @@
         "105-run-reconciliation-review.json",
         "106-run-transaction-matching.json",
         "108-tool-prepare-green-matches.json",
-        "109-run-receipt-lookup.json"
+        "109-run-receipt-lookup.json",
+        "113-tool-start-xero-queue-capture.json",
+        "114-tool-get-xero-capture-status.json",
+        "115-webhook-xero-capture-control.json",
+        "116-webhook-xero-export-companion.json",
+        "117-webhook-import-xero-uncoded-csv.json"
       ]
     }
   ]

@@ -23,19 +23,33 @@ const CLI_TIMEOUT_MS = 5 * 60 * 1_000;
 
 /**
  * Filename prefixes for the workflows that must be live for the agent to work:
- * the tools it calls, the sub-workflows those call, the confirmation step, and
- * the run-once setup workflows.
+ * the tools it calls, the sub-workflows those call, the confirmation step, the
+ * run-once setup workflows, and repository-managed webhook entry points.
  *
  * Read from the files rather than kept as a list of IDs, because a list kept by
  * hand is wrong the moment a learner installs a skill that adds one — and the
  * way it is wrong is silent. An unpublished tool is not an error, it is an
  * agent that quietly cannot do the thing it was just given.
  *
- * Triggers are deliberately absent. A funding or monthly trigger with no saved
- * profile should not start itself. The learner switches
- * those on, and learnerPublishedIds below is what makes that survive a deploy.
+ * User-configurable triggers are deliberately absent. A funding or monthly
+ * trigger with no saved profile should not start itself. Repository-managed
+ * webhook workflows are different: they are authenticated agent entry points
+ * and cannot receive a request unless they are published. The learner switches
+ * user-configurable triggers on, and learnerPublishedIds below is what makes
+ * that survive a deploy.
  */
-const MUST_BE_LIVE = /^\d+-(tool|setup|internal|confirm|run)-/;
+const MUST_BE_LIVE = /^\d+-(tool|setup|internal|confirm|run|webhook)-/;
+
+// These workflows belonged to the retired DOM/browser-extension Xero capture
+// experiment. Removing their JSON files prevents fresh installs, but an
+// existing cloud database can keep a previously published webhook live. Never
+// preserve or republish them, and explicitly unpublish them before each sync.
+export const RETIRED_WORKFLOW_IDS = Object.freeze([
+  "phase20GetXeroQueueStatus",
+  "phase20ImportXeroStatementScan",
+  "phase20GetXeroAnnotations",
+]);
+const RETIRED_WORKFLOW_ID_SET = new Set(RETIRED_WORKFLOW_IDS);
 
 /** The conversation entry point. Useless without an Anthropic credential. */
 const MAIN_WORKFLOW = "phase3StartHere";
@@ -98,7 +112,32 @@ export function learnerPublishedIds(databasePath) {
         .prepare(`SELECT id FROM workflow_entity WHERE ${where}`)
         .all()
         .map((row) => String(row.id))
-        .filter((id) => id !== MAIN_WORKFLOW);
+        .filter((id) => id !== MAIN_WORKFLOW && !RETIRED_WORKFLOW_ID_SET.has(id));
+    } finally {
+      db.close();
+    }
+  } catch {
+    return [];
+  }
+}
+
+/** Previously published workflows that this release has explicitly retired. */
+export function retiredPublishedIds(databasePath) {
+  if (!existsSync(databasePath)) return [];
+  try {
+    const db = new DatabaseSync(databasePath, { readOnly: true });
+    try {
+      const hasVersionColumn = db
+        .prepare("SELECT count(*) n FROM pragma_table_info('workflow_entity') WHERE name = 'activeVersionId'")
+        .get().n > 0;
+      const where = hasVersionColumn
+        ? "active = 1 OR activeVersionId IS NOT NULL"
+        : "active = 1";
+      const placeholders = RETIRED_WORKFLOW_IDS.map(() => "?").join(", ");
+      return db
+        .prepare(`SELECT id FROM workflow_entity WHERE id IN (${placeholders}) AND (${where})`)
+        .all(...RETIRED_WORKFLOW_IDS)
+        .map((row) => String(row.id));
     } finally {
       db.close();
     }
@@ -461,6 +500,34 @@ function lastLines(result, count = 6) {
     .join("\n");
 }
 
+export function retireLegacyWorkflows({
+  databasePath,
+  n8nBin,
+  n8nEnv,
+  log = () => {},
+  runCommand = runCli,
+}) {
+  const retired = retiredPublishedIds(databasePath);
+  for (const id of retired) {
+    const result = runCommand(
+      n8nBin,
+      ["unpublish:workflow", `--id=${id}`],
+      n8nEnv,
+    );
+    if (result.error || result.status !== 0) {
+      throw new Error(
+        `A retired Xero browser-capture workflow could not be unpublished (${id}).\n${lastLines(result)}`,
+      );
+    }
+  }
+  if (retired.length > 0) {
+    log(
+      `  ${retired.length} retired Xero browser-capture ${retired.length === 1 ? "workflow was" : "workflows were"} switched off.`,
+    );
+  }
+  return retired;
+}
+
 /**
  * Imports and publishes the reviewed workflows.
  *
@@ -480,6 +547,12 @@ export function syncWorkflows({ paths, n8nEnv, log }) {
   const state = readSyncState(stateFile);
   const databasePath = join(paths.n8nUserFolder, ".n8n", "database.sqlite");
   const credentialPresent = hasAnthropicCredential(databasePath);
+  retireLegacyWorkflows({
+    databasePath,
+    n8nBin: paths.n8nBin,
+    n8nEnv,
+    log,
+  });
 
   // Re-run when the workflows changed, and also when a credential has appeared
   // since last time, because that is the moment the main workflow can go live.

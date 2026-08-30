@@ -1,0 +1,372 @@
+{
+  "name": "114 - TOOL - get_xero_capture_status",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Read one export run\n\nReturns the authoritative n8n capture-run state and, after import, the linked read-only review state. It never opens Xero or changes any record.",
+        "height": 260,
+        "width": 520,
+        "color": 6
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -700,
+        -260
+      ],
+      "id": "98000114-0000-4000-8000-000000000001",
+      "name": "Sticky"
+    },
+    {
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "sessionId",
+              "type": "string"
+            },
+            {
+              "name": "requestId",
+              "type": "string"
+            },
+            {
+              "name": "runId",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -680,
+        0
+      ],
+      "id": "98000114-0000-4000-8000-000000000010",
+      "name": "Tool Input"
+    },
+    {
+      "parameters": {
+        "jsCode": "const sessionId=String($json.sessionId||'').trim(),requestId=String($json.requestId||'').trim(),runId=String($json.runId||'').trim();const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;const valid=uuid.test(sessionId)&&(!requestId||uuid.test(requestId))&&(!runId||uuid.test(runId));return [{json:{valid,sessionId,requestId,runId,proposedInput:{schemaVersion:1,sessionId,...(requestId?{requestId}:{}),...(runId?{runId}:{})},...(!valid?{response:{ok:false,error:{code:'INVALID_CAPTURE_STATUS_INPUT',message:'Capture status needs a valid conversation and, when supplied, valid request and capture run IDs.'}}}:{})}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -460,
+        0
+      ],
+      "id": "98000114-0000-4000-8000-000000000011",
+      "name": "Validate Status Input"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "xero_capture_runs",
+          "mode": "name"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "sessionId",
+              "condition": "eq",
+              "keyValue": "={{ $('Validate Status Input').first().json.sessionId }}"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 100,
+        "orderBy": true,
+        "orderByColumn": "runCreatedAt",
+        "orderByDirection": "DESC"
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -240,
+        0
+      ],
+      "id": "98000114-0000-4000-8000-000000000012",
+      "name": "Read Capture Runs",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "reconciliation_runs_v2",
+          "mode": "name"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "sessionId",
+              "condition": "eq",
+              "keyValue": "={{ $('Validate Status Input').first().json.sessionId }}"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 20,
+        "orderBy": true,
+        "orderByColumn": "startedAt",
+        "orderByDirection": "DESC"
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -20,
+        0
+      ],
+      "id": "98000114-0000-4000-8000-000000000013",
+      "name": "Read Review Runs",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const input=$('Validate Status Input').first().json;const captures=$('Read Capture Runs').all().map(item=>item.json).filter(row=>row&&String(row.sessionId)===input.sessionId&&(!input.runId||String(row.runId)===input.runId));captures.sort((a,b)=>Date.parse(String(b.runCreatedAt||0))-Date.parse(String(a.runCreatedAt||0)));const capture=captures[0];if(!capture||!String(capture.reviewRunId||''))return [{json:{}}];const normal=value=>String(value||'').normalize('NFKC').trim().replace(/\\s+/g,' ').toLowerCase();const rows=$input.all().map(item=>item.json).filter(row=>row&&String(row.runId)===String(capture.reviewRunId)&&String(row.sessionId)===String(capture.sessionId)&&String(row.captureRunId)===String(capture.runId)&&String(row.captureTenantId)===String(capture.tenantId)&&normal(row.captureOrganisationName)===normal(capture.organisationName));return rows.length?rows.map(json=>({json})):[{json:{}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        100,
+        0
+      ],
+      "id": "98000114-0000-4000-8000-000000000019",
+      "name": "Filter Bound Review Run"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input=$('Validate Status Input').first().json;if(!input.valid)return [{json:{...input}}];const captures=$('Read Capture Runs').all().map((item)=>item.json).filter((row)=>row&&String(row.sessionId)===input.sessionId&&(!input.runId||String(row.runId)===input.runId));captures.sort((a,b)=>Date.parse(String(b.runCreatedAt||0))-Date.parse(String(a.runCreatedAt||0)));const stored=captures[0];if(!stored)return [{json:{...input,response:{ok:true,hasRun:false,status:'missing',message:'No Xero export run matches this conversation.'}}}];const reviewRows=$input.all().map((item)=>item.json).filter((row)=>row&&String(row.runId)===String(stored.reviewRunId||''));const review=reviewRows[0]||null;let state=String(stored.status||stored.phase||'preflight');if(review&&['completed','partial'].includes(String(review.status)))state='ready';else if(review&&String(review.status)==='failed')state='failed';const allowed=new Set(['preflight','opening','awaiting_login','awaiting_export','discovering','capturing','verifying','uploading','reviewing','ready','failed','cancelled']);if(!allowed.has(state))state=String(stored.phase||'preflight');if(!allowed.has(state))state='failed';let derivedErrorCode=String(stored.errorCode||''),derivedErrorMessage=String(stored.errorMessage||''),nowMs=Date.now(),createdMs=Date.parse(String(stored.runCreatedAt||'')),expiresMs=Date.parse(String(stored.expiresAt||'')),heartbeatMs=Date.parse(String(stored.lastHeartbeatAt||stored.claimedAt||''));if(!['ready','failed','cancelled'].includes(state)){const unclaimedTooLong=!String(stored.companionId||'')&&Number.isFinite(createdMs)&&nowMs-createdMs>120000,expired=Number.isFinite(expiresMs)&&nowMs>expiresMs,heartbeatStale=String(stored.companionId||'')&&Number.isFinite(heartbeatMs)&&nowMs-heartbeatMs>20*60000;if(unclaimedTooLong||expired||heartbeatStale){state='failed';derivedErrorCode='HELPER_OFFLINE';derivedErrorMessage=unclaimedTooLong?'The local Xero export companion did not claim this run.':'The local Xero export companion stopped reporting before the run completed.';}}const terminal=['ready','failed','cancelled'].includes(state);const current=Math.max(0,Number(stored.progressCurrent||0)),total=Math.max(current,Number(stored.progressTotal||6));let note=String(stored.progressMessage||'');if(derivedErrorCode==='HELPER_OFFLINE')note=derivedErrorMessage+' Start the configured companion daemon, then start a new capture run.';const reviewRunId=String(stored.reviewRunId||'');const run={runId:String(stored.runId),...(reviewRunId?{reviewRunId}:{}),source:String(stored.source||'agent'),state,note,current,total,accountCount:Number(stored.bankAccountsCaptured||0),capturedCount:Number(stored.statementLinesObserved||0),expectedCount:['reviewing','ready'].includes(state)?Number(stored.statementLinesObserved||0):0,createdAt:String(stored.runCreatedAt||''),updatedAt:String(stored.runUpdatedAt||''),...(derivedErrorCode?{errorCode:derivedErrorCode}:{})};return [{json:{...input,response:{ok:true,hasRun:true,run,runId:run.runId,status:state,phase:String(stored.phase||state),progress:{current,total,percent:total?Math.min(100,Math.round(current/total*100)):0},message:note,requiresUserLogin:String(stored.requiresUserLogin)==='yes',manualLoginOnly:true,browserAutomation:false,bankAccountsCaptured:run.accountCount,statementLinesObserved:run.capturedCount,reviewRunId,reviewStatus:review?String(review.status||''):String(stored.reviewStatus||'not_started'),progressUrl:'/api/xero-capture/runs/'+encodeURIComponent(run.runId),terminal,canCancel:!terminal,cancelRequested:String(stored.cancelRequested)==='yes',error:derivedErrorCode?{code:derivedErrorCode,message:derivedErrorMessage}:null,nextStep:state==='awaiting_login'?'Sign in to Xero and complete MFA yourself. The helper cannot see what you type.':state==='awaiting_export'?'In Xero, open Uncoded Statement Lines, select All bank accounts, then click CSV Export once.':state==='reviewing'?'The validated CSV is being reviewed read-only.':state==='ready'?'Read the saved reconciliation suggestions. Nothing was written to Xero.':derivedErrorCode==='HELPER_OFFLINE'?'Start the configured local export companion daemon, then start a new capture run.':'Keep this progress view open; the helper will update it.'}}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        200,
+        0
+      ],
+      "id": "98000114-0000-4000-8000-000000000014",
+      "name": "Shape Capture Status"
+    },
+    {
+      "parameters": {
+        "jsCode": "const source=$input.first().json,response=source.response||{ok:false,error:{code:'STATUS_FAILED',message:'Capture status failed.'}};return [{json:{occurredAt:new Date().toISOString(),sessionId:source.sessionId,requestId:source.requestId,toolName:'get_xero_capture_status',proposedInput:JSON.stringify(source.proposedInput||{}),result:JSON.stringify(response),error:response.ok===false?String(response.error?.message||'Tool failed'):'',response}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        420,
+        0
+      ],
+      "id": "98000114-0000-4000-8000-000000000015",
+      "name": "Prepare Audit"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "value": "tool_audit",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "occurredAt": "={{ $json.occurredAt }}",
+            "sessionId": "={{ $json.sessionId }}",
+            "requestId": "={{ $json.requestId }}",
+            "toolName": "={{ $json.toolName }}",
+            "proposedInput": "={{ $json.proposedInput }}",
+            "result": "={{ $json.result }}",
+            "error": "={{ $json.error }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "occurredAt",
+              "displayName": "occurredAt",
+              "type": "string"
+            },
+            {
+              "id": "sessionId",
+              "displayName": "sessionId",
+              "type": "string"
+            },
+            {
+              "id": "requestId",
+              "displayName": "requestId",
+              "type": "string"
+            },
+            {
+              "id": "toolName",
+              "displayName": "toolName",
+              "type": "string"
+            },
+            {
+              "id": "proposedInput",
+              "displayName": "proposedInput",
+              "type": "string"
+            },
+            {
+              "id": "result",
+              "displayName": "result",
+              "type": "string"
+            },
+            {
+              "id": "error",
+              "displayName": "error",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        640,
+        0
+      ],
+      "id": "98000114-0000-4000-8000-000000000016",
+      "name": "Write Tool Audit"
+    },
+    {
+      "parameters": {
+        "jsCode": "const prepared=$('Prepare Audit').first().json;const response={...(prepared.response||{ok:false,error:{code:'STATUS_FAILED',message:'Capture status failed.'}})};if(!Number.isInteger($json.id))response.auditWarning='The capture-status audit could not be saved locally.';return [{json:response}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        860,
+        0
+      ],
+      "id": "98000114-0000-4000-8000-000000000017",
+      "name": "Return Tool Result"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Tool Input": {
+      "main": [
+        [
+          {
+            "node": "Validate Status Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Status Input": {
+      "main": [
+        [
+          {
+            "node": "Read Capture Runs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Capture Runs": {
+      "main": [
+        [
+          {
+            "node": "Read Review Runs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Review Runs": {
+      "main": [
+        [
+          {
+            "node": "Filter Bound Review Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Bound Review Run": {
+      "main": [
+        [
+          {
+            "node": "Shape Capture Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shape Capture Status": {
+      "main": [
+        [
+          {
+            "node": "Prepare Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Audit": {
+      "main": [
+        [
+          {
+            "node": "Write Tool Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Tool Audit": {
+      "main": [
+        [
+          {
+            "node": "Return Tool Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "executionTimeout": 30
+  },
+  "versionId": "98000114-0000-4000-8000-000000000900",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "phase": 20,
+    "testedWithN8n": "2.30.5",
+    "toolRisk": "read",
+    "authorization": "automatic-current-context-read",
+    "externalWrite": "none",
+    "dataSource": "xero-capture-runs-and-reconciliation-runs"
+  },
+  "id": "phase20GetXeroCaptureStatus",
+  "tags": [
+    {
+      "id": "tagAgentCanDo",
+      "name": "What your agent can do"
+    }
+  ]
+}

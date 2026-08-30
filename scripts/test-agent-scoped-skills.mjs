@@ -128,6 +128,27 @@ try {
     "agent settings fragments must participate in the source hash",
   );
 
+  const longSkillPath = join(skillsDirectory, "coding-review", "SKILL.md");
+  const originalInstructions = await readFile(longSkillPath, "utf8");
+  const overFormerFileLimit = `${originalInstructions}\n${"Detailed rule. ".repeat(700)}`;
+  assert(overFormerFileLimit.length > 8_000);
+  await writeFile(longSkillPath, overFormerFileLimit);
+  const longSkillBundle = await compileSkills(skillsDirectory, {
+    profileDirectory,
+  });
+  assert.match(
+    longSkillBundle.agents.bookkeeping.instructions,
+    /Detailed rule\./,
+    "an individual skill may exceed the retired 8,000-character ceiling",
+  );
+  await writeFile(longSkillPath, `${originalInstructions}\n${"x".repeat(200_001)}`);
+  await assert.rejects(
+    compileSkills(skillsDirectory, { profileDirectory }),
+    /bookkeeping instructions exceeds 200000 characters/,
+    "the effective per-agent context still has a runaway payload guard",
+  );
+  await writeFile(longSkillPath, originalInstructions);
+
   const badSkill = join(skillsDirectory, "coding-review", "skill.yaml");
   const original = await readFile(badSkill, "utf8");
   await writeFile(badSkill, original.replace("agent: bookkeeping", "agent: unknown"));

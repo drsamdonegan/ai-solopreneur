@@ -73,20 +73,24 @@
         "operation": "get",
         "dataTableId": {
           "__rl": true,
-          "value": "reconciliation_runs",
+          "value": "reconciliation_runs_v2",
           "mode": "name"
         },
         "matchType": "allConditions",
         "filters": {
-          "conditions": []
+          "conditions": [
+            {
+              "keyName": "sessionId",
+              "condition": "eq",
+              "keyValue": "={{ $('Validate Start Input').first().json.sessionId }}"
+            }
+          ]
         },
         "returnAll": false,
         "limit": 10,
         "orderBy": true,
-        "sort": {
-          "field": "startedAt",
-          "direction": "DESC"
-        }
+        "orderByColumn": "startedAt",
+        "orderByDirection": "DESC"
       },
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1.1,
@@ -95,11 +99,12 @@
         0
       ],
       "id": "97900102-0000-4000-8000-000000000012",
-      "name": "Read Recent Runs"
+      "name": "Read Recent Runs",
+      "alwaysOutputData": true
     },
     {
       "parameters": {
-        "jsCode": "const input = $('Validate Start Input').first().json;\nconst rows = $input.all().map((item) => item.json).filter((row) => row && row.runId);\n\nif (!input.valid) {\n  return [{ json: { ...input, shouldQueue: false } }];\n}\n\nconst minutesSince = (value) => {\n  const parsed = Date.parse(String(value ?? ''));\n  if (Number.isNaN(parsed)) return null;\n  return Math.round((Date.now() - parsed) / 60000);\n};\n\n// A review takes minutes and spends real money, so one already in flight is\n// reported rather than started twice. Nothing here can ask whether that run is\n// still alive: a restart, or an execution deleted by hand, leaves exactly the\n// same row behind with nobody working on it. So age decides, and the only\n// honest number is the one past which n8n has certainly stopped it — the\n// executionTimeout on 105, which is 30 minutes. Anything shorter calls a\n// working run wreckage and quietly pays for a second one on top of it.\nconst DEAD_AFTER = 31;\n\nconst open = rows\n  .filter((row) => String(row.status ?? '') === 'running')\n  .map((row) => ({ runId: row.runId, age: minutesSince(row.startedAt) }))\n  .filter((entry) => entry.age !== null)\n  .sort((a, b) => a.age - b.age);\n\nconst live = open.find((entry) => entry.age < DEAD_AFTER) ?? null;\n\nif (live && !input.force) {\n  return [{ json: { ...input, shouldQueue: false, response: { ok: true, status: 'already-running',\n    runId: live.runId, startedMinutesAgo: live.age,\n    message: `A review started ${live.age} minute${live.age === 1 ? '' : 's'} ago and is still going. Reading it back with get_reconciliation_suggestions will show it when it finishes. Say so rather than starting another one, unless they ask you to go again anyway.` } } }];\n}\n\nconst stale = open.find((entry) => entry.age >= DEAD_AFTER) ?? null;\nconst replacing = live\n  ? { reason: 'asked-again', runId: live.runId, age: live.age }\n  : (stale ? { reason: 'interrupted', runId: stale.runId, age: stale.age } : null);\n\nreturn [{ json: { ...input, shouldQueue: true, replacing } }];"
+        "jsCode": "const input = $('Validate Start Input').first().json;\nconst rows = $input.all().map((item) => item.json).filter((row) => row && row.runId && String(row.sessionId ?? '') === input.sessionId);\n\nif (!input.valid) {\n  return [{ json: { ...input, shouldQueue: false } }];\n}\n\nconst minutesSince = (value) => {\n  const parsed = Date.parse(String(value ?? ''));\n  if (Number.isNaN(parsed)) return null;\n  return Math.round((Date.now() - parsed) / 60000);\n};\n\n// A review takes minutes and spends real money, so one already in flight is\n// reported rather than started twice. Nothing here can ask whether that run is\n// still alive: a restart, or an execution deleted by hand, leaves exactly the\n// same row behind with nobody working on it. So age decides, and the only\n// honest number is the one past which n8n has certainly stopped it — the\n// executionTimeout on 105, which is 30 minutes. Anything shorter calls a\n// working run wreckage and quietly pays for a second one on top of it.\nconst DEAD_AFTER = 31;\n\nconst open = rows\n  .filter((row) => String(row.status ?? '') === 'running')\n  .map((row) => ({ runId: row.runId, age: minutesSince(row.startedAt) }))\n  .filter((entry) => entry.age !== null)\n  .sort((a, b) => a.age - b.age);\n\nconst live = open.find((entry) => entry.age < DEAD_AFTER) ?? null;\n\nif (live && !input.force) {\n  return [{ json: { ...input, shouldQueue: false, response: { ok: true, status: 'already-running',\n    runId: live.runId, startedMinutesAgo: live.age,\n    message: `A review started ${live.age} minute${live.age === 1 ? '' : 's'} ago and is still going. Reading it back with get_reconciliation_suggestions will show it when it finishes. Say so rather than starting another one, unless they ask you to go again anyway.` } } }];\n}\n\nconst stale = open.find((entry) => entry.age >= DEAD_AFTER) ?? null;\nconst replacing = live\n  ? { reason: 'asked-again', runId: live.runId, age: live.age }\n  : (stale ? { reason: 'interrupted', runId: stale.runId, age: stale.age } : null);\n\nreturn [{ json: { ...input, shouldQueue: true, replacing } }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -140,7 +145,8 @@
         0
       ],
       "id": "97900102-0000-4000-8000-000000000014",
-      "name": "Read Bookkeeping Profile"
+      "name": "Read Bookkeeping Profile",
+      "alwaysOutputData": true
     },
     {
       "parameters": {
@@ -294,10 +300,20 @@
           "value": {
             "runId": "={{ $json.runId }}",
             "period": "={{ $json.period }}",
-            "mode": "={{ $json.mode }}"
+            "mode": "={{ $json.mode }}",
+            "sessionId": "={{ $json.sessionId }}"
           },
           "matchingColumns": [],
           "schema": [
+            {
+              "id": "sessionId",
+              "displayName": "sessionId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
             {
               "id": "runId",
               "displayName": "runId",

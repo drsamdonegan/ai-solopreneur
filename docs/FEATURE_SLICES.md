@@ -115,7 +115,7 @@ The commit IDs below are immutable slice boundaries on the v0.3 release line. `0
 - Re-import: installing the slice imports workflow 61 and patches `00`; an existing install must update/re-import both copies manually because the installer never overwrites customised files.
 - Skill sync: yes.
 - External setup: `CRUSTDATA_API_KEY` Bearer Auth credential and explicit approval for each search up to 0.30 credits.
-- Verify: `node scripts/test-optional-installer.mjs && node scripts/validate-workflows.mjs`; the installed and catalogue `SKILL.md` files must be byte-identical and under 7,200 characters.
+- Verify: `node scripts/test-optional-installer.mjs && node scripts/validate-workflows.mjs`; the installed and catalogue `SKILL.md` files must be byte-identical. Skill files have no individual size ceiling; the compiled per-agent context retains the aggregate runaway guard.
 - Rollback: `git revert d6d5c81`; doing so restores a fallback the n8n agent cannot run.
 
 ## Post-v0.3 package slices

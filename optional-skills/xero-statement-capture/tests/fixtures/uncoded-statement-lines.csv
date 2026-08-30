@@ -1,0 +1,13 @@
+Xero
+Uncoded Statement Lines
+Organisation,MLAI
+Generated,27 August 2026
+
+Business Everyday
+DATE,PAYEE,PARTICULARS | REFERENCE | CODE,SPENT,RECEIVED,TAX,COMMENTS,YOUR COMMENTS
+27/08/2026,Cloud Host,Monthly hosting | INV-42 | HOST-1,120.00,,GST on Expenses,Needs receipt,
+27/08/2026,Cloud Host,Monthly hosting | INV-42 | HOST-1,120.00,,GST on Expenses,Duplicate bank line,Owner note
+
+Business Savings
+DATE,PAYEE,PARTICULARS | REFERENCE | CODE,SPENT,RECEIVED,TAX,COMMENTS,YOUR COMMENTS
+2026-08-26,Example Client,Customer payment | RCPT-1 | ,,550.00,GST on Income,,

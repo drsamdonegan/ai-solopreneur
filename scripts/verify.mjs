@@ -91,6 +91,9 @@ run("read-only upgrade preflight", process.execPath, [
 run("cloud skill seeding", process.execPath, [
   "scripts/test-cloud-skills.mjs",
 ]);
+run("cloud repository-managed webhook publishing", process.execPath, [
+  "tests/cloud-workflows-required.test.mjs",
+]);
 run("SEO article installed-skill upgrade", process.execPath, [
   "scripts/test-seo-article-upgrade.mjs",
 ]);
@@ -103,6 +106,12 @@ run("chat TypeScript build", process.execPath, [
   "apps/chat/node_modules/typescript/bin/tsc",
   "--project",
   "apps/chat/tsconfig.json",
+]);
+run("Xero export capture API", process.execPath, [
+  "scripts/test-xero-capture-api.mjs",
+]);
+run("Xero export capture frontend", process.execPath, [
+  "scripts/test-xero-capture-ui.mjs",
 ]);
 run("chat store migration reconciliation", process.execPath, [
   "scripts/test-chat-store-migrations.mjs",

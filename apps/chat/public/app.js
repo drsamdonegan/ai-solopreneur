@@ -267,12 +267,18 @@
     suggestionList: document.querySelector("#suggestion-list"),
     suggestions: document.querySelector("#suggestions"),
     uploadButton: document.querySelector("#upload-button"),
+    xeroCaptureGuidance: document.querySelector("#xero-capture-guidance"),
+    xeroCaptureLaunch: document.querySelector("#xero-capture-launch"),
+    xeroCaptureStart: document.querySelector("#xero-capture-start"),
   };
 
   let sessionId = loadOrCreateSession();
   let requestInProgress = false;
   let documentRequestInProgress = false;
   let switchingConversation = false;
+  let conversationSwitchDepth = 0;
+  let conversationLoadGeneration = 0;
+  let activeConversationLoadSwitchGeneration = 0;
   let loadingMessage = null;
   let agents = DEFAULT_AGENTS;
   let activeAgentId = "project-manager";
@@ -291,6 +297,23 @@
   let agentSettings = null;
   let agentDialogAgentId = "";
   let agentDialogReturnFocus = null;
+  let xeroCaptureEnabled = false;
+  let xeroCaptureAvailable = false;
+  let xeroCapturePollTimer = null;
+  let xeroCaptureCard = null;
+  let activeXeroCaptureSessionId = "";
+  let activeXeroCaptureRunId = "";
+  let activeXeroReviewRunId = "";
+  let activeXeroCaptureState = "";
+  let activeXeroCaptureUpdatedAtMs = 0;
+  let xeroCaptureStatusInFlight = false;
+  let xeroCaptureStatusRefreshPending = false;
+  let xeroCaptureStartInFlight = false;
+  let xeroCapturePollFailures = 0;
+  let xeroSuggestionDeliveryTimer = null;
+  let xeroSuggestionDeliveryTimerId = "";
+  let xeroSuggestionDeliveryInFlight = false;
+  const xeroSuggestionsDeliveredThisPage = new Set();
   const narrowLayout = window.matchMedia("(max-width: 50rem)");
 
   function cleanText(value, fallback, maximumLength) {
@@ -420,8 +443,9 @@
     elements.mobileAgentInitials.textContent = getInitials(name);
     applySavedAvatar();
     // Every path that changes the active agent comes through here, so this is
-    // the one place the funding progress poll starts and stops.
+    // the one place the agent-specific progress polls start and stop.
     syncScanProgress();
+    syncXeroCaptureProgress();
   }
 
   function applySavedAvatar() {
@@ -569,7 +593,8 @@
   }
 
   // Agent replies are plain text. Only these local paths become links: an
-  // article download and the two provider connection routes. Nothing else is
+  // article download, provider connection routes, and the fixed Xero capture
+  // hand-off marker. Nothing else is
   // linkified — an agent that reads a stranger's email must never be able to
   // turn a URL from that email into something clickable.
   const SAFE_LINKS = [
@@ -609,6 +634,39 @@
         link.rel = "noopener noreferrer";
         link.textContent = "Open Xero credentials";
         return link;
+      },
+    },
+    {
+      pattern: /(?:http:\/\/localhost:\d{2,5})?\/api\/xero-capture\/runs\b/g,
+      build() {
+        const button = document.createElement("button");
+        button.className = "message__connect message__xero-capture";
+        button.type = "button";
+        button.textContent = "Export Xero queue (read-only)";
+        button.disabled = !xeroCaptureEnabled || !xeroCaptureAvailable;
+        button.addEventListener("click", () => {
+          void startXeroCapture("agent");
+        });
+        return button;
+      },
+    },
+    {
+      // The backend accepts this only when the same browser conversation has
+      // a matching, unexpired pending action. Rendering it as a button makes
+      // the attested user step one click without letting the model call the
+      // confirmed worker directly.
+      pattern: /\bCONFIRM [A-F0-9]{8}\b/g,
+      build(confirmationText) {
+        const button = document.createElement("button");
+        button.className = "message__connect message__confirm-action";
+        button.type = "button";
+        button.textContent = "Confirm this action";
+        button.setAttribute("aria-label", `Send ${confirmationText}`);
+        button.addEventListener("click", () => {
+          button.disabled = true;
+          void sendMessage(confirmationText, true);
+        }, { once: true });
+        return button;
       },
     },
   ];
@@ -1398,40 +1456,106 @@
     }
   }
 
+  function syncConversationSwitchState() {
+    switchingConversation =
+      conversationSwitchDepth > 0 ||
+      activeConversationLoadSwitchGeneration > 0;
+  }
+
+  function beginConversationSwitch() {
+    conversationSwitchDepth += 1;
+    syncConversationSwitchState();
+  }
+
+  function endConversationSwitch() {
+    conversationSwitchDepth = Math.max(0, conversationSwitchDepth - 1);
+    syncConversationSwitchState();
+  }
+
+  function clearXeroCaptureForConversationSwitch() {
+    // Do this before the saved conversation request starts. Otherwise a ready
+    // timer from the conversation being left can fire while the new one is in
+    // flight and manufacture a user turn in the wrong chat.
+    stopXeroCapturePolling();
+    xeroCaptureStatusRefreshPending = false;
+    xeroCaptureAvailable = false;
+    syncXeroCaptureButtons();
+    hideXeroCaptureProgress();
+  }
+
   async function loadConversation(id, targetMessageId, allowBusy = false) {
     if (!allowBusy && (requestInProgress || documentRequestInProgress)) {
       return;
     }
-    const response = await fetch(
-      `/api/conversations/${encodeURIComponent(id)}?limit=100`,
-      { headers: { Accept: "application/json" } },
-    );
-    const body = await parseResponse(response, "That saved chat could not be loaded.");
+    if (allowBusy && switchingConversation && id === sessionId) {
+      return;
+    }
     const previousSessionId = sessionId;
-    if (previousSessionId !== id && sessionDocuments.length > 0) {
-      discardPendingDocuments(previousSessionId);
+    const switchingToDifferentConversation = previousSessionId !== id;
+    const loadGeneration = ++conversationLoadGeneration;
+    if (switchingToDifferentConversation) {
+      activeConversationLoadSwitchGeneration = loadGeneration;
+      syncConversationSwitchState();
+      clearXeroCaptureForConversationSwitch();
+    } else if (activeConversationLoadSwitchGeneration > 0) {
+      // A deliberate click back to the current conversation supersedes an
+      // older history request just as surely as a click to a third chat does.
+      activeConversationLoadSwitchGeneration = 0;
+      syncConversationSwitchState();
     }
-    sessionId = body.conversation.id;
-    storeSession(sessionId);
-    activeConversationTitle = body.conversation.title;
-    const availableAgent = agents.find(
-      (agent) => agent.id === body.conversation.agentId && agent.status === "active",
-    );
-    if (availableAgent) {
-      activeAgentId = availableAgent.id;
+    try {
+      const response = await fetch(
+        `/api/conversations/${encodeURIComponent(id)}?limit=100`,
+        { headers: { Accept: "application/json" } },
+      );
+      const body = await parseResponse(
+        response,
+        "That saved chat could not be loaded.",
+      );
+      // A second history click can overtake the first request. Only the most
+      // recent load may replace the active conversation or its capture state.
+      if (loadGeneration !== conversationLoadGeneration) {
+        return;
+      }
+      if (previousSessionId !== id && sessionDocuments.length > 0) {
+        discardPendingDocuments(previousSessionId);
+      }
+      sessionId = body.conversation.id;
+      storeSession(sessionId);
+      activeConversationTitle = body.conversation.title;
+      const availableAgent = agents.find(
+        (agent) =>
+          agent.id === body.conversation.agentId && agent.status === "active",
+      );
+      if (availableAgent) {
+        activeAgentId = availableAgent.id;
+      }
+      currentMessages = Array.isArray(body.messages) ? body.messages : [];
+      nextMessageBefore = body.nextBefore ?? null;
+      elements.input.value = "";
+      updateCharacterCount();
+      resizeInput();
+      applyAgentIdentity();
+      renderAgentList();
+      renderSuggestions();
+      renderStoredConversation(targetMessageId);
+      renderHistoryList();
+      setHistoryOpen(false);
+      elements.input.focus();
+    } finally {
+      if (
+        switchingToDifferentConversation &&
+        activeConversationLoadSwitchGeneration === loadGeneration
+      ) {
+        activeConversationLoadSwitchGeneration = 0;
+        syncConversationSwitchState();
+        // A failed load leaves the original conversation active. Restore its
+        // status after clearing the old timer rather than leaving the card gone.
+        if (sessionId === previousSessionId) {
+          syncXeroCaptureProgress();
+        }
+      }
     }
-    currentMessages = Array.isArray(body.messages) ? body.messages : [];
-    nextMessageBefore = body.nextBefore ?? null;
-    elements.input.value = "";
-    updateCharacterCount();
-    resizeInput();
-    applyAgentIdentity();
-    renderAgentList();
-    renderSuggestions();
-    renderStoredConversation(targetMessageId);
-    renderHistoryList();
-    setHistoryOpen(false);
-    elements.input.focus();
   }
 
   async function loadOlderMessages() {
@@ -1462,7 +1586,8 @@
     // being left. A background delivery that sent into that gap was rejected
     // with "Conversation belongs to a different agent" — right of the server,
     // and a result nobody would have seen.
-    switchingConversation = true;
+    beginConversationSwitch();
+    clearXeroCaptureForConversationSwitch();
     try {
       const response = await fetch("/api/conversations", {
         method: "POST",
@@ -1474,7 +1599,10 @@
       await loadConversation(body.conversation.id);
       elements.requestStatus.textContent = "New conversation started";
     } finally {
-      switchingConversation = false;
+      endConversationSwitch();
+      if (sessionId === previousSessionId) {
+        syncXeroCaptureProgress();
+      }
     }
   }
 
@@ -1883,6 +2011,7 @@
       ? `${displayAgentName()} is working on your request…`
       : "Press Enter to send · Shift + Enter for a new line";
     elements.agentDialogChat.disabled = controlsBusy;
+    syncXeroCaptureButtons();
     renderDocuments();
   }
 
@@ -2018,9 +2147,8 @@
     }
   }
 
-  // Returns whether the turn landed. Callers that a person drives ignore it;
-  // the automatic funding read-out uses it to tell a delivered result from a
-  // send that never arrived.
+  // Returns whether the visible reply landed. Person-driven callers ignore it;
+  // automatic result mechanisms apply their own bounded delivery policy.
   async function sendMessage(
     rawMessage,
     showUserMessage,
@@ -2128,6 +2256,623 @@
     return delivered;
   }
 
+  // ---- User-mediated Xero queue export ---------------------------------
+  // Xero does not expose the live reconciliation queue through its public
+  // API. The supported hosted flow therefore asks the owner to run Xero's
+  // official Uncoded Statement Lines report and export its CSV. The app only
+  // tracks that import job. It never drives Xero, reads the page, or receives
+  // a Xero credential.
+  const BOOKKEEPING_AGENT_ID = "bookkeeping";
+  const XERO_CAPTURE_POLL_MS = 4_000;
+  const XERO_SUGGESTION_DELIVER_WITHIN_MS = 12 * 60 * 60 * 1000;
+  const XERO_SUGGESTION_BUSY_RETRY_DELAYS_MS = [1_000, 2_000, 4_000, 8_000];
+  const XERO_CAPTURE_TERMINAL_STATES = new Set([
+    "ready",
+    "failed",
+    "cancelled",
+  ]);
+  const XERO_UNCODED_REPORT_URL =
+    "https://go.xero.com/Banking/StatementLines/Offline";
+  const XERO_CAPTURE_RESULT_PROMPT =
+    "Show me this Xero reconciliation review. Use filter: all. Give me the complete lane counts and a concise overview, then paginated details starting with items that need my decision, high-confidence items ready to prepare, and existing matches. Continue with nextCursor while this bounded turn allows. If rows remain, state the exact remaining count and next cursor; never claim every detail was shown.";
+
+  function xeroCaptureResultPrompt(reviewRunId = "") {
+    const exactReviewRunId = String(reviewRunId).trim();
+    return exactReviewRunId
+      ? `${XERO_CAPTURE_RESULT_PROMPT} Read exactly reviewRunId ${exactReviewRunId}; pass it as runId to get_reconciliation_suggestions and do not substitute another review.`
+      : XERO_CAPTURE_RESULT_PROMPT;
+  }
+  const XERO_CAPTURE_STATE = {
+    preflight: {
+      note: "Preparing the read-only export run…",
+      percent: 5,
+    },
+    opening: {
+      note: "Xero is open. Sign in if it asks you to.",
+      percent: 12,
+    },
+    awaiting_login: {
+      note: "Sign in to Xero in the opened tab. This page will keep waiting.",
+      percent: 18,
+    },
+    awaiting_export: {
+      note:
+        "In Xero, choose All bank accounts and a date range covering your unreconciled history, click Run, then Export → CSV. Leave the download in Downloads.",
+      percent: 28,
+    },
+    discovering: {
+      note: "The local companion found the exported CSV…",
+      percent: 38,
+    },
+    capturing: {
+      note: "Reading the exported statement lines locally…",
+      percent: 56,
+    },
+    verifying: {
+      note: "Checking the exported rows and totals…",
+      percent: 70,
+    },
+    uploading: {
+      note: "Sending the verified export to your private bookkeeping workflow…",
+      percent: 82,
+    },
+    reviewing: {
+      note: "Preparing read-only coding suggestions…",
+      percent: 92,
+    },
+    ready: {
+      note: "Your Xero coding suggestions are ready.",
+      percent: 100,
+    },
+    failed: {
+      note: "The Xero export could not be processed. Start a fresh export to retry.",
+      percent: 100,
+    },
+    cancelled: {
+      note: "The Xero export run was cancelled. Nothing changed in Xero.",
+      percent: 100,
+    },
+  };
+
+  function syncXeroCaptureButtons() {
+    const enabled =
+      activeAgentId === BOOKKEEPING_AGENT_ID &&
+      xeroCaptureEnabled &&
+      xeroCaptureAvailable;
+    elements.xeroCaptureLaunch.hidden = !(
+      activeAgentId === BOOKKEEPING_AGENT_ID && xeroCaptureEnabled
+    );
+    elements.xeroCaptureStart.disabled =
+      !enabled || requestInProgress || xeroCaptureStartInFlight;
+    for (const button of document.querySelectorAll(".message__xero-capture")) {
+      button.disabled =
+        !enabled || requestInProgress || xeroCaptureStartInFlight;
+    }
+  }
+
+  function xeroCaptureProgressCard() {
+    if (xeroCaptureCard) {
+      return xeroCaptureCard;
+    }
+    const card = document.createElement("div");
+    card.className = "scan-progress";
+    card.id = "xero-capture-progress";
+    card.setAttribute("role", "status");
+    card.setAttribute("aria-live", "polite");
+    card.hidden = true;
+
+    const spinner = document.createElement("div");
+    spinner.className = "scan-progress__spinner";
+    spinner.setAttribute("aria-hidden", "true");
+
+    const body = document.createElement("div");
+    body.className = "scan-progress__body";
+    const note = document.createElement("p");
+    note.className = "scan-progress__note";
+    const track = document.createElement("div");
+    track.className = "scan-progress__track";
+    track.setAttribute("aria-hidden", "true");
+    const fill = document.createElement("div");
+    fill.className = "scan-progress__fill";
+    track.append(fill);
+    body.append(note, track);
+
+    const side = document.createElement("div");
+    side.className = "xero-capture-progress__side";
+    const meta = document.createElement("p");
+    meta.className = "scan-progress__meta";
+    const actions = document.createElement("div");
+    actions.className = "xero-capture-progress__actions";
+    const open = document.createElement("a");
+    open.className = "xero-capture-progress__action";
+    open.href = XERO_UNCODED_REPORT_URL;
+    open.target = "_blank";
+    open.rel = "noopener noreferrer";
+    open.textContent = "Open Xero report";
+    const cancel = document.createElement("button");
+    cancel.className = "xero-capture-progress__action";
+    cancel.type = "button";
+    cancel.textContent = "Cancel";
+    cancel.addEventListener("click", () => {
+      void cancelXeroCapture();
+    });
+    const show = document.createElement("button");
+    show.className = "xero-capture-progress__action";
+    show.type = "button";
+    show.textContent = "Show suggestions";
+    show.hidden = true;
+    show.addEventListener("click", () => {
+      void sendMessage(xeroCaptureResultPrompt(activeXeroReviewRunId), true);
+    });
+    actions.append(open, cancel, show);
+    side.append(meta, actions);
+    card.append(spinner, body, side);
+    xeroCaptureCard = { card, note, fill, meta, actions, open, cancel, show };
+    return xeroCaptureCard;
+  }
+
+  function hideXeroCaptureProgress() {
+    stopXeroSuggestionDelivery();
+    if (xeroCaptureCard) {
+      xeroCaptureCard.card.hidden = true;
+      xeroCaptureCard.card.remove();
+    }
+    activeXeroCaptureSessionId = "";
+    activeXeroCaptureRunId = "";
+    activeXeroReviewRunId = "";
+    activeXeroCaptureState = "";
+    activeXeroCaptureUpdatedAtMs = 0;
+  }
+
+  function stopXeroCapturePolling() {
+    if (xeroCapturePollTimer !== null) {
+      window.clearTimeout(xeroCapturePollTimer);
+      xeroCapturePollTimer = null;
+    }
+  }
+
+  function stopXeroSuggestionDelivery() {
+    if (xeroSuggestionDeliveryTimer !== null) {
+      window.clearTimeout(xeroSuggestionDeliveryTimer);
+      xeroSuggestionDeliveryTimer = null;
+    }
+    xeroSuggestionDeliveryTimerId = "";
+  }
+
+  function xeroSuggestionDeliveryId(binding) {
+    return `xero-review:${binding.sessionId}:${binding.captureRunId}:${binding.reviewRunId}`;
+  }
+
+  function xeroSuggestionTimestampIsFresh(timestampMs) {
+    const ageMs = Date.now() - Number(timestampMs);
+    return (
+      Number.isFinite(ageMs) &&
+      ageMs >= -5 * 60 * 1000 &&
+      ageMs <= XERO_SUGGESTION_DELIVER_WITHIN_MS
+    );
+  }
+
+  function xeroSuggestionBindingIsCurrent(binding) {
+    return (
+      activeAgentId === BOOKKEEPING_AGENT_ID &&
+      sessionId === binding.sessionId &&
+      activeXeroCaptureSessionId === binding.sessionId &&
+      activeXeroCaptureRunId === binding.captureRunId &&
+      activeXeroReviewRunId === binding.reviewRunId &&
+      activeXeroCaptureState === "ready" &&
+      xeroSuggestionTimestampIsFresh(binding.resultUpdatedAtMs)
+    );
+  }
+
+  // A completed review is the result of the user's original request, not a
+  // second task they should have to discover and ask for. Deliver it through
+  // the agent once, retaining the visible button as an explicit retry.
+  function scheduleXeroSuggestionDelivery(
+    binding,
+    delay = 0,
+    busyAttempt = 0,
+  ) {
+    if (
+      !binding ||
+      !binding.sessionId ||
+      !binding.captureRunId ||
+      !binding.reviewRunId ||
+      !xeroSuggestionBindingIsCurrent(binding)
+    ) {
+      return;
+    }
+    const deliveryId = xeroSuggestionDeliveryId(binding);
+    if (xeroSuggestionDeliveryTimer !== null) {
+      if (xeroSuggestionDeliveryTimerId === deliveryId) {
+        return;
+      }
+      stopXeroSuggestionDelivery();
+    }
+    if (
+      xeroSuggestionsDeliveredThisPage.has(deliveryId) ||
+      alreadyDelivered(deliveryId)
+    ) {
+      return;
+    }
+    xeroSuggestionDeliveryTimerId = deliveryId;
+    xeroSuggestionDeliveryTimer = window.setTimeout(() => {
+      xeroSuggestionDeliveryTimer = null;
+      xeroSuggestionDeliveryTimerId = "";
+      void deliverXeroSuggestions(binding, busyAttempt);
+    }, delay);
+  }
+
+  async function deliverXeroSuggestions(binding, busyAttempt = 0) {
+    if (!xeroSuggestionBindingIsCurrent(binding)) {
+      return;
+    }
+    if (
+      xeroSuggestionDeliveryInFlight ||
+      switchingConversation ||
+      requestInProgress ||
+      documentRequestInProgress
+    ) {
+      const retryDelay = XERO_SUGGESTION_BUSY_RETRY_DELAYS_MS[busyAttempt];
+      if (retryDelay === undefined) {
+        // The result remains available through Show suggestions. Persistently
+        // suppress this automatic attempt so a busy tab cannot retry forever
+        // on every status render or reload.
+        const deliveryId = xeroSuggestionDeliveryId(binding);
+        xeroSuggestionsDeliveredThisPage.add(deliveryId);
+        markDelivered(deliveryId);
+        return;
+      }
+      scheduleXeroSuggestionDelivery(binding, retryDelay, busyAttempt + 1);
+      return;
+    }
+    const deliveryId = xeroSuggestionDeliveryId(binding);
+    if (
+      xeroSuggestionsDeliveredThisPage.has(deliveryId) ||
+      alreadyDelivered(deliveryId)
+    ) {
+      return;
+    }
+    xeroSuggestionDeliveryInFlight = true;
+    xeroSuggestionsDeliveredThisPage.add(deliveryId);
+    markDelivered(deliveryId);
+    try {
+      // Once /api/chat is attempted, its outcome may be ambiguous: the server
+      // can have committed the turn even if the response is lost. Never replay
+      // automatically with a fresh request ID. The visible Show suggestions
+      // button is the deliberate retry path.
+      await sendMessage(xeroCaptureResultPrompt(binding.reviewRunId), true);
+    } finally {
+      xeroSuggestionDeliveryInFlight = false;
+    }
+  }
+
+  function ensureXeroCapturePolling(delay = XERO_CAPTURE_POLL_MS) {
+    if (xeroCapturePollTimer === null) {
+      xeroCapturePollTimer = window.setTimeout(() => {
+        xeroCapturePollTimer = null;
+        void refreshXeroCaptureStatus();
+      }, delay);
+    }
+  }
+
+  function attachXeroCaptureProgress(card) {
+    if (
+      card.parentElement !== elements.conversation ||
+      elements.conversation.lastElementChild !== card
+    ) {
+      elements.conversation.append(card);
+    }
+  }
+
+  function normaliseXeroReviewRunId(value) {
+    const reviewRunId = typeof value === "string" ? value.trim() : "";
+    return /^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/.test(reviewRunId)
+      ? reviewRunId
+      : "";
+  }
+
+  function renderXeroCaptureStatus(payload, statusSessionId = sessionId) {
+    if (sessionId !== statusSessionId) {
+      return;
+    }
+    xeroCaptureEnabled = payload?.enabled === true;
+    xeroCaptureAvailable = payload?.available === true;
+    syncXeroCaptureButtons();
+    const run = payload?.run;
+    if (
+      activeAgentId !== BOOKKEEPING_AGENT_ID ||
+      !run ||
+      typeof run.runId !== "string" ||
+      !XERO_CAPTURE_STATE[run.state]
+    ) {
+      hideXeroCaptureProgress();
+      stopXeroCapturePolling();
+      xeroCapturePollFailures = 0;
+      return;
+    }
+
+    const reviewRunId = normaliseXeroReviewRunId(
+      run.reviewRunId ?? payload?.reviewRunId,
+    );
+    const incomingUpdatedAtMs = Number.isFinite(Date.parse(run.updatedAt))
+      ? Date.parse(run.updatedAt)
+      : 0;
+    const incomingCreatedAtMs = Number.isFinite(Date.parse(run.createdAt))
+      ? Date.parse(run.createdAt)
+      : 0;
+    const resultUpdatedAtMs = Math.max(
+      incomingUpdatedAtMs,
+      incomingCreatedAtMs,
+    );
+    if (
+      activeXeroCaptureSessionId === statusSessionId &&
+      activeXeroCaptureRunId === run.runId
+    ) {
+      // A status poll can overlap a cancellation or a fast review completion.
+      // Never let an older/non-terminal response replace newer terminal state.
+      if (
+        XERO_CAPTURE_TERMINAL_STATES.has(activeXeroCaptureState) &&
+        !XERO_CAPTURE_TERMINAL_STATES.has(run.state)
+      ) {
+        return;
+      }
+      if (
+        incomingUpdatedAtMs > 0 &&
+        activeXeroCaptureUpdatedAtMs > 0 &&
+        incomingUpdatedAtMs < activeXeroCaptureUpdatedAtMs
+      ) {
+        return;
+      }
+    } else {
+      activeXeroCaptureUpdatedAtMs = 0;
+    }
+    activeXeroCaptureSessionId = statusSessionId;
+    activeXeroCaptureRunId = run.runId;
+    activeXeroReviewRunId = reviewRunId;
+    activeXeroCaptureState = run.state;
+    activeXeroCaptureUpdatedAtMs = Math.max(
+      activeXeroCaptureUpdatedAtMs,
+      incomingUpdatedAtMs,
+    );
+    const state = XERO_CAPTURE_STATE[run.state];
+    const { card, note, fill, meta, actions, open, cancel, show } =
+      xeroCaptureProgressCard();
+    card.classList.toggle(
+      "scan-progress--done",
+      run.state === "ready" || run.state === "cancelled",
+    );
+    card.classList.toggle("scan-progress--failed", run.state === "failed");
+    const total = Number(run.total) || 0;
+    const current = Number(run.current) || 0;
+    const dynamicPercent =
+      total > 0 && ["discovering", "capturing", "verifying"].includes(run.state)
+        ? Math.max(
+            state.percent,
+            Math.min(state.percent + 14, state.percent + Math.round((current / total) * 14)),
+          )
+        : state.percent;
+    fill.style.width = `${dynamicPercent}%`;
+    note.textContent =
+      typeof run.note === "string" && run.note.trim()
+        ? run.note.trim()
+        : state.note;
+
+    const details = [];
+    if (total > 0) {
+      details.push(`${Math.min(current, total)}/${total}`);
+    }
+    if (Number(run.accountCount) > 0) {
+      details.push(
+        `${Number(run.accountCount)} bank account${Number(run.accountCount) === 1 ? "" : "s"}`,
+      );
+    }
+    if (Number(run.expectedCount) > 0) {
+      details.push(
+        `${Number(run.capturedCount) || 0}/${Number(run.expectedCount)} rows`,
+      );
+    }
+    if (run.source === "agent") {
+      details.push("started by Bookkeeping");
+    }
+    meta.textContent = details.join(" · ");
+    actions.hidden = run.state === "cancelled";
+    open.hidden = run.state === "ready" || run.state === "cancelled";
+    cancel.hidden = XERO_CAPTURE_TERMINAL_STATES.has(run.state);
+    show.hidden = run.state !== "ready";
+    card.hidden = false;
+    attachXeroCaptureProgress(card);
+    if (XERO_CAPTURE_TERMINAL_STATES.has(run.state)) {
+      // Terminal runs no longer change. Stopping here avoids an unbounded
+      // stream of status requests (and tool-audit rows) from an idle tab.
+      stopXeroCapturePolling();
+      xeroCapturePollFailures = 0;
+    }
+    if (run.state === "ready" && reviewRunId) {
+      scheduleXeroSuggestionDelivery({
+        sessionId: statusSessionId,
+        captureRunId: run.runId,
+        reviewRunId,
+        resultUpdatedAtMs,
+      });
+    }
+  }
+
+  async function refreshXeroCaptureStatus() {
+    if (activeAgentId !== BOOKKEEPING_AGENT_ID) {
+      return;
+    }
+    if (xeroCaptureStatusInFlight) {
+      // Conversation B can request status while conversation A's request is
+      // still in flight. Remember that demand; A's stale response is discarded
+      // below and the finally block immediately starts a B-bound refresh.
+      xeroCaptureStatusRefreshPending = true;
+      return;
+    }
+    const requestedSessionId = sessionId;
+    const requestedAgentId = activeAgentId;
+    xeroCaptureStatusInFlight = true;
+    try {
+      const response = await fetch(
+        `/api/xero-capture/runs?sessionId=${encodeURIComponent(requestedSessionId)}`,
+        { headers: { Accept: "application/json" } },
+      );
+      if (
+        sessionId !== requestedSessionId ||
+        activeAgentId !== requestedAgentId ||
+        switchingConversation
+      ) {
+        return;
+      }
+      if (!response.ok) {
+        throw new Error("Xero capture status is temporarily unavailable.");
+      }
+      const payload = await response.json();
+      renderXeroCaptureStatus(payload, requestedSessionId);
+      if (
+        payload?.run &&
+        !XERO_CAPTURE_TERMINAL_STATES.has(payload.run.state) &&
+        xeroCaptureEnabled &&
+        xeroCaptureAvailable
+      ) {
+        xeroCapturePollFailures = 0;
+        ensureXeroCapturePolling();
+      }
+    } catch {
+      if (
+        sessionId !== requestedSessionId ||
+        activeAgentId !== requestedAgentId ||
+        switchingConversation
+      ) {
+        return;
+      }
+      xeroCaptureAvailable = false;
+      syncXeroCaptureButtons();
+      xeroCapturePollFailures += 1;
+      if (
+        activeAgentId === BOOKKEEPING_AGENT_ID &&
+        xeroCapturePollFailures <= 3
+      ) {
+        ensureXeroCapturePolling(
+          XERO_CAPTURE_POLL_MS * 2 ** (xeroCapturePollFailures - 1),
+        );
+      } else {
+        stopXeroCapturePolling();
+      }
+    } finally {
+      xeroCaptureStatusInFlight = false;
+      const refreshPending = xeroCaptureStatusRefreshPending;
+      xeroCaptureStatusRefreshPending = false;
+      if (refreshPending && activeAgentId === BOOKKEEPING_AGENT_ID) {
+        void refreshXeroCaptureStatus();
+      }
+    }
+  }
+
+  async function startXeroCapture(source = "user") {
+    if (
+      activeAgentId !== BOOKKEEPING_AGENT_ID ||
+      switchingConversation ||
+      !xeroCaptureEnabled ||
+      !xeroCaptureAvailable ||
+      xeroCaptureStartInFlight
+    ) {
+      return;
+    }
+    const requestedSessionId = sessionId;
+    const requestedAgentId = activeAgentId;
+    xeroCaptureStartInFlight = true;
+    syncXeroCaptureButtons();
+    elements.xeroCaptureStart.disabled = true;
+    elements.xeroCaptureGuidance.textContent =
+      "The local companion will open Xero after it is ready. Choose All bank accounts and a date range covering your unreconciled history, then export CSV and leave it in Downloads.";
+    try {
+      const response = await fetch("/api/xero-capture/runs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: requestedSessionId, source }),
+      });
+      const payload = await parseResponse(
+        response,
+        "The Xero export run could not be started.",
+      );
+      if (
+        sessionId === requestedSessionId &&
+        activeAgentId === requestedAgentId
+      ) {
+        renderXeroCaptureStatus(payload, requestedSessionId);
+        if (!XERO_CAPTURE_TERMINAL_STATES.has(payload?.run?.state)) {
+          xeroCapturePollFailures = 0;
+          ensureXeroCapturePolling();
+        }
+      }
+    } catch (error) {
+      if (
+        sessionId === requestedSessionId &&
+        activeAgentId === requestedAgentId
+      ) {
+        addError(
+          error instanceof Error
+            ? error.message
+            : "The Xero export run could not be started.",
+        );
+      }
+    } finally {
+      xeroCaptureStartInFlight = false;
+      syncXeroCaptureButtons();
+    }
+  }
+
+  async function cancelXeroCapture() {
+    if (!activeXeroCaptureRunId) {
+      return;
+    }
+    const runId = activeXeroCaptureRunId;
+    const requestedSessionId = sessionId;
+    const requestedAgentId = activeAgentId;
+    try {
+      const response = await fetch(
+        `/api/xero-capture/runs/${encodeURIComponent(runId)}?sessionId=${encodeURIComponent(requestedSessionId)}`,
+        { method: "DELETE" },
+      );
+      const payload = await parseResponse(
+        response,
+        "The Xero export run could not be cancelled.",
+      );
+      if (
+        sessionId === requestedSessionId &&
+        activeAgentId === requestedAgentId &&
+        activeXeroCaptureRunId === runId
+      ) {
+        renderXeroCaptureStatus(payload, requestedSessionId);
+      }
+    } catch (error) {
+      if (
+        sessionId === requestedSessionId &&
+        activeAgentId === requestedAgentId
+      ) {
+        addError(
+          error instanceof Error
+            ? error.message
+            : "The Xero export run could not be cancelled.",
+        );
+      }
+    }
+  }
+
+  function syncXeroCaptureProgress() {
+    if (activeAgentId === BOOKKEEPING_AGENT_ID) {
+      void refreshXeroCaptureStatus();
+      return;
+    }
+    stopXeroCapturePolling();
+    xeroCaptureStatusRefreshPending = false;
+    xeroCaptureEnabled = false;
+    xeroCaptureAvailable = false;
+    xeroCapturePollFailures = 0;
+    elements.xeroCaptureLaunch.hidden = true;
+    hideXeroCaptureProgress();
+  }
+
   // ---- Funding search progress ------------------------------------------
   // A funding search runs server-side for the best part of an hour, and a
   // chat transcript cannot show that anything is happening. While the
@@ -2151,9 +2896,9 @@
   // that saw it running meant the owner still had to ask. Delivery is now
   // decided by what this browser has already read out, kept where it survives
   // a reload, rather than by what one page happened to witness.
-  // One list of everything this browser has already read out, funding searches
-  // and scheduled tasks alike, so neither can arrive twice and a reload does
-  // not undo the memory of it.
+  // One list of everything this browser has already read out — funding
+  // searches, scheduled tasks, monthly updates, and Xero reviews — so none can
+  // arrive twice and a reload does not undo the memory of it.
   const DELIVERED_KEY = "chat-results-delivered";
   // Old enough and it is not news any more: the owner has moved on, and an
   // unprompted read-out of yesterday's work is noise. They can still ask.
@@ -2652,6 +3397,7 @@
       void refreshMonthlyUpdateProgress();
       void refreshScheduleResults();
       void refreshArticlePanel();
+      void refreshXeroCaptureStatus();
     }
   });
 
@@ -2687,6 +3433,10 @@
   elements.form.addEventListener("submit", (event) => {
     event.preventDefault();
     void sendMessage(elements.input.value, true);
+  });
+
+  elements.xeroCaptureStart.addEventListener("click", () => {
+    void startXeroCapture("user");
   });
 
   elements.input.addEventListener("input", () => {

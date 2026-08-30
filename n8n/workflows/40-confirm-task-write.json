@@ -4,7 +4,7 @@
   "nodes": [
     {
       "parameters": {
-        "content": "## Exact, expiring, single-use\nThe main workflow calls this only for a message matching `CONFIRM XXXXXXXX` exactly.\n\nThis workflow checks the browser session, exact phrase, proposal status, and five-minute expiry. It conditionally marks the proposal consumed **before** calling one reviewed write worker. A retry cannot reuse it.",
+        "content": "## Exact, single-use confirmation\n\nA current-user `CONFIRM XXXXXXXX` message is matched to one pending proposal in the same session. The proposal is consumed atomically before any reviewed worker runs. Task writes and Xero green-match preparation share this boundary; neither the model nor source material can call the Xero worker directly.",
         "height": 300,
         "width": 700,
         "color": 4
@@ -135,7 +135,7 @@
       "parameters": {
         "mode": "runOnceForEachItem",
         "language": "javaScript",
-        "jsCode": "const input = $('Validate Confirmation').first().json;\nconst row = $json;\nlet response = null;\nlet ready = false;\nlet expired = false;\nlet proposedInput = null;\n\nif (typeof row.error === 'string' && row.error !== '') {\n  response = {\n    ok: false,\n    error: {\n      code: 'CONFIRMATION_DATA_UNAVAILABLE',\n      message: 'Confirmation data is not ready. Rerun local setup, then ask for a new proposal.'\n    }\n  };\n} else if (!Number.isInteger(row.id)) {\n  response = {\n    ok: false,\n    error: {\n      code: 'CONFIRMATION_NOT_FOUND',\n      message: 'That confirmation does not match a proposal in this conversation. Ask for a new proposal.'\n    }\n  };\n} else if (row.status === 'consumed') {\n  response = {\n    ok: false,\n    error: {\n      code: 'CONFIRMATION_ALREADY_USED',\n      message: 'That confirmation was already used. Ask for a new proposal before another change.'\n    }\n  };\n} else if (row.status === 'superseded') {\n  response = {\n    ok: false,\n    error: {\n      code: 'CONFIRMATION_SUPERSEDED',\n      message: 'A newer proposal replaced that confirmation. Use the newest phrase instead.'\n    }\n  };\n} else if (row.status !== 'pending') {\n  response = {\n    ok: false,\n    error: {\n      code: 'CONFIRMATION_UNAVAILABLE',\n      message: 'That confirmation is no longer available. Ask for a new proposal.'\n    }\n  };\n} else if (Date.parse(row.expiresAt) <= Date.now()) {\n  expired = true;\n  response = {\n    ok: false,\n    error: {\n      code: 'CONFIRMATION_EXPIRED',\n      message: 'That confirmation expired. Ask for a new proposal and confirm it within five minutes.'\n    }\n  };\n} else {\n  try {\n    proposedInput = JSON.parse(row.proposedInput);\n  } catch {\n    response = {\n      ok: false,\n      error: {\n        code: 'INVALID_STORED_PROPOSAL',\n        message: 'The stored proposal is invalid. Ask for a new proposal.'\n      }\n    };\n  }\n  if (proposedInput && ['create_task', 'update_task_status'].includes(row.actionType)) {\n    ready = true;\n  } else if (!response) {\n    response = {\n      ok: false,\n      error: {\n        code: 'INVALID_STORED_PROPOSAL',\n        message: 'The stored proposal is invalid. Ask for a new proposal.'\n      }\n    };\n  }\n}\n\nreturn {\n  json: {\n    ready,\n    expired,\n    sessionId: input.sessionId,\n    confirmationText: input.confirmationText,\n    actionId: String(row.actionId ?? ''),\n    actionType: String(row.actionType ?? ''),\n    proposedInput,\n    response\n  }\n};"
+        "jsCode": "const input = $('Validate Confirmation').first().json;\nconst row = $json;\nlet response = null;\nlet ready = false;\nlet expired = false;\nlet proposedInput = null;\n\nif (typeof row.error === 'string' && row.error !== '') {\n  response = {\n    ok: false,\n    error: {\n      code: 'CONFIRMATION_DATA_UNAVAILABLE',\n      message: 'Confirmation data is not ready. Rerun local setup, then ask for a new proposal.'\n    }\n  };\n} else if (!Number.isInteger(row.id)) {\n  response = {\n    ok: false,\n    error: {\n      code: 'CONFIRMATION_NOT_FOUND',\n      message: 'That confirmation does not match a proposal in this conversation. Ask for a new proposal.'\n    }\n  };\n} else if (row.status === 'consumed') {\n  response = {\n    ok: false,\n    error: {\n      code: 'CONFIRMATION_ALREADY_USED',\n      message: 'That confirmation was already used. Ask for a new proposal before another change.'\n    }\n  };\n} else if (row.status === 'superseded') {\n  response = {\n    ok: false,\n    error: {\n      code: 'CONFIRMATION_SUPERSEDED',\n      message: 'A newer proposal replaced that confirmation. Use the newest phrase instead.'\n    }\n  };\n} else if (row.status !== 'pending') {\n  response = {\n    ok: false,\n    error: {\n      code: 'CONFIRMATION_UNAVAILABLE',\n      message: 'That confirmation is no longer available. Ask for a new proposal.'\n    }\n  };\n} else if (Date.parse(row.expiresAt) <= Date.now()) {\n  expired = true;\n  response = {\n    ok: false,\n    error: {\n      code: 'CONFIRMATION_EXPIRED',\n      message: 'That confirmation expired. Ask for a new proposal and confirm it within five minutes.'\n    }\n  };\n} else {\n  try {\n    proposedInput = JSON.parse(row.proposedInput);\n  } catch {\n    response = {\n      ok: false,\n      error: {\n        code: 'INVALID_STORED_PROPOSAL',\n        message: 'The stored proposal is invalid. Ask for a new proposal.'\n      }\n    };\n  }\n  if (proposedInput && ['create_task', 'update_task_status', 'prepare_green_matches'].includes(row.actionType)) {\n    ready = true;\n  } else if (!response) {\n    response = {\n      ok: false,\n      error: {\n        code: 'INVALID_STORED_PROPOSAL',\n        message: 'The stored proposal is invalid. Ask for a new proposal.'\n      }\n    };\n  }\n}\n\nreturn {\n  json: {\n    ready,\n    expired,\n    sessionId: input.sessionId,\n    confirmationText: input.confirmationText,\n    actionId: String(row.actionId ?? ''),\n    actionType: String(row.actionType ?? ''),\n    proposedInput,\n    response\n  }\n};"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -379,6 +379,16 @@
               "keyName": "sessionId",
               "condition": "eq",
               "keyValue": "={{ $('Evaluate Proposal').item.json.sessionId }}"
+            },
+            {
+              "keyName": "actionType",
+              "condition": "eq",
+              "keyValue": "={{ $('Evaluate Proposal').item.json.actionType }}"
+            },
+            {
+              "keyName": "confirmationText",
+              "condition": "eq",
+              "keyValue": "={{ $('Evaluate Proposal').item.json.confirmationText }}"
             },
             {
               "keyName": "status",
@@ -745,8 +755,8 @@
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.3,
       "position": [
-        1780,
-        -140
+        2040,
+        80
       ],
       "id": "54000000-0000-4000-8000-000000000010",
       "name": "Execute Confirmed Update"
@@ -755,12 +765,12 @@
       "parameters": {
         "mode": "runOnceForEachItem",
         "language": "javaScript",
-        "jsCode": "const proposal = $('Verify Single Use').first().json;\nif ($json.ok !== true) {\n  return {\n    json: {\n      ok: false,\n      actionType: proposal.actionType,\n      error: $json.error ?? {\n        code: 'TASK_WRITE_FAILED',\n        message: 'The confirmed task change failed. Ask for a new proposal before retrying.'\n      }\n    }\n  };\n}\nreturn {\n  json: {\n    ok: true,\n    confirmed: true,\n    actionType: proposal.actionType,\n    task: $json.task\n  }\n};"
+        "jsCode": "const proposal = $('Verify Single Use').first().json;\nif ($json.ok !== true) {\n  return { json: { ok: false, actionType: proposal.actionType, error: $json.error ?? {\n    code: proposal.actionType === 'prepare_green_matches' ? 'XERO_PREPARATION_FAILED' : 'TASK_WRITE_FAILED',\n    message: proposal.actionType === 'prepare_green_matches'\n      ? 'The confirmed Xero preparation failed. Review the refusal and create a fresh proposal before retrying.'\n      : 'The confirmed task change failed. Ask for a new proposal before retrying.'\n  } } };\n}\nif (proposal.actionType === 'prepare_green_matches') {\n  return { json: { ...$json, confirmed: true, actionType: proposal.actionType } };\n}\nreturn { json: { ok: true, confirmed: true, actionType: proposal.actionType, task: $json.task } };"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2040,
+        2300,
         -260
       ],
       "id": "54000000-0000-4000-8000-000000000011",
@@ -795,6 +805,103 @@
       ],
       "id": "54000000-0000-4000-8000-000000000013",
       "name": "Return Confirmation Result"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "54000000-0000-4000-8000-000000000014",
+              "leftValue": "={{ $json.actionType === 'prepare_green_matches' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1780,
+        -140
+      ],
+      "id": "54000000-0000-4000-8000-000000000014",
+      "name": "Prepare Green Matches Action?"
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "phase19PrepareGreenMatches",
+          "mode": "list",
+          "cachedResultName": "108 - INTERNAL - prepare_green_matches"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "sessionId": "={{ $('Verify Single Use').item.json.sessionId }}",
+            "requestId": "={{ $('Verify Single Use').item.json.actionId }}",
+            "confirmedActionId": "={{ $('Verify Single Use').item.json.actionId }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "sessionId",
+              "displayName": "sessionId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "requestId",
+              "displayName": "requestId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "confirmedActionId",
+              "displayName": "confirmedActionId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        2040,
+        -140
+      ],
+      "id": "54000000-0000-4000-8000-000000000015",
+      "name": "Execute Confirmed Green Matches"
     }
   ],
   "connections": {
@@ -969,7 +1076,7 @@
         ],
         [
           {
-            "node": "Execute Confirmed Update",
+            "node": "Prepare Green Matches Action?",
             "type": "main",
             "index": 0
           }
@@ -1019,6 +1126,35 @@
           }
         ]
       ]
+    },
+    "Prepare Green Matches Action?": {
+      "main": [
+        [
+          {
+            "node": "Execute Confirmed Green Matches",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Execute Confirmed Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Confirmed Green Matches": {
+      "main": [
+        [
+          {
+            "node": "Shape Confirmed Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "active": false,
@@ -1045,6 +1181,11 @@
       "update_task_status"
     ]
   },
-  "tags": [{ "id": "tagSafety", "name": "Safety checks" }],
+  "tags": [
+    {
+      "id": "tagSafety",
+      "name": "Safety checks"
+    }
+  ],
   "pinData": {}
 }

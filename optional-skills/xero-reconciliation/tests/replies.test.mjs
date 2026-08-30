@@ -16,6 +16,17 @@ const decide = loadWorkflow("104-tool-record-reconciliation-decision.json");
 const review = loadWorkflow("105-run-reconciliation-review.json");
 const receipt = loadWorkflow("109-run-receipt-lookup.json");
 const prepare = loadWorkflow("108-tool-prepare-green-matches.json");
+const SESSION_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+
+for (const [workflow, names] of [
+  [profile, ["Read Existing Profile"]],
+  [start, ["Read Recent Runs", "Read Bookkeeping Profile"]],
+  [get, ["Read Recent Runs", "Read Suggestions"]],
+]) {
+  for (const name of names) {
+    check(`${name} preserves an empty-result refusal path`, workflow.nodes.find((entry) => entry.name === name)?.alwaysOutputData === true);
+  }
+}
 
 // --- the four connection states -------------------------------------------
 const probeSrc = codeOf(connection, "Read Xero Probe");
@@ -125,8 +136,38 @@ const restarted = runCode(startShapeSrc, {
 check("an interrupted predecessor is explained honestly", /stopped 44 minutes ago/.test(restarted.message));
 
 // --- what the learner reads back -------------------------------------------
+const validateSuggestSrc = codeOf(get, "Validate Read Input");
+const validateSuggestionRead = (filter, extra = {}) => runCode(validateSuggestSrc, {
+  input: [{ sessionId: SESSION_ID, requestId: SESSION_ID, filter, ...extra }],
+})[0];
+check("a complete suggestion read is the safe default", validateSuggestionRead("").filter === "all");
+check("an unknown suggestion filter falls back to all", validateSuggestionRead("surprise").filter === "all");
+check("an explicit uncertain-only read stays available", validateSuggestionRead("uncertain").filter === "uncertain");
+const CAPTURE_RUN_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const REVIEW_RUN_ID = `csv-review-${CAPTURE_RUN_ID}`;
+const boundRead = validateSuggestionRead("all", { runId: REVIEW_RUN_ID });
+check("a capture review ID is accepted as an exact target", boundRead.valid === true && boundRead.targetRunId === REVIEW_RUN_ID);
+check("the exact target is preserved in the audited input", boundRead.proposedInput.runId === REVIEW_RUN_ID);
+check("an unsafe review ID is rejected", validateSuggestionRead("all", { runId: "review id with spaces" }).response?.error?.code === "INVALID_RUN_ID");
+
+const pickRunSrc = codeOf(get, "Pick Run");
+const exactPicked = runCode(pickRunSrc, {
+  nodes: { "Validate Read Input": [{ ...boundRead, targetRunId: REVIEW_RUN_ID }] },
+  input: [
+    { runId: "newer-review", sessionId: SESSION_ID, status: "completed", startedAt: "2026-08-30T02:00:00.000Z" },
+    { runId: REVIEW_RUN_ID, sessionId: SESSION_ID, status: "completed", startedAt: "2026-08-30T01:00:00.000Z" },
+    { runId: REVIEW_RUN_ID, sessionId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc", status: "completed", startedAt: "2026-08-30T03:00:00.000Z" },
+  ],
+})[0];
+check("an exact review target cannot be replaced by a newer run", exactPicked.hasRun === true && exactPicked.runId === REVIEW_RUN_ID);
+const missingExact = runCode(pickRunSrc, {
+  nodes: { "Validate Read Input": [{ ...boundRead, targetRunId: REVIEW_RUN_ID }] },
+  input: [{ runId: "newer-review", sessionId: SESSION_ID, status: "completed", startedAt: "2026-08-30T02:00:00.000Z" }],
+})[0];
+check("a missing exact target does not fall back to another review", missingExact.hasRun === false && missingExact.targetMissing === true);
+
 const suggestSrc = codeOf(get, "Shape Suggestions Result");
-const row = (over = {}) => ({ suggestionId: "sug-1", occurredAt: "2026-07-15", amount: -42.35,
+const row = (over = {}) => ({ suggestionId: "sug-1", runId: "run-1", sessionId: SESSION_ID, occurredAt: "2026-07-15", amount: -42.35,
   contactName: "UBER *TRIP", suggestedContact: "Uber", description: "UBER", needsHuman: "no",
   basis: "user-rule", suggestedAccountCode: "429", suggestedAccountName: "Travel - National",
   suggestedTaxType: "INPUT", suggestedContactId: "contact-uber", matchedInvoiceId: "",
@@ -142,7 +183,7 @@ const interrupted = runCode(suggestSrc, { nodes: { "Pick Run": [{ hasRun: false,
 check("an interrupted review is not called running", /never finished/i.test(interrupted.message));
 
 const full = runCode(suggestSrc, {
-  nodes: { "Pick Run": [{ hasRun: true, runId: "run-1", filter: "all", run: { status: "completed", reportText: "REPORT", errorSummary: "" } }] },
+  nodes: { "Pick Run": [{ hasRun: true, runId: "run-1", sessionId: SESSION_ID, filter: "all", run: { status: "completed", reportText: "REPORT", errorSummary: "" } }] },
   input: [
     row({ suggestionId: "ready-1" }),
     row({ suggestionId: "uncertain-1", needsHuman: "yes", resultLane: "likely", suggestedAccountCode: "", reviewQuestion: "Who is 8841?" }),
@@ -161,10 +202,15 @@ check("an uncertain row carries its question", full.needsYou[0].reviewQuestion =
 check("an uncertain row carries its likely description", full.needsYou[0].likelyDescription === "Local business travel");
 check("an uncertain row shows no account", full.needsYou[0].account === "");
 check("ready rows expose an existing ContactID", full.readyToApprove[0].contactId === "contact-uber");
-check("the agent is told to lead with the uncertain ones", /lead with needsYou and blocked/i.test(full.nextStep));
+check("the agent is told to surface the uncertain ones first", /needsYou and blocked first/i.test(full.nextStep));
 check("the agent is told final Xero clicks remain", /nothing is reconciled.*clicks OK/i.test(full.nextStep));
+const crossSession = runCode(suggestSrc, {
+  nodes: { "Pick Run": [{ hasRun: true, runId: "run-1", sessionId: SESSION_ID, filter: "all", run: { status: "completed" } }] },
+  input: [row({ sessionId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" })],
+})[0].response;
+check("suggestions from another conversation are never returned", crossSession.counts.total === 0 && crossSession.readyToApprove.length === 0);
 const uncertainOnly = runCode(suggestSrc, {
-  nodes: { "Pick Run": [{ hasRun: true, runId: "run-1", filter: "uncertain", run: { status: "completed", reportText: "", errorSummary: "" } }] },
+  nodes: { "Pick Run": [{ hasRun: true, runId: "run-1", sessionId: SESSION_ID, filter: "uncertain", run: { status: "completed", reportText: "", errorSummary: "" } }] },
   input: [row({ suggestionId: "ready-1" }), row({ suggestionId: "u-1", needsHuman: "yes", resultLane: "likely" })],
 })[0].response;
 const groups = [full.needsYou, full.blocked, full.readyToApprove, full.matchInXero, full.alreadyAccepted, full.readyInXero];
@@ -172,6 +218,26 @@ const shownIds = groups.flatMap((group) => group.map((entry) => entry.suggestion
 check("no transaction appears in two groups", new Set(shownIds).size === shownIds.length, shownIds.join(","));
 check("every transaction appears somewhere", new Set(shownIds).size === full.counts.total);
 check("the uncertain filter hides the rest", uncertainOnly.readyToApprove.length === 0 && uncertainOnly.needsYou.length === 1);
+
+const manyUncertain = Array.from({ length: 60 }, (_, index) => row({
+  suggestionId: `uncertain-${String(index).padStart(2, "0")}`,
+  resultLane: "likely",
+  needsHuman: "yes",
+  suggestedAccountCode: "",
+}));
+const balanced = runCode(suggestSrc, {
+  nodes: { "Pick Run": [{ hasRun: true, runId: REVIEW_RUN_ID, sessionId: SESSION_ID, filter: "all", cursor: 0, limit: 20, run: { status: "completed" } }] },
+  input: [
+    ...manyUncertain,
+    row({ suggestionId: "ready-visible", runId: REVIEW_RUN_ID }),
+    row({ suggestionId: "match-visible", runId: REVIEW_RUN_ID, resultLane: "existing_match" }),
+  ].map((entry) => ({ ...entry, runId: REVIEW_RUN_ID })),
+})[0].response;
+check("complete counts include rows beyond the bounded page", balanced.counts.needsYou === 60 && balanced.counts.readyToApprove === 1 && balanced.counts.matchInXero === 1);
+check("a large uncertain lane cannot hide ready and match lanes on page one", balanced.readyToApprove[0]?.suggestionId === "ready-visible" && balanced.matchInXero[0]?.suggestionId === "match-visible");
+check("pagination discloses the exact omitted detail count", balanced.pagination.hasMore === true && balanced.pagination.remaining === 42 && balanced.pagination.nextCursor === "20");
+check("remaining counts are broken down by lane", balanced.pagination.remainingByLane.needsYou === 42 && balanced.pagination.remainingByLane.readyToApprove === 0);
+check("the tool forbids implying omitted details were shown", /never imply omitted details were shown/i.test(balanced.nextStep));
 
 // --- the report itself ------------------------------------------------------
 const reportSrc = codeOf(review, "Compose Report");
@@ -184,7 +250,7 @@ const composed = runCode(reportSrc, {
     ] }] },
   input: [{}],
 })[0];
-check("the headline counts what it can and cannot do", /I checked 3 transactions from a fresh, complete Xero queue capture\. 1 are ready for you to approve for preparation; 1 need your help\./.test(composed.reportText), composed.reportText.split("\n")[0]);
+check("the headline names the user-exported source", /I checked 3 transactions from a fresh, complete Xero Uncoded Statement Lines export\. 1 are ready for you to approve for preparation; 1 need your help\./.test(composed.reportText), composed.reportText.split("\n")[0]);
 check("a ready line carries its evidence", /Existing contact and saved context/.test(composed.reportText));
 check("an uncertain line has a likely description and question", /likely Unknown direct debit\. Who is 8841\?/.test(composed.reportText));
 check("the mailbox search is disclosed", /looked in your mailbox for receipts on 6 of these and found 2/.test(composed.reportText));
@@ -195,7 +261,7 @@ const truncated = runCode(reportSrc, {
   nodes: { "Merge All Suggestions": [{ runId: "r", receiptsSearched: 0, receiptsFound: 0, truncated: true, maxLines: 200,
     problems: ["the tax rates did not answer (500)"], rows: [row()] }] }, input: [{}],
 })[0];
-check("truncation is disclosed", /more than 200 captured lines/.test(truncated.reportText));
+check("reviews never silently claim a most-recent slice", !/most recent|more than 200 captured lines/.test(truncated.reportText));
 check("a partial failure is disclosed", /context did not come back cleanly/.test(truncated.reportText));
 check("the closing line survives a partial run", truncated.reportText.trim().endsWith("and click OK in Xero."));
 
@@ -243,12 +309,17 @@ check("a valid change is accepted", vd({ suggestionIds: "a", decision: "changed"
 check("ids are trimmed and split", JSON.stringify(vd({ suggestionIds: " a , b ", decision: "accepted" }).ids) === '["a","b"]');
 
 const decisionShapeSrc = codeOf(decide, "Shape Decision Result");
+const decisionProposal = { decision: "accepted", recorded: [{ suggestionId: "a", line: "L1" }], refused: [],
+  proposalReady: true, proposedInput: { suggestions: [{ suggestionId: "a", acceptedHash: "a".repeat(64) }] },
+  confirmationText: "CONFIRM ABCD1234", expiresAt: new Date(Date.now() + 300000).toISOString() };
 const recorded = runCode(decisionShapeSrc, {
-  nodes: { "Evaluate Decisions": [{ decision: "accepted", recorded: [{ suggestionId: "a", line: "L1" }], refused: [] }] },
-  input: [{}],
+  nodes: { "Build Green Match Proposal": [decisionProposal] },
+  input: [{ id: 7 }],
 })[0].response;
 check("recording says nothing reached Xero", /nothing has been sent to Xero yet/i.test(recorded.message));
-check("recording points at the next step", /prepare_green_matches/.test(recorded.nextStep));
+check("recording returns the exact confirmation phrase", recorded.confirmationRequired === true && recorded.confirmation.phrase === "CONFIRM ABCD1234");
+check("recording points at the deterministic next step", /send it as a separate message within five minutes/i.test(recorded.nextStep));
+check("recording does not tell the model to call the writer", !/call prepare_green_matches|confirmApply/i.test(recorded.nextStep));
 
 // --- the mailbox query ------------------------------------------------------
 const querySrc = codeOf(receipt, "Build Gmail Query");

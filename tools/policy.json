@@ -212,30 +212,6 @@
       "workflowId": "phase16RunThreadExtraction"
     },
     {
-      "id": "get_xero_queue_status",
-      "risk": "read",
-      "available": true,
-      "modelCallable": true,
-      "mode": "automatic",
-      "workflowId": "phase20GetXeroQueueStatus"
-    },
-    {
-      "id": "import_xero_statement_scan",
-      "risk": "bounded_local_write",
-      "available": true,
-      "modelCallable": false,
-      "mode": "authenticated_webhook_only",
-      "workflowId": "phase20ImportXeroStatementScan"
-    },
-    {
-      "id": "get_xero_annotations",
-      "risk": "read",
-      "available": true,
-      "modelCallable": false,
-      "mode": "authenticated_webhook_only",
-      "workflowId": "phase20GetXeroAnnotations"
-    },
-    {
       "id": "check_xero_connection",
       "risk": "read",
       "available": true,
@@ -279,8 +255,8 @@
       "id": "prepare_green_matches",
       "risk": "bounded_external_write",
       "available": true,
-      "modelCallable": true,
-      "mode": "explicit_request_required",
+      "modelCallable": false,
+      "mode": "internal_confirmed_only",
       "workflowId": "phase19PrepareGreenMatches"
     },
     {
@@ -306,6 +282,46 @@
       "modelCallable": false,
       "mode": "internal_background_only",
       "workflowId": "phase19RunReceiptLookup"
+    },
+    {
+      "id": "start_xero_queue_capture",
+      "risk": "bounded_local_write",
+      "available": true,
+      "modelCallable": true,
+      "mode": "explicit_request_required",
+      "workflowId": "phase20StartXeroQueueCapture"
+    },
+    {
+      "id": "get_xero_capture_status",
+      "risk": "read",
+      "available": true,
+      "modelCallable": true,
+      "mode": "automatic",
+      "workflowId": "phase20GetXeroCaptureStatus"
+    },
+    {
+      "id": "xero_capture_control",
+      "risk": "bounded_local_write",
+      "available": true,
+      "modelCallable": false,
+      "mode": "authenticated_webhook_only",
+      "workflowId": "phase20XeroCaptureControl"
+    },
+    {
+      "id": "xero_export_companion",
+      "risk": "bounded_external_read_and_local_write",
+      "available": true,
+      "modelCallable": false,
+      "mode": "authenticated_webhook_only",
+      "workflowId": "phase20XeroExportCompanion"
+    },
+    {
+      "id": "import_xero_uncoded_csv",
+      "risk": "bounded_local_write",
+      "available": true,
+      "modelCallable": false,
+      "mode": "authenticated_webhook_only",
+      "workflowId": "phase20ImportXeroUncodedCsv"
     },
     {
       "id": "delete_task",

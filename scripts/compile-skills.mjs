@@ -25,8 +25,11 @@ const allowedMetadataKeys = new Set([
   "description",
 ]);
 
-// Runaway guards rather than design budgets. These limits are also enforced by
-// the n8n skill-sync workflow; change both sides together.
+// One aggregate runaway guard protects the sync payload and model context. A
+// skill has no arbitrary per-file ceiling: authors can split supporting detail
+// into references when useful, but compilation is governed by the effective
+// per-agent context rather than an 8,000-character file-size proxy. The same
+// aggregate limit is enforced by the n8n skill-sync workflow.
 const maxCompiledBlock = 200_000;
 
 function parseScalar(value, location) {
@@ -182,10 +185,8 @@ export async function compileSkills(
     const instructions = (
       await readFile(join(skillDirectory, "SKILL.md"), "utf8")
     ).trim();
-    if (instructions.length === 0 || instructions.length > 8_000) {
-      throw new Error(
-        `${join(skillDirectory, "SKILL.md")}: instructions must contain 1-8,000 characters`,
-      );
+    if (instructions.length === 0) {
+      throw new Error(`${join(skillDirectory, "SKILL.md")}: instructions cannot be empty`);
     }
 
     enabledSkills.push({ ...metadata, instructions });

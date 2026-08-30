@@ -851,6 +851,11 @@ async function main() {
   if (seeded.enabled.length > 0) {
     print(`  Enabled skills installed by this deploy: ${seeded.enabled.join(", ")}`);
   }
+  if (seeded.upgraded.length > 0) {
+    print(
+      `  Upgraded retired shipped skills: ${seeded.upgraded.map(({ id }) => id).join(", ")}`,
+    );
+  }
   const migrated = migrateSkillMetadata();
   if (migrated.length > 0) {
     print(`  Updated saved skills to the current format: ${migrated.join(", ")}`);

@@ -104,7 +104,8 @@
         0
       ],
       "id": "97900101-0000-4000-8000-000000000015",
-      "name": "Read Existing Profile"
+      "name": "Read Existing Profile",
+      "alwaysOutputData": true
     },
     {
       "parameters": {

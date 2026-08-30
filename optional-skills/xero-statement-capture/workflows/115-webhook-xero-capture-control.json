@@ -1,0 +1,895 @@
+{
+  "name": "115 - WEBHOOK - Xero Capture Control",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Authenticated chat control plane\n\nStarts, reads, or cancels a user-mediated Xero Uncoded Statement Lines CSV export. These webhooks use the dedicated Xero Capture Control header credential; the local companion uses a different credential.",
+        "height": 300,
+        "width": 560,
+        "color": 6
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -980,
+        -420
+      ],
+      "id": "98000115-0000-4000-8000-000000000001",
+      "name": "Sticky"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "xero-capture-start",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -960,
+        -160
+      ],
+      "id": "98000115-0000-4000-8000-000000000010",
+      "name": "Authenticated Capture Start",
+      "webhookId": "98000115-0000-4000-8000-000000000110",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "phase20XeroCaptureControl",
+          "name": "Xero Capture Control"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const b=$json.body??$json;const keys=new Set(['schemaVersion','runId','sessionId','requestId','source','readOnly','period']);const exact=b&&typeof b==='object'&&!Array.isArray(b)&&Object.keys(b).every(k=>keys.has(k));const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;const source=String(b.source||'');const valid=Boolean(exact&&b.schemaVersion===1&&uuid.test(String(b.runId||''))&&uuid.test(String(b.sessionId||''))&&uuid.test(String(b.requestId||''))&&new Set(['user','agent']).has(source)&&b.readOnly===true);return [{json:{valid,runId:String(b.runId||''),sessionId:String(b.sessionId||''),requestId:String(b.requestId||''),source,readOnly:true,period:String(b.period||'all'),response:valid?undefined:{ok:false,error:{code:'INVALID_CAPTURE_START',message:'Use schemaVersion 1, UUID run/session/request IDs, source user or agent, and readOnly true.'}}}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -740,
+        -160
+      ],
+      "id": "98000115-0000-4000-8000-000000000011",
+      "name": "Validate Control Start"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "98000115-start-valid",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -520,
+        -160
+      ],
+      "id": "98000115-0000-4000-8000-000000000012",
+      "name": "Valid Control Start?"
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "phase20StartXeroQueueCapture",
+          "mode": "list",
+          "cachedResultName": "113 - TOOL - start_xero_queue_capture"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "runId": "={{ $json.runId }}",
+            "sessionId": "={{ $json.sessionId }}",
+            "requestId": "={{ $json.requestId }}",
+            "source": "={{ $json.source }}",
+            "readOnly": "={{ $json.readOnly }}",
+            "period": "={{ $json.period }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "runId",
+              "displayName": "runId",
+              "type": "string"
+            },
+            {
+              "id": "sessionId",
+              "displayName": "sessionId",
+              "type": "string"
+            },
+            {
+              "id": "requestId",
+              "displayName": "requestId",
+              "type": "string"
+            },
+            {
+              "id": "source",
+              "displayName": "source",
+              "type": "string"
+            },
+            {
+              "id": "readOnly",
+              "displayName": "readOnly",
+              "type": "boolean"
+            },
+            {
+              "id": "period",
+              "displayName": "period",
+              "type": "string"
+            }
+          ]
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        -300,
+        -240
+      ],
+      "id": "98000115-0000-4000-8000-000000000013",
+      "name": "Start Capture Run"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { schemaVersion: 1, run: $json.run || $json.response?.run || null, ...(($json.error || $json.response?.error) ? { error: $json.error || $json.response.error } : {}) } }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json; charset=utf-8"
+              },
+              {
+                "name": "Cache-Control",
+                "value": "no-store"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        -60,
+        -160
+      ],
+      "id": "98000115-0000-4000-8000-000000000014",
+      "name": "Respond Capture Start"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "xero-capture-status",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -960,
+        100
+      ],
+      "id": "98000115-0000-4000-8000-000000000020",
+      "name": "Authenticated Capture Status",
+      "webhookId": "98000115-0000-4000-8000-000000000120",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "phase20XeroCaptureControl",
+          "name": "Xero Capture Control"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const b=$json.body??$json;const keys=new Set(['schemaVersion','sessionId','requestId','runId']);const exact=b&&typeof b==='object'&&!Array.isArray(b)&&Object.keys(b).every(k=>keys.has(k));const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;const requestId=String(b.requestId||'');const runId=String(b.runId||'');const valid=Boolean(exact&&b.schemaVersion===1&&uuid.test(String(b.sessionId||''))&&(!requestId||uuid.test(requestId))&&(!runId||uuid.test(runId)));return [{json:{valid,sessionId:String(b.sessionId||''),requestId,runId,response:valid?undefined:{ok:false,error:{code:'INVALID_CAPTURE_STATUS',message:'Use schemaVersion 1 and valid UUID session, request, and capture run IDs.'}}}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -740,
+        100
+      ],
+      "id": "98000115-0000-4000-8000-000000000021",
+      "name": "Validate Control Status"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "98000115-status-valid",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -520,
+        100
+      ],
+      "id": "98000115-0000-4000-8000-000000000022",
+      "name": "Valid Control Status?"
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "phase20GetXeroCaptureStatus",
+          "mode": "list",
+          "cachedResultName": "114 - TOOL - get_xero_capture_status"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "sessionId": "={{ $json.sessionId }}",
+            "requestId": "={{ $json.requestId }}",
+            "runId": "={{ $json.runId }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "sessionId",
+              "displayName": "sessionId",
+              "type": "string"
+            },
+            {
+              "id": "requestId",
+              "displayName": "requestId",
+              "type": "string"
+            },
+            {
+              "id": "runId",
+              "displayName": "runId",
+              "type": "string"
+            }
+          ]
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        -300,
+        20
+      ],
+      "id": "98000115-0000-4000-8000-000000000023",
+      "name": "Get Capture Run"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { schemaVersion: 1, run: $json.run || $json.response?.run || null, ...(($json.error || $json.response?.error) ? { error: $json.error || $json.response.error } : {}) } }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json; charset=utf-8"
+              },
+              {
+                "name": "Cache-Control",
+                "value": "no-store"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        -60,
+        100
+      ],
+      "id": "98000115-0000-4000-8000-000000000024",
+      "name": "Respond Capture Status"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "xero-capture-cancel",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -960,
+        360
+      ],
+      "id": "98000115-0000-4000-8000-000000000030",
+      "name": "Authenticated Capture Cancel",
+      "webhookId": "98000115-0000-4000-8000-000000000130",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "phase20XeroCaptureControl",
+          "name": "Xero Capture Control"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const b=$json.body??$json;const keys=new Set(['schemaVersion','runId','sessionId','requestId']);const exact=b&&typeof b==='object'&&!Array.isArray(b)&&Object.keys(b).every(k=>keys.has(k));const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;const requestId=String(b.requestId||'');const valid=Boolean(exact&&b.schemaVersion===1&&uuid.test(String(b.runId||''))&&uuid.test(String(b.sessionId||''))&&(!requestId||uuid.test(requestId)));return [{json:{valid,runId:String(b.runId||''),sessionId:String(b.sessionId||''),requestId,response:valid?undefined:{ok:false,error:{code:'INVALID_CAPTURE_CANCEL',message:'Use schemaVersion 1 and valid UUID run, session, and request IDs.'}}}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -740,
+        360
+      ],
+      "id": "98000115-0000-4000-8000-000000000031",
+      "name": "Validate Control Cancel"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "98000115-cancel-valid",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -520,
+        360
+      ],
+      "id": "98000115-0000-4000-8000-000000000032",
+      "name": "Valid Control Cancel?"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "xero_capture_runs",
+          "mode": "name"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "runId",
+              "condition": "eq",
+              "keyValue": "={{ $('Validate Control Cancel').first().json.runId }}"
+            },
+            {
+              "keyName": "sessionId",
+              "condition": "eq",
+              "keyValue": "={{ $('Validate Control Cancel').first().json.sessionId }}"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 2,
+        "orderBy": false
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -300,
+        280
+      ],
+      "id": "98000115-0000-4000-8000-000000000033",
+      "name": "Read Runs For Cancel",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const input=$('Validate Control Cancel').first().json;const rows=$input.all().map(i=>i.json).filter(r=>r&&String(r.runId)===input.runId&&String(r.sessionId)===input.sessionId);const stored=rows[0];if(!stored)return [{json:{...input,shouldUpdate:false,response:{ok:false,error:{code:'CAPTURE_NOT_FOUND',message:'No matching Xero capture run was found.'}}}}];const terminal=new Set(['ready','failed','cancelled']);if(terminal.has(String(stored.status)))return [{json:{...input,shouldUpdate:false,response:{ok:true,run:{runId:String(stored.runId),source:String(stored.source||'agent'),state:String(stored.status),note:String(stored.progressMessage||''),current:Number(stored.progressCurrent||0),total:Number(stored.progressTotal||6),accountCount:Number(stored.bankAccountsCaptured||0),capturedCount:Number(stored.statementLinesObserved||0),expectedCount:Number(stored.statementLinesObserved||0),createdAt:String(stored.runCreatedAt||''),updatedAt:String(stored.runUpdatedAt||'')}}}}];const previousStatus=String(stored.status||'');const now=new Date().toISOString();return [{json:{...input,shouldUpdate:true,previousStatus,updatedAt:now,finishedAt:now,status:'cancelled',phase:'cancelled',cancelRequested:'yes',progressMessage:'The user cancelled this Xero export run.'}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -80,
+        280
+      ],
+      "id": "98000115-0000-4000-8000-000000000034",
+      "name": "Plan Cancel"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "98000115-cancel-update",
+              "leftValue": "={{ $json.shouldUpdate }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        140,
+        280
+      ],
+      "id": "98000115-0000-4000-8000-000000000035",
+      "name": "Cancel Needs Update?"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "value": "xero_capture_runs",
+          "mode": "name"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "runId",
+              "condition": "eq",
+              "keyValue": "={{ $json.runId }}"
+            },
+            {
+              "keyName": "sessionId",
+              "condition": "eq",
+              "keyValue": "={{ $json.sessionId }}"
+            },
+            {
+              "keyName": "status",
+              "condition": "eq",
+              "keyValue": "={{ $json.previousStatus }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "runUpdatedAt": "={{ $json.updatedAt }}",
+            "finishedAt": "={{ $json.finishedAt }}",
+            "status": "={{ $json.status }}",
+            "phase": "={{ $json.phase }}",
+            "cancelRequested": "={{ $json.cancelRequested }}",
+            "progressMessage": "={{ $json.progressMessage }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "runUpdatedAt",
+              "displayName": "runUpdatedAt",
+              "type": "date"
+            },
+            {
+              "id": "finishedAt",
+              "displayName": "finishedAt",
+              "type": "date"
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "type": "string"
+            },
+            {
+              "id": "phase",
+              "displayName": "phase",
+              "type": "string"
+            },
+            {
+              "id": "cancelRequested",
+              "displayName": "cancelRequested",
+              "type": "string"
+            },
+            {
+              "id": "progressMessage",
+              "displayName": "progressMessage",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {
+          "dryRun": false
+        }
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        360,
+        200
+      ],
+      "id": "98000115-0000-4000-8000-000000000036",
+      "name": "Cancel Capture Run",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "xero_capture_runs",
+          "mode": "name"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "runId",
+              "condition": "eq",
+              "keyValue": "={{ $('Plan Cancel').first().json.runId }}"
+            },
+            {
+              "keyName": "sessionId",
+              "condition": "eq",
+              "keyValue": "={{ $('Plan Cancel').first().json.sessionId }}"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 2,
+        "orderBy": false
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        580,
+        200
+      ],
+      "id": "98000115-0000-4000-8000-000000000039",
+      "name": "Read Cancel Result",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const planned=$('Plan Cancel').first().json;const stored=$input.first().json;if(!Number.isInteger(stored.id)||String(stored.runId)!==planned.runId||String(stored.sessionId)!==planned.sessionId)return [{json:{response:{ok:false,error:{code:'CAPTURE_CANCEL_UNCONFIRMED',message:'The capture cancellation could not be confirmed. Refresh status before trying again.'}}}}];const terminal=new Set(['ready','failed','cancelled']);const state=String(stored.status||stored.phase||'preflight');const run={runId:String(stored.runId),source:String(stored.source||'agent'),state,note:String(stored.progressMessage||''),current:Number(stored.progressCurrent||0),total:Number(stored.progressTotal||6),accountCount:Number(stored.bankAccountsCaptured||0),capturedCount:Number(stored.statementLinesObserved||0),expectedCount:Number(stored.statementLinesObserved||0),createdAt:String(stored.runCreatedAt||''),updatedAt:String(stored.runUpdatedAt||'')};return [{json:{response:terminal.has(state)?{ok:true,run}:{ok:false,error:{code:'CAPTURE_STATE_CHANGED',message:'The capture advanced while cancellation was requested. Refresh status before trying again.'}}}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        200
+      ],
+      "id": "98000115-0000-4000-8000-000000000037",
+      "name": "Shape Cancelled Run"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { schemaVersion: 1, run: $json.run || $json.response?.run || null, ...(($json.error || $json.response?.error) ? { error: $json.error || $json.response.error } : {}) } }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json; charset=utf-8"
+              },
+              {
+                "name": "Cache-Control",
+                "value": "no-store"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        820,
+        360
+      ],
+      "id": "98000115-0000-4000-8000-000000000038",
+      "name": "Respond Capture Cancel"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Authenticated Capture Start": {
+      "main": [
+        [
+          {
+            "node": "Validate Control Start",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Control Start": {
+      "main": [
+        [
+          {
+            "node": "Valid Control Start?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Valid Control Start?": {
+      "main": [
+        [
+          {
+            "node": "Start Capture Run",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Capture Start",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start Capture Run": {
+      "main": [
+        [
+          {
+            "node": "Respond Capture Start",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Authenticated Capture Status": {
+      "main": [
+        [
+          {
+            "node": "Validate Control Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Control Status": {
+      "main": [
+        [
+          {
+            "node": "Valid Control Status?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Valid Control Status?": {
+      "main": [
+        [
+          {
+            "node": "Get Capture Run",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Capture Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Capture Run": {
+      "main": [
+        [
+          {
+            "node": "Respond Capture Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Authenticated Capture Cancel": {
+      "main": [
+        [
+          {
+            "node": "Validate Control Cancel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Control Cancel": {
+      "main": [
+        [
+          {
+            "node": "Valid Control Cancel?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Valid Control Cancel?": {
+      "main": [
+        [
+          {
+            "node": "Read Runs For Cancel",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Capture Cancel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Runs For Cancel": {
+      "main": [
+        [
+          {
+            "node": "Plan Cancel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plan Cancel": {
+      "main": [
+        [
+          {
+            "node": "Cancel Needs Update?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cancel Needs Update?": {
+      "main": [
+        [
+          {
+            "node": "Cancel Capture Run",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Capture Cancel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cancel Capture Run": {
+      "main": [
+        [
+          {
+            "node": "Read Cancel Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Cancel Result": {
+      "main": [
+        [
+          {
+            "node": "Shape Cancelled Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shape Cancelled Run": {
+      "main": [
+        [
+          {
+            "node": "Respond Capture Cancel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "executionTimeout": 30
+  },
+  "versionId": "98000115-0000-4000-8000-000000000900",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "phase": 20,
+    "testedWithN8n": "2.30.5",
+    "authentication": "X-Xero-Capture-Control",
+    "captureMethod": "user-mediated-xero-csv-export",
+    "browserAutomation": false
+  },
+  "id": "phase20XeroCaptureControl",
+  "tags": []
+}

@@ -3,7 +3,7 @@
   "nodes": [
     {
       "parameters": {
-        "content": "## Run this once\n\nSelect **Execute workflow** below. It creates three local tables:\n\n- `bookkeeping_profile` — the facts about your books that decide a suggestion: your usual suppliers, the coding rules you already follow, and the amount above which you always want to decide yourself\n- `reconciliation_suggestions` — one row for every transaction the review looked at, what it thinks, and what you decided\n- `reconciliation_runs` — a copy of each review, and what that review cost\n\nNothing leaves your computer. All three start empty.",
+        "content": "## Run this once\n\nSelect **Execute workflow** below. It creates three local tables:\n\n- `bookkeeping_profile` — the facts about your books that decide a suggestion: your usual suppliers, the coding rules you already follow, and the amount above which you always want to decide yourself\n- `reconciliation_suggestions_v2` — session- and Xero-organisation-bound review rows; legacy suggestion rows are never reused\n- `reconciliation_runs_v2` — session- and capture-bound review runs; legacy run rows are never reused\n\nNothing leaves your computer. All three start empty.",
         "height": 420,
         "width": 420,
         "color": 4
@@ -135,7 +135,7 @@
       "parameters": {
         "resource": "table",
         "operation": "create",
-        "tableName": "reconciliation_suggestions",
+        "tableName": "reconciliation_suggestions_v2",
         "columns": {
           "column": [
             {
@@ -144,6 +144,22 @@
             },
             {
               "name": "runId",
+              "type": "string"
+            },
+            {
+              "name": "sessionId",
+              "type": "string"
+            },
+            {
+              "name": "captureRunId",
+              "type": "string"
+            },
+            {
+              "name": "captureTenantId",
+              "type": "string"
+            },
+            {
+              "name": "captureOrganisationName",
               "type": "string"
             },
             {
@@ -337,11 +353,27 @@
       "parameters": {
         "resource": "table",
         "operation": "create",
-        "tableName": "reconciliation_runs",
+        "tableName": "reconciliation_runs_v2",
         "columns": {
           "column": [
             {
               "name": "runId",
+              "type": "string"
+            },
+            {
+              "name": "sessionId",
+              "type": "string"
+            },
+            {
+              "name": "captureRunId",
+              "type": "string"
+            },
+            {
+              "name": "captureTenantId",
+              "type": "string"
+            },
+            {
+              "name": "captureOrganisationName",
               "type": "string"
             },
             {
@@ -429,7 +461,7 @@
     },
     {
       "parameters": {
-        "jsCode": "return [{ json: {\n  ok: true,\n  tables: ['bookkeeping_profile', 'reconciliation_suggestions', 'reconciliation_runs'],\n  message: 'The three bookkeeping tables are ready. Next: connect Xero in n8n as docs/XERO_RECONCILIATION.md describes, then tell your agent about your books.'\n} }];"
+        "jsCode": "return [{ json: {\n  ok: true,\n  tables: ['bookkeeping_profile', 'reconciliation_suggestions_v2', 'reconciliation_runs_v2'],\n  message: 'The three bookkeeping tables are ready. Next: connect Xero in n8n as docs/XERO_RECONCILIATION.md describes, then tell your agent about your books.'\n} }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,

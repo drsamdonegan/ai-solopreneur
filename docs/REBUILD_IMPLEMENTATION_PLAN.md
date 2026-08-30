@@ -633,7 +633,7 @@ Commit: `fix(meetings): render grounded action items as plain text`.
 
 Remove the non-runnable Python/public-search fallback from both catalogue copies and keep the files byte-identical. The skill must either call its installed provider tool or clearly say that lookup is unavailable.
 
-Target less than 7,200 trimmed characters to restore maintenance headroom.
+Keep the instructions concise for maintainability; compilation no longer uses an arbitrary per-skill character ceiling.
 
 Verify:
 
