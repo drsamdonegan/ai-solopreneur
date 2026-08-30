@@ -267,6 +267,7 @@ const request = runCode(requestSrc, {
 })[0];
 check("transaction text cannot alter system prompt", !request.requestBody.system.includes(poison));
 check("transaction text is inside untrusted block", request.requestBody.messages[0].content.includes(`--- BEGIN UNTRUSTED TRANSACTIONS ---`));
+check("classification request omits deprecated temperature parameter", !("temperature" in request.requestBody));
 const contextRequest = runCode(requestSrc, {
   nodes: { "Collect Receipts": [{ runId: "run-1", catalog: ACCOUNTS, taxRates: TAX, batch: [line()],
     invoiceShortlist: {}, contactShortlist: {}, history: { "sl-1": [{ ContactName: "Uber", LineItems: [{ AccountCode: "429" }] }] },
