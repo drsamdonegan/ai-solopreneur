@@ -39,6 +39,7 @@ const startColumns = node(start, "Save Capture Run").parameters.columns;
 check(startDecision.includes("importKey:''") && startDecision.includes("importClaimId:''"), "new runs must initialize the atomic import identity fields");
 check(startDecision.includes("expectedCount:Number(live.statementLinesObserved||0)") && !startDecision.includes("expectedCount:Number(live.bankAccountsExpected||0)"), "an already-running capture must report expectedCount in statement-line units");
 check(startColumns.value.dateOrder === "" && startColumns.value.importKey && startColumns.value.importClaimId, "start must leave date order for live Xero binding and persist empty import identity fields");
+check(["finishedAt", "claimedAt", "lastHeartbeatAt"].every((key) => !(key in startColumns.value)), "new capture rows must omit nullable date fields instead of sending empty strings to n8n");
 check(["importKey", "importClaimId"].every((key) => startColumns.schema.some((entry) => entry.id === key)), "capture-run insert schema must include import identity fields");
 
 const statusCode = node(status, "Shape Capture Status").parameters.jsCode;
